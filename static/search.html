@@ -99,9 +99,10 @@
         }
 
         updateResults() {
-          const { searchValue, selectedChannel, selectedUser } = this.state;
+          const { searchValue } = this.state;
+          const trimmedSearchValue = searchValue.trim();
           const matchingMessages =
-            (searchValue.trim().length > 1 || selectedChannel || selectedUser)
+            trimmedSearchValue.length > 1
               ? this.searchMessages(searchValue)
               : [];
           this.setState({ matchingMessages });
