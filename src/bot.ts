@@ -50,7 +50,6 @@ export async function runBot() {
   app.event("app_mention", async ({ event, say }: { event: any; say: any }) => {
     const text = event.text;
     // Remove the mention from the query
-    const query = text.replace(/<@[A-Z0-9]+>/g, "").trim();
     const query = text.replace(/<@[A-Z0-9]+[^>]*>/g, "").trim();
     if (!query) {
       await say(
@@ -100,10 +99,10 @@ export async function runBot() {
     for (const res of topResults) {
       const channelName = searchData.channels[res.c] || res.c;
       const userName = searchData.users[res.u] || res.u;
-      const date = new Date(parseFloat(res.t) * 1000).toLocaleString();
+      const date = new Date(parseFloat(res.t) * 1000).toLocaleString("fi-FI");
 
-      response += `*#${channelName}* | *${userName}* | ${date}\n> ${res.m}\n\n`;
-      response += "*#" + channelName + "* | *" + userName + "* | " + date + "\n> " + res.m.replace(/\n/g, "\n> ") + "\n\n";
+      response += `*#${channelName}* | *${userName}* | ${date}\n> ${res.m.replace(/\n/g, "\n> ")}\n\n`;
+    }
 
     await say({
       text: response,
