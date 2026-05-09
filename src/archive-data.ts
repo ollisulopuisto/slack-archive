@@ -19,7 +19,7 @@ export async function getSlackArchiveData(): Promise<SlackArchiveData> {
 }
 
 export async function setSlackArchiveData(
-  newData: SlackArchiveData
+  newData: SlackArchiveData,
 ): Promise<void> {
   const oldData = await getSlackArchiveData();
   const dataToWrite = {
@@ -29,6 +29,6 @@ export async function setSlackArchiveData(
 
   return write(
     SLACK_ARCHIVE_DATA_PATH,
-    JSON.stringify(dataToWrite, undefined, 2)
+    JSON.stringify(dataToWrite, undefined, 2),
   );
 }

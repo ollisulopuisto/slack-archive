@@ -17,7 +17,7 @@ can still enjoy in 20 years. This tool will help you do that.
 ## Using it
 
 1. Do you already have a user token for your workspace? If not, read on below on how to get a token.
-2. Make sure you have [`node` and `npm`](https://nodejs.org/en/) installed, ideally something newer than Node v14.
+2. Make sure you have [`node` and `npm`](https://nodejs.org/en/) installed (Node v20.19.0 or newer is recommended).
 3. Run `slack-archive`, which will interactively guide you through the options.
 
 ```sh
@@ -110,3 +110,35 @@ https://{your-team-name}.slack.com/api/oauth.access?client_id={your-client-id}&c
 ```
 
 Your browser should now be returning some JSON including a token. Make a note of it - that's what we'll use. Paste it in the command line, OR create a file called `.token` in the slack-archive directory (created when the command is first run) and paste it in there.
+
+## Slack Bot Integration
+
+You can run a Slack bot that allows users to search the archive directly from Slack. The bot uses Socket Mode, so you don't need a public URL.
+
+### Setup
+
+1. Create a new Slack App at [api.slack.com/apps](https://api.slack.com/apps).
+2. Enable **Socket Mode**.
+3. Under **App-Level Tokens**, click "Generate" and create a token with `connections:write` scope (save this as `SLACK_APP_TOKEN`).
+4. Under **OAuth & Permissions**, add the following **Bot Token Scopes**:
+   - `app_mentions:read`
+   - `chat:write`
+5. Install the app to your workspace and copy the **Bot User OAuth Token** (save this as `SLACK_BOT_TOKEN`).
+6. Enable **Event Subscriptions**, and under "Subscribe to bot events", add `app_mention`.
+
+### Usage
+
+Run the bot with the following command:
+
+~~~bash
+export SLACK_BOT_TOKEN=xoxb-...
+export SLACK_APP_TOKEN=xapp-...
+npm run cli -- --bot
+~~~
+
+### Commands
+
+- `@YourBotName query` - Search for messages containing `query`.
+- `@YourBotName "exact phrase"` - Search for messages containing the exact phrase.
+
+The bot will return the top 5 matches, including the channel, user, date, and a snippet of the message.

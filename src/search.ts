@@ -1,4 +1,5 @@
 import fs from "fs-extra";
+import path from "path";
 import ora, { Ora } from "ora";
 import { getChannelName } from "./channels.js";
 
@@ -37,7 +38,7 @@ const INDEX_OF_PAGES: SearchPageIndex = {};
 export function recordPage(channelId?: string, timestamp?: string) {
   if (!channelId || !timestamp) {
     console.warn(
-      `Search: Cannot record page: channelId: ${channelId} timestamp: ${timestamp}`
+      `Search: Cannot record page: channelId: ${channelId} timestamp: ${timestamp}`,
     );
     return;
   }
@@ -82,7 +83,7 @@ async function createSearchFile(spinner: Ora) {
     if (!channel.id) {
       console.warn(
         `Can't create search file for channel ${channel.name}: No id found`,
-        channel
+        channel,
       );
       continue;
     }
@@ -115,19 +116,38 @@ async function createSearchHTML() {
 
   template = template.replace(
     "<!-- react -->",
-    getScript(`react@18.2.0/umd/react.production.min.js`)
+    getScript(`react@18.3.1/umd/react.production.min.js`),
   );
   template = template.replace(
     "<!-- react-dom -->",
-    getScript(`react-dom@18.2.0/umd/react-dom.production.min.js`)
+    getScript(`react-dom@18.3.1/umd/react-dom.production.min.js`),
   );
   template = template.replace(
     `<!-- babel -->`,
-    getScript(`babel-standalone@6.26.0/babel.min.js`)
+    getScript(`babel-standalone@6.26.0/babel.min.js`),
   );
   template = template.replace(
     `<!-- minisearch -->`,
-    getScript("minisearch@5.0.0/dist/umd/index.min.js")
+    getScript("minisearch@7.2.0/dist/umd/index.min.js"),
+  );
+
+  const sharedQueryLogicTs = fs.readFileSync(
+    path.join(__dirname, "./search-query.ts"),
+    "utf8",
+  );
+  // Simple "transpilation" to remove types for the browser
+  const sharedQueryLogicJs = sharedQueryLogicTs
+    .replace(/export /g, "")
+    .replace(/: {[^}]+}/g, "")
+    .replace(/: string\[\]/g, "")
+    .replace(/: string/g, "")
+    .replace(/<T extends { m\?: string }>/g, "")
+    .replace(/: T\[\]/g, "")
+    .replace(/: any/g, "");
+
+  template = template.replace(
+    "<!-- search-query-logic -->",
+    `<script type="text/javascript">${sharedQueryLogicJs}</script>`,
   );
 
   template = template.replace(`<!-- Size -->`, getSize());

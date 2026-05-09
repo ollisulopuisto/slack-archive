@@ -37,7 +37,7 @@ function isChannels(input: any): input is ConversationsListResponse {
 
 export async function downloadChannels(
   options: ConversationsListArguments,
-  users: Users
+  users: Users,
 ): Promise<Array<Channel>> {
   const channels: Array<Channel> = [];
 
@@ -49,14 +49,16 @@ export async function downloadChannels(
 
   for await (const page of getWebClient().paginate(
     "conversations.list",
-    options
+    options as any,
   )) {
     if (isChannels(page)) {
       spinner.text = `Found ${page.channels?.length} channels (found so far: ${
         channels.length + (page.channels?.length || 0)
       })`;
 
-      const pageChannels = (page.channels || []).filter((c) => !!c.id);
+      const pageChannels = (page.channels || []).filter(
+        (c) => !!c.id,
+      ) as Channel[];
 
       for (const channel of pageChannels) {
         if (channel.is_im) {
@@ -66,7 +68,7 @@ export async function downloadChannels(
         }
 
         if (channel.is_mpim) {
-          channel.name = channel.purpose?.value;
+          channel.name = (channel as any).purpose?.value;
         }
       }
 

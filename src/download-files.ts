@@ -21,7 +21,7 @@ export interface DownloadUrlOptions {
 export async function downloadURL(
   url: string,
   filePath: string,
-  options: DownloadUrlOptions = {}
+  options: DownloadUrlOptions = {},
 ) {
   const authorize = options.authorize === undefined ? true : options.authorize;
 
@@ -50,7 +50,7 @@ async function downloadFile(
   channelId: string,
   i: number,
   total: number,
-  spinner: Ora
+  spinner: Ora,
 ) {
   const { url_private, id, is_external, mimetype } = file;
   const { thumb_1024, thumb_720, thumb_480, thumb_pdf } = file as any;
@@ -84,7 +84,7 @@ export async function downloadFilesForChannel(channelId: string, spinner: Ora) {
   const channels = await getChannels();
   const channel = channels.find(({ id }) => id === channelId);
   const fileMessages = messages.filter(
-    (m) => (m.files?.length || m.replies?.length || 0) > 0
+    (m) => (m.files?.length || m.replies?.length || 0) > 0,
   );
   const getSpinnerText = (i: number, ri?: number) => {
     let reply = "";
@@ -123,7 +123,7 @@ export async function downloadFilesForChannel(channelId: string, spinner: Ora) {
               channelId,
               i,
               fileMessages.length,
-              spinner
+              spinner,
             );
           }
         }

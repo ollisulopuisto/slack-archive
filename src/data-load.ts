@@ -30,7 +30,7 @@ export const messagesCache: Record<string, Array<ArchiveMessage>> = {};
 
 export async function getMessages(
   channelId: string,
-  cachedOk: boolean = false
+  cachedOk: boolean = false,
 ): Promise<Array<ArchiveMessage>> {
   if (cachedOk && messagesCache[channelId]) {
     return messagesCache[channelId];

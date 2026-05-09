@@ -1,8 +1,6 @@
 import { uniqBy } from "lodash-es";
 import inquirer from "inquirer";
 import fs from "fs-extra";
-import { User } from "@slack/web-api/dist/response/UsersInfoResponse";
-import { Channel } from "@slack/web-api/dist/response/ConversationsListResponse";
 import ora from "ora";
 
 import {
@@ -37,9 +35,12 @@ import { downloadEmojiList, downloadEmojis } from "./emoji.js";
 import { downloadAvatars } from "./users.js";
 import { downloadChannels } from "./channels.js";
 import { authTest } from "./web-client.js";
-import { SlackArchiveChannelData } from "./interfaces.js";
+import { User, Channel, SlackArchiveChannelData } from "./interfaces.js";
+import { runBot } from "./bot.js";
 
 const { prompt } = inquirer;
+
+const BOT_MODE = process.argv.includes("--bot");
 
 async function selectMergeFiles(): Promise<boolean> {
   const defaultResponse = true;
@@ -71,39 +72,39 @@ async function selectMergeFiles(): Promise<boolean> {
 
 async function selectChannels(
   channels: Array<Channel>,
-  previouslyDownloadedChannels: Record<string, SlackArchiveChannelData>
+  previouslyDownloadedChannels: Record<string, SlackArchiveChannelData>,
 ): Promise<Array<Channel>> {
   if (USE_PREVIOUS_CHANNEL_CONFIG) {
     const selectedChannels: Array<Channel> = channels.filter(
-      (channel) => channel.id && channel.id in previouslyDownloadedChannels
+      (channel) => channel.id && channel.id in previouslyDownloadedChannels,
     );
     const selectedChannelNames = selectedChannels.map(
-      (channel) => channel.name || channel.id || "Unknown"
+      (channel) => channel.name || channel.id || "Unknown",
     );
     console.log(
-      `Downloading channels selected previously: ${selectedChannelNames}.`
+      `Downloading channels selected previously: ${selectedChannelNames}.`,
     );
 
     const previousChannelIds = Object.keys(previouslyDownloadedChannels);
     if (previousChannelIds.length != selectedChannels.length) {
       console.warn(
-        "WARNING: Did not find all previously selected channel IDs."
+        "WARNING: Did not find all previously selected channel IDs.",
       );
       console.log(
-        `Expected to find ${previousChannelIds.length} channels, but only ${selectedChannels.length} matched.`
+        `Expected to find ${previousChannelIds.length} channels, but only ${selectedChannels.length} matched.`,
       );
       // Consider Looking up the user-facing names of the missing channels in the saved data.
       const availableChannelIds = new Set<string>(
-        channels.map((channel) => channel.id || "")
+        channels.map((channel) => channel.id || ""),
       );
       const missingChannelIds = previousChannelIds.filter(
-        (cId) => !availableChannelIds.has(cId)
+        (cId) => !availableChannelIds.has(cId),
       );
       //console.log(availableChannelIds);
       console.log(`Missing channel ids: ${missingChannelIds}`);
     } else {
       console.log(
-        `Matched all ${previousChannelIds.length} previously selected channels out of ${channels.length} total channels available.`
+        `Matched all ${previousChannelIds.length} previously selected channels out of ${channels.length} total channels available.`,
       );
     }
 
@@ -117,8 +118,10 @@ async function selectChannels(
 
   if (AUTOMATIC_MODE || NO_SLACK_CONNECT) {
     if (EXCLUDE_CHANNELS) {
-      const excludeChannels = EXCLUDE_CHANNELS.split(',');
-      return channels.filter((channel) => !excludeChannels.includes(channel.name || ''));
+      const excludeChannels = EXCLUDE_CHANNELS.split(",");
+      return channels.filter(
+        (channel) => !excludeChannels.includes(channel.name || ""),
+      );
     }
     return channels;
   }
@@ -243,13 +246,13 @@ async function getAuthTest() {
     spinner.fail(`Authentication with Slack failed.`);
 
     console.log(
-      `Authentication with Slack failed. The error was: ${result.error}`
+      `Authentication with Slack failed. The error was: ${result.error}`,
     );
     console.log(
-      `The provided token was ${config.token}. Double-check the token and try again.`
+      `The provided token was ${config.token}. Double-check the token and try again.`,
     );
     console.log(
-      `For more information on the error code, see the error table at https://api.slack.com/methods/auth.test`
+      `For more information on the error code, see the error table at https://api.slack.com/methods/auth.test`,
     );
     console.log(`This tool will now exit.`);
 
@@ -263,6 +266,11 @@ async function getAuthTest() {
 }
 
 export async function main() {
+  if (BOT_MODE) {
+    await runBot();
+    return;
+  }
+
   console.log(`Welcome to slack-archive${getLastSuccessfulRun()}`);
 
   if (AUTOMATIC_MODE) {
@@ -285,7 +293,7 @@ export async function main() {
   const channels = await downloadChannels({ types: channelTypes }, users);
   const selectedChannels = await selectChannels(
     channels,
-    slackArchiveData.channels
+    slackArchiveData.channels,
   );
   const newMessages: Record<string, number> = {};
 
@@ -309,7 +317,7 @@ export async function main() {
   // - or channels that we didn't make HTML for yet
   const channelsToCreateFilesFor = await getChannelsToCreateFilesFor(
     selectedChannels,
-    newMessages
+    newMessages,
   );
   await createHtmlForChannels(channelsToCreateFilesFor);
 
@@ -343,7 +351,7 @@ export async function main() {
       let downloadData = await downloadMessages(
         channel,
         i,
-        selectedChannels.length
+        selectedChannels.length,
       );
       let result = downloadData.messages;
       newMessages[channel.id] = downloadData.new;
@@ -354,7 +362,7 @@ export async function main() {
 
       // Sort messages
       const spinner = ora(
-        `Saving message data for ${channel.name || channel.id} to disk`
+        `Saving message data for ${channel.name || channel.id} to disk`,
       ).start();
       spinner.render();
 
@@ -366,7 +374,7 @@ export async function main() {
       await writeAndMerge(USERS_DATA_PATH, users);
       fs.outputFileSync(
         getChannelDataFilePath(channel.id),
-        JSON.stringify(result, undefined, 2)
+        JSON.stringify(result, undefined, 2),
       );
 
       // Download files. This needs to run after the messages are saved to disk
