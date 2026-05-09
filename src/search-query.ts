@@ -1,14 +1,3 @@
-type SearchLikeResult = {
-  c?: string;
-  m?: string;
-  u?: string;
-};
-
-type SearchFilters = {
-  channel?: string;
-  user?: string;
-};
-
 export function parseSearchQuery(query: string) {
   const phrases: string[] = [];
   const regex = /"([^"]+)"/g;
@@ -24,17 +13,23 @@ export function parseSearchQuery(query: string) {
   };
 }
 
-export function getSearchFilter({ channel, user }: SearchFilters) {
+export function getSearchFilter({
+  channel,
+  user,
+}: {
+  channel?: string;
+  user?: string;
+}) {
   if (!channel && !user) return undefined;
 
-  return (result: SearchLikeResult) => {
+  return (result: any) => {
     if (channel && result.c !== channel) return false;
     if (user && result.u !== user) return false;
     return true;
   };
 }
 
-export function filterResultsByPhrases<T extends SearchLikeResult>(
+export function filterResultsByPhrases<T extends { m?: string }>(
   results: T[],
   phrases: string[],
 ) {

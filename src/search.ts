@@ -1,4 +1,5 @@
 import fs from "fs-extra";
+import path from "path";
 import ora, { Ora } from "ora";
 import { getChannelName } from "./channels.js";
 
@@ -128,6 +129,25 @@ async function createSearchHTML() {
   template = template.replace(
     `<!-- minisearch -->`,
     getScript("minisearch@7.2.0/dist/umd/index.min.js"),
+  );
+
+  const sharedQueryLogicTs = fs.readFileSync(
+    path.join(__dirname, "./search-query.ts"),
+    "utf8",
+  );
+  // Simple "transpilation" to remove types for the browser
+  const sharedQueryLogicJs = sharedQueryLogicTs
+    .replace(/export /g, "")
+    .replace(/: {[^}]+}/g, "")
+    .replace(/: string\[\]/g, "")
+    .replace(/: string/g, "")
+    .replace(/<T extends { m\?: string }>/g, "")
+    .replace(/: T\[\]/g, "")
+    .replace(/: any/g, "");
+
+  template = template.replace(
+    "<!-- search-query-logic -->",
+    `<script type="text/javascript">${sharedQueryLogicJs}</script>`,
   );
 
   template = template.replace(`<!-- Size -->`, getSize());

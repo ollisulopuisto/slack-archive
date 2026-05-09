@@ -27,8 +27,7 @@ function performSearch(
   if (cleanQuery) {
     results = miniSearch.search(cleanQuery, searchOptions);
   } else if (filters.channel || filters.user) {
-    // We don't support empty query searches in this simplified test helper
-    results = [];
+    results = miniSearch.search(MiniSearch.wildcard, searchOptions);
   }
 
   results = filterResultsByPhrases(results, phrases);

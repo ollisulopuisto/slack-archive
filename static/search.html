@@ -11,6 +11,7 @@
     <!-- react-dom -->
     <!-- babel -->
     <!-- minisearch -->
+    <!-- search-query-logic -->
   </head>
 
   <body>
@@ -111,29 +112,16 @@
         searchMessages(query) {
           const { miniSearch, selectedChannel, selectedUser } = this.state;
           
-          // Extract quoted phrases
-          const phrases = [];
-          const regex = /"([^"]+)"/g;
-          let match;
-          while ((match = regex.exec(query)) !== null) {
-            phrases.push(match[1]);
-          }
-          
-          // Clean query for MiniSearch (remove quotes, use spaces)
-          const cleanQuery = query.replace(/"/g, ' ').trim();
+          const { cleanQuery, phrases } = parseSearchQuery(query);
           
           const searchOptions = {
             combineWith: 'AND',
             prefix: true,
           };
           
-          if (selectedChannel || selectedUser) {
-            searchOptions.filter = (result) => {
-              let match = true;
-              if (selectedChannel) match = match && result.c === selectedChannel;
-              if (selectedUser) match = match && result.u === selectedUser;
-              return match;
-            };
+          const filter = getSearchFilter({ channel: selectedChannel, user: selectedUser });
+          if (filter) {
+            searchOptions.filter = filter;
           }
           
           let results;
@@ -145,15 +133,7 @@
             results = [];
           }
           
-          // Post-filter for phrases
-          if (phrases.length > 0) {
-            results = results.filter(result => {
-              const text = typeof result.m === 'string' ? result.m.toLowerCase() : '';
-              return phrases.every(phrase => text.includes(phrase.toLowerCase()));
-            });
-          }
-          
-          return results.slice(0, 50);
+          return filterResultsByPhrases(results, phrases).slice(0, 50);
         }
 
         render() {
