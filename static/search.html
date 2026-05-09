@@ -21,6 +21,8 @@
 
           this.handleSearchChange = this.handleSearchChange.bind(this);
           this.handleSearchClear = this.handleSearchClear.bind(this);
+          this.handleChannelChange = this.handleChannelChange.bind(this);
+          this.handleUserChange = this.handleUserChange.bind(this);
           this.searchMessages = this.searchMessages.bind(this);
           this.loadSearchData = this.loadSearchData.bind(this);
           this.loadSearchDataWhenReady =
@@ -30,6 +32,8 @@
           this.state = {
             matchingMessages: [],
             searchValue: "",
+            selectedChannel: "",
+            selectedUser: "",
             ready: false,
             miniSearch: null,
           };
@@ -50,7 +54,7 @@
         }
 
         loadSearchData() {
-          const { channels, users, messages } = window.search_data;
+          const { messages } = window.search_data;
 
           console.time(`Loading minisearch`);
           const allMessages = [];
@@ -73,32 +77,102 @@
         }
 
         handleSearchChange({ target: { value } }) {
-          this.setState({ searchValue: value });
-          const matchingMessages =
-            value.length > 1 ? this.searchMessages(value) : [];
-          this.setState({ matchingMessages });
+          this.setState({ searchValue: value }, () => {
+            this.updateResults();
+          });
+        }
+
+        handleChannelChange({ target: { value } }) {
+          this.setState({ selectedChannel: value }, () => {
+            this.updateResults();
+          });
+        }
+
+        handleUserChange({ target: { value } }) {
+          this.setState({ selectedUser: value }, () => {
+            this.updateResults();
+          });
         }
 
         handleSearchClear() {
-          this.setState({ searchValue: "", matchingMessages: [] });
+          this.setState({ searchValue: "", matchingMessages: [], selectedChannel: "", selectedUser: "" });
+        }
+
+        updateResults() {
+          const { searchValue, selectedChannel, selectedUser } = this.state;
+          const matchingMessages =
+            (searchValue.trim().length > 1 || selectedChannel || selectedUser)
+              ? this.searchMessages(searchValue)
+              : [];
+          this.setState({ matchingMessages });
         }
 
         searchMessages(query) {
-          const { miniSearch } = this.state;
-          return miniSearch.search(query).slice(0, 50);
+          const { miniSearch, selectedChannel, selectedUser } = this.state;
+          
+          // Extract quoted phrases
+          const phrases = [];
+          const regex = /"([^"]+)"/g;
+          let match;
+          while ((match = regex.exec(query)) !== null) {
+            phrases.push(match[1]);
+          }
+          
+          // Clean query for MiniSearch (remove quotes, use spaces)
+          const cleanQuery = query.replace(/"/g, ' ').trim();
+          
+          const searchOptions = {
+            combineWith: 'AND',
+            prefix: true,
+          };
+          
+          if (selectedChannel || selectedUser) {
+            searchOptions.filter = (result) => {
+              let match = true;
+              if (selectedChannel) match = match && result.c === selectedChannel;
+              if (selectedUser) match = match && result.u === selectedUser;
+              return match;
+            };
+          }
+          
+          let results;
+          if (cleanQuery) {
+            results = miniSearch.search(cleanQuery, searchOptions);
+          } else if (selectedChannel || selectedUser) {
+            // Search all for filters when query is empty
+            // MiniSearch doesn't easily support "empty search with filter" 
+            // so we return empty or we could use wildcard but that's expensive.
+            // For now, let's just use text search as trigger.
+            results = []; 
+          } else {
+            results = [];
+          }
+          
+          // Post-filter for phrases
+          if (phrases.length > 0) {
+            results = results.filter(result => {
+              const text = result.m.toLowerCase();
+              return phrases.every(phrase => text.includes(phrase.toLowerCase()));
+            });
+          }
+          
+          return results.slice(0, 50);
         }
 
         render() {
-          const { matchingMessages, searchValue, ready } = this.state;
+          const { matchingMessages, searchValue, selectedChannel, selectedUser, ready } = this.state;
           return (
             <div className="App">
               <article className="main">
                 {ready ? (
                   <Header
                     onChange={this.handleSearchChange}
-                    onKeyDown={this.handleSearchKeyDown}
+                    onChannelChange={this.handleChannelChange}
+                    onUserChange={this.handleUserChange}
                     onSearchClear={this.handleSearchClear}
                     value={searchValue}
+                    selectedChannel={selectedChannel}
+                    selectedUser={selectedUser}
                     searchInputRef={this.searchInputRef}
                   />
                 ) : (
@@ -107,7 +181,7 @@
                 {matchingMessages && matchingMessages.length > 0 ? (
                   <MessagesList messages={matchingMessages} />
                 ) : (
-                  <p>This search is incredibly basic, but it works.</p>
+                  <p>{searchValue || selectedChannel || selectedUser ? "No matches found." : "Start typing to search messages."}</p>
                 )}
               </article>
             </div>
@@ -173,7 +247,7 @@
         const date = new Date(jsTs);
 
         return (
-          <span class="timestamp">
+          <span className="timestamp">
             <span className="c-timestamp__label">{date.toLocaleString()}</span>
           </span>
         );
@@ -188,32 +262,60 @@
 
       const SearchBox = ({
         onChange,
+        onChannelChange,
+        onUserChange,
         onSearchClear,
         value,
+        selectedChannel,
+        selectedUser,
         searchInputRef,
-      }) => (
-        <div className="SearchBox">
-          <div className="Search">
-            <input
-              type="text"
-              value={value}
-              onChange={onChange}
-              ref={searchInputRef}
-              autoComplete="none"
-              autoCorrect="none"
-              autoCapitalize="none"
-              spellCheck="false"
-            />
-            <button
-              className="clear"
-              onClick={onSearchClear}
-              style={{ margin: 10 }}
-            >
-              &times;
-            </button>
+      }) => {
+        const { channels, users } = window.search_data;
+        
+        const sortedChannels = Object.entries(channels)
+          .sort((a, b) => a[1].localeCompare(b[1]));
+          
+        const sortedUsers = Object.entries(users)
+          .sort((a, b) => a[1].localeCompare(b[1]));
+
+        return (
+          <div className="SearchBox">
+            <div className="Search">
+              <input
+                type="text"
+                value={value}
+                onChange={onChange}
+                ref={searchInputRef}
+                placeholder="Search messages..."
+                autoComplete="none"
+                autoCorrect="none"
+                autoCapitalize="none"
+                spellCheck="false"
+              />
+              <button
+                className="clear"
+                onClick={onSearchClear}
+              >
+                &times;
+              </button>
+            </div>
+            <div className="Filters">
+              <select value={selectedChannel} onChange={onChannelChange}>
+                <option value="">All Channels</option>
+                {sortedChannels.map(([id, name]) => (
+                  <option key={id} value={id}>#{name}</option>
+                ))}
+              </select>
+              <select value={selectedUser} onChange={onUserChange}>
+                <option value="">All Users</option>
+                {sortedUsers.map(([id, name]) => (
+                  <option key={id} value={id}>@{name}</option>
+                ))}
+              </select>
+            </div>
           </div>
-        </div>
-      );
+        );
+      };
 
       ReactDOM.render(
         React.createElement(App),
