@@ -71,8 +71,8 @@ const Files: React.FunctionComponent<FilesProps> = (props) => {
 
   if (!files || files.length === 0) return null;
 
-  const fileElements = files.map((file) => {
-    const { thumb_1024, thumb_720, thumb_480, thumb_pdf } = file as any;
+  const fileElements = files.map((file: any) => {
+    const { thumb_1024, thumb_720, thumb_480, thumb_pdf } = file;
     const thumb = thumb_1024 || thumb_720 || thumb_480 || thumb_pdf;
     let src = `files/${channelId}/${file.id}.${file.filetype}`;
     let href = src;
@@ -111,7 +111,7 @@ const Files: React.FunctionComponent<FilesProps> = (props) => {
     );
   });
 
-  return <div className="files">{...fileElements}</div>;
+  return <div className="files">{fileElements}</div>;
 };
 
 interface AvatarProps {
@@ -140,11 +140,15 @@ const ParentMessage: React.FunctionComponent<ParentMessageProps> = (props) => {
   return (
     <Message message={message} channelId={channelId}>
       {hasFiles ? <Files message={message} channelId={channelId} /> : null}
-      {message.reactions?.map((reaction) => (
+      {message.reactions?.map((reaction: any) => (
         <Reaction key={reaction.name} reaction={reaction} />
       ))}
       {message.replies?.map((reply) => (
-        <ParentMessage message={reply} channelId={channelId} key={reply.ts} />
+        <ParentMessage
+          message={reply as ArchiveMessage}
+          channelId={channelId}
+          key={reply.ts}
+        />
       ))}
     </Message>
   );
@@ -184,6 +188,7 @@ const Emoji: React.FunctionComponent<EmojiProps> = ({ name }) => {
 interface MessageProps {
   message: ArchiveMessage;
   channelId: string;
+  children?: React.ReactNode;
 }
 const Message: React.FunctionComponent<MessageProps> = (props) => {
   const { message } = props;
@@ -206,7 +211,7 @@ const Message: React.FunctionComponent<MessageProps> = (props) => {
         <div
           className="text"
           dangerouslySetInnerHTML={{
-            __html: slackMarkdown.toHTML(message.text, {
+            __html: slackMarkdown.toHTML(message.text || "", {
               escapeHTML: false,
               slackCallbacks,
             }),
@@ -391,7 +396,10 @@ const IndexPage: React.FunctionComponent<IndexPageProps> = (props) => {
   );
 };
 
-const HtmlPage: React.FunctionComponent = (props) => {
+interface HtmlPageProps {
+  children?: React.ReactNode;
+}
+const HtmlPage: React.FunctionComponent<HtmlPageProps> = (props) => {
   return (
     <html lang="en">
       <head>

@@ -1,12 +1,7 @@
-import {
-  ConversationsHistoryResponse,
-  ConversationsListArguments,
-  ConversationsListResponse,
-} from "@slack/web-api";
-import { Channel } from "@slack/web-api/dist/response/ConversationsListResponse";
+import { ConversationsHistoryResponse } from "@slack/web-api";
 import ora from "ora";
 
-import { ArchiveMessage, Message, Users } from "./interfaces.js";
+import { Channel, ArchiveMessage, Message, Users } from "./interfaces.js";
 import { getMessages } from "./data-load.js";
 import { isThread } from "./threads.js";
 import { downloadUser, getName } from "./users.js";
@@ -37,13 +32,16 @@ export async function downloadMessages(
   }
 
   for (const message of await getMessages(channel.id)) {
-    result.messages.push(message);
+    result.messages.push(message as ArchiveMessage);
   }
 
   const oldest =
     result.messages.length > 0 ? parseInt(result.messages[0].ts || "0", 10) : 0;
   const name =
-    channel.name || channel.id || channel.purpose?.value || "Unknown channel";
+    channel.name ||
+    channel.id ||
+    (channel as any).purpose?.value ||
+    "Unknown channel";
 
   const spinner = ora(
     `Downloading messages for channel ${i + 1}/${channelCount} (${name})...`,
@@ -64,7 +62,7 @@ export async function downloadMessages(
 
       result.new = result.new + (page.messages || []).length;
 
-      result.messages.unshift(...(page.messages || []));
+      result.messages.unshift(...((page.messages as ArchiveMessage[]) || []));
     }
   }
 
@@ -104,7 +102,7 @@ export async function downloadReplies(
   });
 
   // First message is the parent
-  return (result.messages || []).slice(1);
+  return (result.messages || []).slice(1) as Message[];
 }
 
 export async function downloadExtras(

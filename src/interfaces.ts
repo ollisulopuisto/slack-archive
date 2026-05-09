@@ -1,27 +1,40 @@
-import { Message as SlackMessage } from "@slack/web-api/dist/response/ConversationsHistoryResponse";
-import { Channel as SlackChannel } from "@slack/web-api/dist/response/ConversationsListResponse";
-import { User as SlackUser } from "@slack/web-api/dist/response/UsersInfoResponse";
-import { File as SlackFile } from "@slack/web-api/dist/response/FilesInfoResponse";
-import { Reaction as SlackReaction } from "@slack/web-api/dist/response/ReactionsGetResponse";
-import { AuthTestResponse } from "@slack/web-api";
+import {
+  ConversationsHistoryResponse,
+  ConversationsListResponse,
+  UsersInfoResponse,
+  FilesInfoResponse,
+  ReactionsGetResponse,
+  AuthTestResponse,
+} from "@slack/web-api";
 
-export type User = SlackUser;
+// We need the specific element types from the responses
+export type User = NonNullable<UsersInfoResponse["user"]>;
+export type Channel = NonNullable<
+  ConversationsListResponse["channels"]
+>[number];
+export type Message = {
+  ts: string;
+  user?: string;
+  text?: string;
+  files?: any[];
+  reactions?: any[];
+  reply_count?: number;
+  replies?: Message[];
+  [key: string]: any;
+};
+export type File = NonNullable<FilesInfoResponse["file"]>;
+export type Reaction = {
+  name?: string;
+  count?: number;
+  users?: string[];
+  [key: string]: any;
+};
 
 export type Users = Record<string, User>;
 
 export type Emojis = Record<string, string>;
 
-export interface ArchiveMessage extends SlackMessage {
-  replies?: Array<SlackMessage>;
-}
-
-export type Reaction = SlackReaction;
-
-export type Message = SlackMessage;
-
-export type Channel = SlackChannel;
-
-export type File = SlackFile;
+export interface ArchiveMessage extends Message {}
 
 export type SearchPageIndex = Record<string, Array<string>>;
 

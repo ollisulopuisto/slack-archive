@@ -1,8 +1,6 @@
 import { uniqBy } from "lodash-es";
 import inquirer from "inquirer";
 import fs from "fs-extra";
-import { User } from "@slack/web-api/dist/response/UsersInfoResponse";
-import { Channel } from "@slack/web-api/dist/response/ConversationsListResponse";
 import ora from "ora";
 
 import {
@@ -37,7 +35,7 @@ import { downloadEmojiList, downloadEmojis } from "./emoji.js";
 import { downloadAvatars } from "./users.js";
 import { downloadChannels } from "./channels.js";
 import { authTest } from "./web-client.js";
-import { SlackArchiveChannelData } from "./interfaces.js";
+import { User, Channel, SlackArchiveChannelData } from "./interfaces.js";
 import { runBot } from "./bot.js";
 
 const { prompt } = inquirer;

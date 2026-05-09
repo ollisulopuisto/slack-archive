@@ -115,11 +115,11 @@ async function createSearchHTML() {
 
   template = template.replace(
     "<!-- react -->",
-    getScript(`react@18.2.0/umd/react.production.min.js`),
+    getScript(`react@18.3.1/umd/react.production.min.js`),
   );
   template = template.replace(
     "<!-- react-dom -->",
-    getScript(`react-dom@18.2.0/umd/react-dom.production.min.js`),
+    getScript(`react-dom@18.3.1/umd/react-dom.production.min.js`),
   );
   template = template.replace(
     `<!-- babel -->`,
