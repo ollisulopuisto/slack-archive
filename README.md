@@ -17,7 +17,7 @@ can still enjoy in 20 years. This tool will help you do that.
 ## Using it
 
 1. Do you already have a user token for your workspace? If not, read on below on how to get a token.
-2. Make sure you have [`node` and `npm`](https://nodejs.org/en/) installed, ideally something newer than Node v14.
+2. Make sure you have [`node` and `npm`](https://nodejs.org/en/) installed (Node v20.19.0 or newer is recommended).
 3. Run `slack-archive`, which will interactively guide you through the options.
 
 ```sh
@@ -142,4 +142,3 @@ npm run cli -- --bot
 - `@YourBotName "exact phrase"` - Search for messages containing the exact phrase.
 
 The bot will return the top 5 matches, including the channel, user, date, and a snippet of the message.
-

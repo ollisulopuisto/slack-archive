@@ -2,6 +2,7 @@ import { App } from "@slack/bolt";
 import MiniSearch from "minisearch";
 import { getSearchFile } from "./data-load.js";
 import { SearchMessage } from "./interfaces.js";
+import { filterResultsByPhrases, parseSearchQuery } from "./search-query.js";
 
 export async function runBot() {
   const token = process.env.SLACK_BOT_TOKEN;
@@ -60,15 +61,7 @@ export async function runBot() {
 
     console.log(`Bot search query: ${query}`);
 
-    // Phrase search logic
-    const phrases: string[] = [];
-    const regex = /"([^"]+)"/g;
-    let match;
-    while ((match = regex.exec(query)) !== null) {
-      phrases.push(match[1]);
-    }
-
-    const cleanQuery = query.replace(/"/g, " ").trim();
+    const { cleanQuery, phrases } = parseSearchQuery(query);
 
     let results: any[] = [];
     if (cleanQuery) {
@@ -78,14 +71,7 @@ export async function runBot() {
       });
     }
 
-    if (phrases.length > 0) {
-      results = results.filter((result) => {
-        const msgText = result.m.toLowerCase();
-        return phrases.every((phrase) =>
-          msgText.includes(phrase.toLowerCase()),
-        );
-      });
-    }
+    results = filterResultsByPhrases(results, phrases);
 
     const topResults = results.slice(0, 5);
 
@@ -100,8 +86,9 @@ export async function runBot() {
       const channelName = searchData.channels[res.c] || res.c;
       const userName = searchData.users[res.u] || res.u;
       const date = new Date(parseFloat(res.t) * 1000).toLocaleString("fi-FI");
+      const message = typeof res.m === "string" ? res.m : "";
 
-      response += `*#${channelName}* | *${userName}* | ${date}\n> ${res.m.replace(/\n/g, "\n> ")}\n\n`;
+      response += `*#${channelName}* | *${userName}* | ${date}\n> ${message.replace(/\n/g, "\n> ")}\n\n`;
     }
 
     await say({

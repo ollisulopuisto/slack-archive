@@ -1,34 +1,26 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import MiniSearch from "minisearch";
+import {
+  filterResultsByPhrases,
+  getSearchFilter,
+  parseSearchQuery,
+} from "./search-query.js";
 
-// Emulate the search logic used in bot.ts and search.html
 function performSearch(
   miniSearch: MiniSearch,
   query: string,
   filters: { channel?: string; user?: string } = {},
 ) {
-  // Extract quoted phrases
-  const phrases: string[] = [];
-  const regex = /"([^"]+)"/g;
-  let match;
-  while ((match = regex.exec(query)) !== null) {
-    phrases.push(match[1]);
-  }
-
-  const cleanQuery = query.replace(/"/g, " ").trim();
+  const { cleanQuery, phrases } = parseSearchQuery(query);
 
   const searchOptions: any = {
     combineWith: "AND",
     prefix: true,
   };
 
-  if (filters.channel || filters.user) {
-    searchOptions.filter = (result: any) => {
-      let match = true;
-      if (filters.channel) match = match && result.c === filters.channel;
-      if (filters.user) match = match && result.u === filters.user;
-      return match;
-    };
+  const filter = getSearchFilter(filters);
+  if (filter) {
+    searchOptions.filter = filter;
   }
 
   let results: any[] = [];
@@ -39,12 +31,7 @@ function performSearch(
     results = [];
   }
 
-  if (phrases.length > 0) {
-    results = results.filter((result) => {
-      const text = typeof result.m === "string" ? result.m.toLowerCase() : "";
-      return phrases.every((phrase) => text.includes(phrase.toLowerCase()));
-    });
-  }
+  results = filterResultsByPhrases(results, phrases);
 
   return results;
 }
@@ -99,5 +86,12 @@ describe("Search Logic", () => {
     const results = performSearch(miniSearch, "hello", { user: "u1" });
     expect(results).toHaveLength(1);
     expect(results[0].t).toBe("1");
+  });
+
+  it("should handle missing message text in phrase filtering", () => {
+    miniSearch.addAll([{ t: "5", u: "u3", c: "c3" }]);
+    const results = performSearch(miniSearch, '"hello"');
+
+    expect(results.some((result) => result.t === "5")).toBe(false);
   });
 });
