@@ -103,7 +103,7 @@ export async function runBot() {
       const date = new Date(parseFloat(res.t) * 1000).toLocaleString();
 
       response += `*#${channelName}* | *${userName}* | ${date}\n> ${res.m}\n\n`;
-    }
+      response += "*#" + channelName + "* | *" + userName + "* | " + date + "\n> " + res.m.replace(/\n/g, "\n> ") + "\n\n";
 
     await say({
       text: response,
