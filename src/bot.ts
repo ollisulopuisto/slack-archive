@@ -100,7 +100,7 @@ export async function runBot() {
     for (const res of topResults) {
       const channelName = searchData.channels[res.c] || res.c;
       const userName = searchData.users[res.u] || res.u;
-      const date = new Date(parseFloat(res.t) * 1000).toLocaleString("fi-FI");
+      const date = new Date(parseFloat(res.t) * 1000).toLocaleString();
 
       response += `*#${channelName}* | *${userName}* | ${date}\n> ${res.m}\n\n`;
     }
