@@ -139,11 +139,8 @@
           if (cleanQuery) {
             results = miniSearch.search(cleanQuery, searchOptions);
           } else if (selectedChannel || selectedUser) {
-            // Search all for filters when query is empty
-            // MiniSearch doesn't easily support "empty search with filter" 
-            // so we return empty or we could use wildcard but that's expensive.
-            // For now, let's just use text search as trigger.
-            results = []; 
+            results = miniSearch.search(MiniSearch.wildcard, searchOptions);
+          } else {
           } else {
             results = [];
           }
