@@ -75,7 +75,7 @@ export async function downloadEmojiList(): Promise<Emojis> {
 export async function downloadEmoji(
   name: string,
   url: string,
-  emojis: Emojis
+  emojis: Emojis,
 ): Promise<void> {
   // Alias?
   if (url.startsWith("alias:")) {
@@ -83,7 +83,7 @@ export async function downloadEmoji(
 
     if (!emojis[alias]) {
       console.warn(
-        `Found emoji alias ${alias}, which does not exist in master emoji list`
+        `Found emoji alias ${alias}, which does not exist in master emoji list`,
       );
       return;
     } else {
@@ -105,12 +105,12 @@ export function getEmojiAlias(name: string): string {
 
 export async function downloadEmojis(
   messages: Array<ArchiveMessage>,
-  emojis: Emojis
+  emojis: Emojis,
 ) {
   const regex = /:[^:\s]*(?:::[^:\s]*)*:/g;
 
   const spinner = ora(
-    `Scanning 0/${messages.length} messages for emoji shortcodes...`
+    `Scanning 0/${messages.length} messages for emoji shortcodes...`,
   ).start();
   let downloaded = 0;
 
@@ -130,6 +130,6 @@ export async function downloadEmojis(
   }
 
   spinner.succeed(
-    `Scanned ${messages.length} messages for emoji (and downloaded ${downloaded})`
+    `Scanned ${messages.length} messages for emoji (and downloaded ${downloaded})`,
   );
 }

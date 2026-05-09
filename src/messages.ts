@@ -24,7 +24,7 @@ interface DownloadMessagesResult {
 export async function downloadMessages(
   channel: Channel,
   i: number,
-  channelCount: number
+  channelCount: number,
 ): Promise<DownloadMessagesResult> {
   let result: DownloadMessagesResult = {
     messages: [],
@@ -46,7 +46,7 @@ export async function downloadMessages(
     channel.name || channel.id || channel.purpose?.value || "Unknown channel";
 
   const spinner = ora(
-    `Downloading messages for channel ${i + 1}/${channelCount} (${name})...`
+    `Downloading messages for channel ${i + 1}/${channelCount} (${name})...`,
   ).start();
 
   for await (const page of getWebClient().paginate("conversations.history", {
@@ -69,7 +69,7 @@ export async function downloadMessages(
   }
 
   spinner.succeed(
-    `Downloaded messages for channel ${i + 1}/${channelCount} (${name})`
+    `Downloaded messages for channel ${i + 1}/${channelCount} (${name})`,
   );
 
   return result;
@@ -77,7 +77,7 @@ export async function downloadMessages(
 
 export async function downloadReplies(
   channel: Channel,
-  message: ArchiveMessage
+  message: ArchiveMessage,
 ): Promise<Array<Message>> {
   if (!channel.id || !message.ts) {
     console.warn("Could not find channel or message id", channel, message);
@@ -110,10 +110,10 @@ export async function downloadReplies(
 export async function downloadExtras(
   channel: Channel,
   messages: Array<ArchiveMessage>,
-  users: Users
+  users: Users,
 ) {
   const spinner = ora(
-    `Downloading threads and users for ${channel.name || channel.id}...`
+    `Downloading threads and users for ${channel.name || channel.id}...`,
   ).start();
 
   // Then, all messages and threads
@@ -138,6 +138,6 @@ export async function downloadExtras(
   spinner.succeed(
     `Downloaded ${totalThreads} threads and users for ${
       channel.name || channel.id
-    }.`
+    }.`,
   );
 }

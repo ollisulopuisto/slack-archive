@@ -10,7 +10,7 @@ const defaultOptions: RetryOptions = {
 export async function retry<T>(
   options: Partial<RetryOptions>,
   operation: () => T,
-  attempt = 0
+  attempt = 0,
 ): Promise<T> {
   let mergedOptions = { ...defaultOptions, ...options };
 

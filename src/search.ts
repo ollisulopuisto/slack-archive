@@ -37,7 +37,7 @@ const INDEX_OF_PAGES: SearchPageIndex = {};
 export function recordPage(channelId?: string, timestamp?: string) {
   if (!channelId || !timestamp) {
     console.warn(
-      `Search: Cannot record page: channelId: ${channelId} timestamp: ${timestamp}`
+      `Search: Cannot record page: channelId: ${channelId} timestamp: ${timestamp}`,
     );
     return;
   }
@@ -82,7 +82,7 @@ async function createSearchFile(spinner: Ora) {
     if (!channel.id) {
       console.warn(
         `Can't create search file for channel ${channel.name}: No id found`,
-        channel
+        channel,
       );
       continue;
     }
@@ -115,19 +115,19 @@ async function createSearchHTML() {
 
   template = template.replace(
     "<!-- react -->",
-    getScript(`react@18.2.0/umd/react.production.min.js`)
+    getScript(`react@18.2.0/umd/react.production.min.js`),
   );
   template = template.replace(
     "<!-- react-dom -->",
-    getScript(`react-dom@18.2.0/umd/react-dom.production.min.js`)
+    getScript(`react-dom@18.2.0/umd/react-dom.production.min.js`),
   );
   template = template.replace(
     `<!-- babel -->`,
-    getScript(`babel-standalone@6.26.0/babel.min.js`)
+    getScript(`babel-standalone@6.26.0/babel.min.js`),
   );
   template = template.replace(
     `<!-- minisearch -->`,
-    getScript("minisearch@5.0.0/dist/umd/index.min.js")
+    getScript("minisearch@5.0.0/dist/umd/index.min.js"),
   );
 
   template = template.replace(`<!-- Size -->`, getSize());

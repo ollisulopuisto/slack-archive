@@ -34,7 +34,7 @@ export async function deleteBackup() {
   }
 
   console.log(
-    `Cleaning up backup: If anything went wrong, you'll find it in your system's trash.`
+    `Cleaning up backup: If anything went wrong, you'll find it in your system's trash.`,
   );
 
   try {
@@ -42,10 +42,10 @@ export async function deleteBackup() {
     await trash(backupDir);
     return;
   } catch (error) {
-    console.log('Moving backup to trash failed.');
+    console.log("Moving backup to trash failed.");
   }
 
-  if (!process.env['TRASH_HARDER']) {
+  if (!process.env["TRASH_HARDER"]) {
     console.log(`Set TRASH_HARDER=1 to delete files permanently.`);
     return;
   }
@@ -78,7 +78,7 @@ export async function deleteOlderBackups() {
 
     if (AUTOMATIC_MODE) {
       console.log(
-        `Found existing older backups, but in automatic mode: Proceeding without deleting them.`
+        `Found existing older backups, but in automatic mode: Proceeding without deleting them.`,
       );
       return;
     }
@@ -89,7 +89,7 @@ export async function deleteOlderBackups() {
         default: true,
         name: "del",
         message: `We've found existing backups (${oldBackupNames.join(
-          ", "
+          ", ",
         )}). Do you want to delete them?`,
       },
     ]);

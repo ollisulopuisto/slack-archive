@@ -34,7 +34,7 @@ function getCliParameter(param: string) {
 
 export const AUTOMATIC_MODE = findCliParameter("--automatic");
 export const USE_PREVIOUS_CHANNEL_CONFIG = findCliParameter(
-  "--use-previous-channel-config"
+  "--use-previous-channel-config",
 );
 export const CHANNEL_TYPES = getCliParameter("--channel-types");
 export const NO_BACKUP = findCliParameter("--no-backup");
@@ -42,7 +42,7 @@ export const NO_SEARCH = findCliParameter("--no-search");
 export const NO_FILE_DOWNLOAD = findCliParameter("--no-file-download");
 export const NO_SLACK_CONNECT = findCliParameter("--no-slack-connect");
 export const FORCE_HTML_GENERATION = findCliParameter(
-  "--force-html-generation"
+  "--force-html-generation",
 );
 export const EXCLUDE_CHANNELS = getCliParameter("--exclude-channels");
 export const BASE_DIR = process.cwd();
@@ -60,14 +60,14 @@ export const SEARCH_PATH = path.join(OUT_DIR, "search.html");
 export const MESSAGES_JS_PATH = path.join(__dirname, "../static/scroll.js");
 export const SEARCH_TEMPLATE_PATH = path.join(
   __dirname,
-  "../static/search.html"
+  "../static/search.html",
 );
 export const CHANNELS_DATA_PATH = path.join(DATA_DIR, "channels.json");
 export const USERS_DATA_PATH = path.join(DATA_DIR, "users.json");
 export const EMOJIS_DATA_PATH = path.join(DATA_DIR, "emojis.json");
 export const SLACK_ARCHIVE_DATA_PATH = path.join(
   DATA_DIR,
-  "slack-archive.json"
+  "slack-archive.json",
 );
 export const SEARCH_DATA_PATH = path.join(DATA_DIR, "search.js");
 

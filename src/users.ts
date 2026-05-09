@@ -14,7 +14,7 @@ export const avatarsRefetchedThisRun: Array<string> = [];
 
 export async function downloadUser(
   item: Message | any,
-  users: Users
+  users: Users,
 ): Promise<User | null> {
   if (!item.user) return null;
 
@@ -24,11 +24,14 @@ export async function downloadUser(
     return users[item.user];
 
   const spinner = ora(`Downloading info for user ${item.user}...`).start();
-  const user = (item.user === 'U00') ? {} as User : (
-      await getWebClient().users.info({
-        user: item.user,
-      })
-    ).user;
+  const user =
+    item.user === "U00"
+      ? ({} as User)
+      : (
+          await getWebClient().users.info({
+            user: item.user,
+          })
+        ).user;
 
   if (user) {
     usersRefetchedThisRun.push(item.user);
@@ -66,7 +69,7 @@ export async function downloadAvatarForUser(user?: User | null) {
   try {
     const filePath = getAvatarFilePath(
       user.id!,
-      path.extname(profile.image_512)
+      path.extname(profile.image_512),
     );
     await downloadURL(profile.image_512, filePath, {
       authorize: false,

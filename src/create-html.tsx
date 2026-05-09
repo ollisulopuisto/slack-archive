@@ -313,7 +313,7 @@ const IndexPage: React.FunctionComponent<IndexPageProps> = (props) => {
 
   const dmChannels = sortedChannels
     .filter(
-      (channel) => isDmChannel(channel, users) && !users[channel.user!].deleted
+      (channel) => isDmChannel(channel, users) && !users[channel.user!].deleted,
     )
     .sort((a, b) => {
       // Self first
@@ -328,7 +328,7 @@ const IndexPage: React.FunctionComponent<IndexPageProps> = (props) => {
 
   const dmDeletedChannels = sortedChannels
     .filter(
-      (channel) => isDmChannel(channel, users) && users[channel.user!].deleted
+      (channel) => isDmChannel(channel, users) && users[channel.user!].deleted,
     )
     .sort((a, b) => (a.name || "Unknown").localeCompare(b.name || "Unknown"))
     .map((channel) => <ChannelLink key={channel.id} channel={channel} />);
@@ -479,7 +479,7 @@ const Pagination: React.FunctionComponent<PaginationProps> = (props) => {
     options.push(
       <option selected={selected} key={value} value={value}>
         {text}
-      </option>
+      </option>,
     );
   }
 
@@ -554,7 +554,7 @@ async function renderAndWrite(page: JSX.Element, filePath: string) {
 
 export async function getChannelsToCreateFilesFor(
   channels: Array<Channel>,
-  newMessages: Record<string, number>
+  newMessages: Record<string, number>,
 ) {
   const result: Array<Channel> = [];
 
@@ -593,7 +593,7 @@ async function createHtmlForChannel({
   const messages = await getMessages(channel.id!, true);
   const chunks = chunk(messages, MESSAGE_CHUNK);
   const spinner = ora(
-    `Rendering HTML for ${i + 1}/${total} ${channel.name || channel.id}`
+    `Rendering HTML for ${i + 1}/${total} ${channel.name || channel.id}`,
   ).start();
 
   // Calculate info about all chunks
@@ -614,7 +614,7 @@ async function createHtmlForChannel({
         chunkIndex: 0,
         chunksInfo: chunksInfo,
       },
-      spinner
+      spinner,
     );
   }
 
@@ -626,12 +626,12 @@ async function createHtmlForChannel({
         chunkIndex: chunkI,
         chunksInfo,
       },
-      spinner
+      spinner,
     );
   }
 
   spinner.succeed(
-    `Rendered HTML for ${i + 1}/${total} ${channel.name || channel.id}`
+    `Rendered HTML for ${i + 1}/${total} ${channel.name || channel.id}`,
   );
 }
 

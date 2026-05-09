@@ -37,7 +37,7 @@ function isChannels(input: any): input is ConversationsListResponse {
 
 export async function downloadChannels(
   options: ConversationsListArguments,
-  users: Users
+  users: Users,
 ): Promise<Array<Channel>> {
   const channels: Array<Channel> = [];
 
@@ -49,7 +49,7 @@ export async function downloadChannels(
 
   for await (const page of getWebClient().paginate(
     "conversations.list",
-    options
+    options,
   )) {
     if (isChannels(page)) {
       spinner.text = `Found ${page.channels?.length} channels (found so far: ${
