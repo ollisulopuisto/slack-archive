@@ -51,7 +51,7 @@ export async function runBot() {
     const text = event.text;
     // Remove the mention from the query
     const query = text.replace(/<@[A-Z0-9]+>/g, "").trim();
-
+    const query = text.replace(/<@[A-Z0-9]+[^>]*>/g, "").trim();
     if (!query) {
       await say(
         'Mitä haluaisit etsiä arkistosta? Esimerkki: `@arkisto intel` tai `@arkisto "tämä fraasi"`',
