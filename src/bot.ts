@@ -1,5 +1,4 @@
-import pkg from "@slack/bolt";
-const { App } = pkg;
+import { App } from "@slack/bolt";
 import MiniSearch from "minisearch";
 import { getSearchFile } from "./data-load.js";
 import { SearchMessage } from "./interfaces.js";
@@ -46,7 +45,7 @@ export async function runBot() {
   miniSearch.addAll(allMessages);
   console.log("Indexing complete.");
 
-  app.event("app_mention", async ({ event, say }) => {
+  app.event("app_mention", async ({ event, say }: { event: any; say: any }) => {
     const text = event.text;
     // Remove the mention from the query
     const query = text.replace(/<@[A-Z0-9]+>/g, "").trim();
@@ -70,7 +69,7 @@ export async function runBot() {
 
     const cleanQuery = query.replace(/"/g, " ").trim();
 
-    let results = [];
+    let results: any[] = [];
     if (cleanQuery) {
       results = miniSearch.search(cleanQuery, {
         combineWith: "AND",

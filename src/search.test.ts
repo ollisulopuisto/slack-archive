@@ -31,7 +31,7 @@ function performSearch(
     };
   }
 
-  let results = [];
+  let results: any[] = [];
   if (cleanQuery) {
     results = miniSearch.search(cleanQuery, searchOptions);
   } else if (filters.channel || filters.user) {
