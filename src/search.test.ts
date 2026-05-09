@@ -41,7 +41,7 @@ function performSearch(
 
   if (phrases.length > 0) {
     results = results.filter((result) => {
-      const text = result.m.toLowerCase();
+      const text = typeof result.m === "string" ? result.m.toLowerCase() : "";
       return phrases.every((phrase) => text.includes(phrase.toLowerCase()));
     });
   }
