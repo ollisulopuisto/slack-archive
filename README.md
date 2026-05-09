@@ -21,8 +21,17 @@ can still enjoy in 20 years. This tool will help you do that.
 2. Make sure you have [`node` and `npm`](https://nodejs.org/en/) installed (Node v20.19.0 or newer is recommended).
 3. Run `slack-archive`, which will interactively guide you through the options.
 
+To run this forked version (with advanced search and bot features):
+
 ```sh
-npx slack-archive
+npx github:ollisulopuisto/slack-archive
+```
+
+Or you can install it globally:
+
+```sh
+npm install -g github:ollisulopuisto/slack-archive
+slack-archive --bot
 ```
 
 ### Parameters
