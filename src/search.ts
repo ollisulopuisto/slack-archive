@@ -127,7 +127,7 @@ async function createSearchHTML() {
   );
   template = template.replace(
     `<!-- minisearch -->`,
-    getScript("minisearch@5.0.0/dist/umd/index.min.js"),
+    getScript("minisearch@7.2.0/dist/umd/index.min.js"),
   );
 
   template = template.replace(`<!-- Size -->`, getSize());
