@@ -34,15 +34,17 @@ export async function runBot() {
     storeFields: ["t", "u", "m", "c"],
   });
 
-  const allMessages: SearchMessage[] = [];
+  let messageCount = 0;
   for (const channelId in searchData.messages) {
-    for (const msg of searchData.messages[channelId]) {
-      allMessages.push({ ...msg, c: channelId });
-    }
+    const messages = searchData.messages[channelId].map((msg) => ({
+      ...msg,
+      c: channelId,
+    }));
+    miniSearch.addAll(messages);
+    messageCount += messages.length;
   }
 
-  console.log(`Indexing ${allMessages.length} messages...`);
-  miniSearch.addAll(allMessages);
+  console.log(`Indexing ${messageCount} messages...`);
   console.log("Indexing complete.");
 
   app.event("app_mention", async ({ event, say }: { event: any; say: any }) => {
