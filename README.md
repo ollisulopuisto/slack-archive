@@ -10,7 +10,8 @@ can still enjoy in 20 years. This tool will help you do that.
  * **Incremental backups**: If you already have local data, we'll extend it - no need to download existing stuff again.
  * **JSON included**: All data is also stored as JSON, so you can consume it with other tools later.
  * **No cloud, free**: Do all of this for free, without giving anyone your information.
- * **Basic search**: Offers basic search functionality.
+ * **Advanced search**: Features a fast, browser-based search with channel/user filters and exact phrase matching.
+ * **Slack Bot Integration**: Search your archive directly from Slack with a Socket Mode bot.
 
 <img width="1151" alt="Screen Shot 2021-09-09 at 6 43 55 PM" src="https://user-images.githubusercontent.com/1426799/132776566-0f75a1b4-4b9a-4b53-8a39-e44e8a747a68.png">
 
@@ -142,3 +143,13 @@ npm run cli -- --bot
 - `@YourBotName "exact phrase"` - Search for messages containing the exact phrase.
 
 The bot will return the top 5 matches, including the channel, user, date, and a snippet of the message.
+
+### Lightweight VPS Deployment
+
+If you want to run the bot on a VPS with limited storage, you **do not need the generated HTML files**. The bot only requires the following:
+
+- `data/search.js` (contains the indexed messages)
+- `data/users.json` and `data/channels.json`
+- `data/avatars/` and `data/emojis/` (optional, for metadata)
+
+You can safely exclude the `/html/` directory to save significant disk space.
