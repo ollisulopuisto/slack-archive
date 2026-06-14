@@ -1,7 +1,10 @@
 import fs from "fs-extra";
 import path from "path";
+import { fileURLToPath } from "url";
 import ora, { Ora } from "ora";
 import { getChannelName } from "./channels.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import {
   NO_SEARCH,
