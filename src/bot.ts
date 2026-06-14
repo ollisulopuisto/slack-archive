@@ -36,6 +36,14 @@ export async function runBot() {
   const db = new sqlite3.Database(SEARCH_DB_PATH);
   console.log("Database connection established.");
 
+  db.get("SELECT COUNT(*) AS count FROM messages", (err, row: any) => {
+    if (err) {
+      console.error("Error checking messages count:", err.message);
+    } else {
+      console.log(`Database stats: ${row ? row.count : 0} messages in index.`);
+    }
+  });
+
   // Log all incoming payloads for debugging
   app.use(async ({ payload, next }) => {
     console.log("Slack event payload received:", JSON.stringify(payload));
