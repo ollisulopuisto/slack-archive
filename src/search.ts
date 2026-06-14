@@ -9,16 +9,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import {
   NO_SEARCH,
   SEARCH_DATA_PATH,
+  SEARCH_DB_PATH,
   SEARCH_PATH,
   SEARCH_TEMPLATE_PATH,
 } from "./config.js";
-import { SearchFile, SearchMessage, SearchPageIndex } from "./interfaces";
+import { SearchFile, SearchMessage, SearchPageIndex } from "./interfaces.js";
 import {
   getChannels,
   getMessages,
   getSearchFile,
   getUsers,
 } from "./data-load.js";
+import sqlite3 from "sqlite3";
 
 // Format:
 // channelId: [ timestamp0, timestamp1, timestamp2, ... ]
@@ -61,8 +63,98 @@ export async function createSearch() {
 
   await createSearchFile(spinner);
   await createSearchHTML();
+  await createSearchDatabase(spinner);
 
   spinner.succeed(`Search file created`);
+}
+
+async function createSearchDatabase(spinner: Ora) {
+  const users = await getUsers();
+  const channels = await getChannels();
+
+  // Delete existing database file to start fresh and avoid locks
+  if (fs.existsSync(SEARCH_DB_PATH)) {
+    fs.unlinkSync(SEARCH_DB_PATH);
+  }
+
+  const db = new sqlite3.Database(SEARCH_DB_PATH);
+
+  await new Promise<void>((resolve, reject) => {
+    db.serialize(() => {
+      
+      // Create tables
+      db.run("CREATE TABLE channels (id TEXT PRIMARY KEY, name TEXT)");
+      db.run("CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT)");
+      db.run(`CREATE TABLE messages (
+        id TEXT PRIMARY KEY,
+        channel_id TEXT,
+        user_id TEXT,
+        timestamp TEXT,
+        message TEXT
+      )`);
+      db.run("CREATE VIRTUAL TABLE messages_fts USING fts5(id UNINDEXED, message)");
+
+      // Begin transaction
+      db.run("BEGIN TRANSACTION");
+
+      // Insert Users
+      const userStmt = db.prepare("INSERT OR REPLACE INTO users (id, name) VALUES (?, ?)");
+      for (const userId in users) {
+        const name = users[userId].name || users[userId].real_name || "Unknown";
+        userStmt.run(userId, name);
+      }
+      userStmt.finalize();
+
+      resolve();
+    });
+  });
+
+  // Now insert the messages in batches
+  for (const channel of channels) {
+    if (!channel.id) continue;
+    const name = getChannelName(channel);
+    
+    spinner.text = `Indexing database messages for channel ${name}`;
+    spinner.render();
+
+    await new Promise<void>((resolve, reject) => {
+      db.serialize(async () => {
+        db.run("INSERT OR REPLACE INTO channels (id, name) VALUES (?, ?)", channel.id, name);
+        
+        const messages = await getMessages(channel.id!, true);
+        const msgStmt = db.prepare("INSERT OR REPLACE INTO messages (id, channel_id, user_id, timestamp, message) VALUES (?, ?, ?, ?, ?)");
+        const ftsStmt = db.prepare("INSERT OR REPLACE INTO messages_fts (id, message) VALUES (?, ?)");
+        
+        for (const msg of messages) {
+          const id = `${channel.id}-${msg.ts}`;
+          const text = msg.text || "";
+          msgStmt.run(id, channel.id, msg.user, msg.ts, text);
+          ftsStmt.run(id, text);
+        }
+        
+        msgStmt.finalize();
+        ftsStmt.finalize();
+        resolve();
+      });
+    });
+  }
+
+  // Commit transaction and close
+  await new Promise<void>((resolve, reject) => {
+    db.serialize(() => {
+      db.run("COMMIT", (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    db.close((err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
 }
 
 async function createSearchFile(spinner: Ora) {

@@ -70,6 +70,7 @@ export const SLACK_ARCHIVE_DATA_PATH = path.join(
   "slack-archive.json",
 );
 export const SEARCH_DATA_PATH = path.join(DATA_DIR, "search.js");
+export const SEARCH_DB_PATH = path.join(DATA_DIR, "search.db");
 
 export function getChannelDataFilePath(channelId: string) {
   return path.join(DATA_DIR, `${channelId}.json`);
