@@ -68,7 +68,7 @@ export async function createSearch() {
   spinner.succeed(`Search file created`);
 }
 
-async function createSearchDatabase(spinner: Ora) {
+export async function createSearchDatabase(spinner: Ora) {
   const existingData = await getSearchFile();
   const users = await getUsers();
   const channels = await getChannels();

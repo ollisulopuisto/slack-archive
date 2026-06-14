@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [26.06.14.123] - 2026-06-14
+
+### Added
+- Added a standalone script `src/build-db.ts` to build only the SQLite database from existing data without running the HTML rendering or full archive generation process. This prevents Out Of Memory (OOM) crashes on small VPS instances.
+
 ## [26.06.14.122] - 2026-06-14
 
 ### Added
