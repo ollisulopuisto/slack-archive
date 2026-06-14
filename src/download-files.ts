@@ -38,7 +38,8 @@ export async function downloadURL(
 
   try {
     const response = await fetch(url, { headers });
-    const buffer = await response.buffer();
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
     fs.outputFileSync(filePath, buffer);
   } catch (error) {
     console.warn(`Failed to download file ${url}`, error);

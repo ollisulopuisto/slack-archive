@@ -483,9 +483,8 @@ const Pagination: React.FunctionComponent<PaginationProps> = (props) => {
   for (const [i, chunk] of chunksInfo.entries()) {
     const text = `${i} - ${chunk.newest} to ${chunk.oldest}`;
     const value = `${channelId}-${i}.html`;
-    const selected = i === index;
     options.push(
-      <option selected={selected} key={value} value={value}>
+      <option key={value} value={value}>
         {text}
       </option>,
     );
@@ -498,7 +497,9 @@ const Pagination: React.FunctionComponent<PaginationProps> = (props) => {
       {older}
       {sep2}
       <div className="jumper">
-        <select id="jumper">{options}</select>
+        <select id="jumper" defaultValue={`${channelId}-${index}.html`}>
+          {options}
+        </select>
         <script
           dangerouslySetInnerHTML={{
             __html: `
