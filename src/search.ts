@@ -69,6 +69,7 @@ export async function createSearch() {
 }
 
 async function createSearchDatabase(spinner: Ora) {
+  const existingData = await getSearchFile();
   const users = await getUsers();
   const channels = await getChannels();
 
@@ -125,7 +126,17 @@ async function createSearchDatabase(spinner: Ora) {
     spinner.render();
 
     // Fetch messages async BEFORE entering db.serialize
-    const messages = await getMessages(channel.id!, true);
+    const rawMessages = await getMessages(channel.id!, true);
+    let messages: SearchMessage[] = rawMessages.map((message) => ({
+      m: message.text,
+      u: message.user,
+      t: message.ts,
+    }));
+
+    // Fallback to existing search data if the raw channel JSON file is empty/missing
+    if (messages.length === 0 && existingData.messages && existingData.messages[channel.id!]) {
+      messages = existingData.messages[channel.id!];
+    }
 
     await new Promise<void>((resolve, reject) => {
       db.serialize(() => {
@@ -135,9 +146,9 @@ async function createSearchDatabase(spinner: Ora) {
         const ftsStmt = db.prepare("INSERT OR REPLACE INTO messages_fts (id, message) VALUES (?, ?)");
         
         for (const msg of messages) {
-          const id = `${channel.id}-${msg.ts}`;
-          const text = msg.text || "";
-          msgStmt.run(id, channel.id, msg.user, msg.ts, text);
+          const id = `${channel.id}-${msg.t}`;
+          const text = msg.m || "";
+          msgStmt.run(id, channel.id, msg.u, msg.t, text);
           ftsStmt.run(id, text);
         }
         
@@ -196,7 +207,7 @@ async function createSearchFile(spinner: Ora) {
     spinner.text = `Creating search messages for channel ${name}`;
     spinner.render();
 
-    const messages = (await getMessages(channel.id, true)).map((message) => {
+    let messages = (await getMessages(channel.id, true)).map((message) => {
       const searchMessage: SearchMessage = {
         m: message.text,
         u: message.user,
@@ -205,6 +216,10 @@ async function createSearchFile(spinner: Ora) {
 
       return searchMessage;
     });
+
+    if (messages.length === 0 && existingData.messages && existingData.messages[channel.id]) {
+      messages = existingData.messages[channel.id];
+    }
 
     result.messages![channel.id] = messages;
     result.channels[channel.id] = name;
