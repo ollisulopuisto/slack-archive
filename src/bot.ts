@@ -50,14 +50,14 @@ export async function runBot() {
     await next();
   });
 
-  app.event("app_mention", async ({ event, say }: { event: any; say: any }) => {
-    const text = event.text;
+  async function performSearch(text: string, say: any, threadTs?: string) {
     // Remove the mention from the query
     const query = text.replace(/<@[A-Z0-9]+[^>]*>/g, "").trim();
     if (!query) {
-      await say(
-        'Mitä haluaisit etsiä arkistosta? Esimerkki: `@arkisto intel` tai `@arkisto "tämä fraasi"`',
-      );
+      await say({
+        text: 'Mitä haluaisit etsiä arkistosta? Esimerkki: `intel` tai `"tämä fraasi"`',
+        thread_ts: threadTs,
+      });
       return;
     }
 
@@ -109,7 +109,10 @@ export async function runBot() {
     const topResults = DefenseSlice(results, 5);
 
     if (topResults.length === 0) {
-      await say(`Ei osumia haulla: ${query}`);
+      await say({
+        text: `Ei osumia haulla: ${query}`,
+        thread_ts: threadTs,
+      });
       return;
     }
 
@@ -126,8 +129,19 @@ export async function runBot() {
 
     await say({
       text: response,
-      thread_ts: event.ts,
+      thread_ts: threadTs,
     });
+  }
+
+  app.event("app_mention", async ({ event, say }: { event: any; say: any }) => {
+    await performSearch(event.text, say, event.ts);
+  });
+
+  app.event("message", async ({ event, say }: { event: any; say: any }) => {
+    // Only respond to direct messages (IMs) sent by users (ignore bot messages and other channel messages)
+    if (event.channel_type === "im" && !event.bot_id && event.user) {
+      await performSearch(event.text, say);
+    }
   });
 
   await app.start();

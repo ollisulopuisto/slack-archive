@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [26.06.14.124] - 2026-06-14
+
+### Added
+- Added DM (Direct Message) search support to the Slackbot. You can now message the bot directly in an IM channel to search the archive without needing to mention it with `@botname`.
+
 ## [26.06.14.123] - 2026-06-14
 
 ### Added
