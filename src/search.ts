@@ -79,9 +79,15 @@ async function createSearchDatabase(spinner: Ora) {
 
   const db = new sqlite3.Database(SEARCH_DB_PATH);
 
+  const run = (sql: string, params: any[] = []) => new Promise<void>((resolve, reject) => {
+    db.run(sql, params, (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+
   await new Promise<void>((resolve, reject) => {
     db.serialize(() => {
-      
       // Create tables
       db.run("CREATE TABLE channels (id TEXT PRIMARY KEY, name TEXT)");
       db.run("CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT)");
@@ -95,19 +101,20 @@ async function createSearchDatabase(spinner: Ora) {
       db.run("CREATE VIRTUAL TABLE messages_fts USING fts5(id UNINDEXED, message)");
 
       // Begin transaction
-      db.run("BEGIN TRANSACTION");
-
-      // Insert Users
-      const userStmt = db.prepare("INSERT OR REPLACE INTO users (id, name) VALUES (?, ?)");
-      for (const userId in users) {
-        const name = users[userId].name || users[userId].real_name || "Unknown";
-        userStmt.run(userId, name);
-      }
-      userStmt.finalize();
-
-      resolve();
+      db.run("BEGIN TRANSACTION", (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
     });
   });
+
+  // Insert Users
+  const userStmt = db.prepare("INSERT OR REPLACE INTO users (id, name) VALUES (?, ?)");
+  for (const userId in users) {
+    const name = users[userId].name || users[userId].real_name || "Unknown";
+    userStmt.run(userId, name);
+  }
+  userStmt.finalize();
 
   // Now insert the messages in batches
   for (const channel of channels) {
@@ -117,11 +124,13 @@ async function createSearchDatabase(spinner: Ora) {
     spinner.text = `Indexing database messages for channel ${name}`;
     spinner.render();
 
+    // Fetch messages async BEFORE entering db.serialize
+    const messages = await getMessages(channel.id!, true);
+
     await new Promise<void>((resolve, reject) => {
-      db.serialize(async () => {
+      db.serialize(() => {
         db.run("INSERT OR REPLACE INTO channels (id, name) VALUES (?, ?)", channel.id, name);
         
-        const messages = await getMessages(channel.id!, true);
         const msgStmt = db.prepare("INSERT OR REPLACE INTO messages (id, channel_id, user_id, timestamp, message) VALUES (?, ?, ?, ?, ?)");
         const ftsStmt = db.prepare("INSERT OR REPLACE INTO messages_fts (id, message) VALUES (?, ?)");
         
@@ -134,21 +143,20 @@ async function createSearchDatabase(spinner: Ora) {
         
         msgStmt.finalize();
         ftsStmt.finalize();
-        resolve();
+        
+        // Use a dummy query to signal when all queued statements are done
+        db.run("SELECT 1", (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
       });
     });
   }
 
-  // Commit transaction and close
-  await new Promise<void>((resolve, reject) => {
-    db.serialize(() => {
-      db.run("COMMIT", (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  });
+  // Commit transaction
+  await run("COMMIT");
 
+  // Close database connection
   await new Promise<void>((resolve, reject) => {
     db.close((err) => {
       if (err) reject(err);
