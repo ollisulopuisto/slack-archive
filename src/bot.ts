@@ -37,6 +37,30 @@ export async function runBot() {
   console.log("Database connection established.");
 
   app.event("app_mention", async ({ event, say }: { event: any; say: any }) => {
+    // Access control check
+    const allowedChannels = process.env.ALLOWED_CHANNELS
+      ? process.env.ALLOWED_CHANNELS.split(",").map((c) => c.trim())
+      : null;
+    const allowedUsers = process.env.ALLOWED_USERS
+      ? process.env.ALLOWED_USERS.split(",").map((u) => u.trim())
+      : null;
+
+    if (allowedChannels && !allowedChannels.includes(event.channel)) {
+      console.log(
+        `Access denied: Channel ${event.channel} is not in ALLOWED_CHANNELS.`,
+      );
+      await say("Pahoittelut, arkistohakua ei saa käyttää tällä kanavalla.");
+      return;
+    }
+
+    if (allowedUsers && !allowedUsers.includes(event.user)) {
+      console.log(
+        `Access denied: User ${event.user} is not in ALLOWED_USERS.`,
+      );
+      await say("Pahoittelut, sinulla ei ole oikeutta käyttää arkistohakua.");
+      return;
+    }
+
     const text = event.text;
     // Remove the mention from the query
     const query = text.replace(/<@[A-Z0-9]+[^>]*>/g, "").trim();
