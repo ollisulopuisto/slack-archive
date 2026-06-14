@@ -30,7 +30,7 @@ export async function runBot() {
   const searchData = await getSearchFile();
 
   const miniSearch = new MiniSearch({
-    idField: "t",
+    idField: "id",
     fields: ["m"],
     storeFields: ["t", "u", "m", "c"],
   });
@@ -40,6 +40,7 @@ export async function runBot() {
     const messages = searchData.messages[channelId].map((msg) => ({
       ...msg,
       c: channelId,
+      id: `${channelId}-${msg.t}`,
     }));
     miniSearch.addAll(messages);
     messageCount += messages.length;

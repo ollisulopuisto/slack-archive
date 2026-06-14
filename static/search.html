@@ -60,14 +60,14 @@
           console.time(`Loading minisearch`);
           const allMessages = [];
           const miniSearch = new MiniSearch({
-            idField: "t",
+            idField: "id",
             fields: ["m"], // fields to index for full-text search
             storeFields: ["t", "u", "m", "c"], // fields to return with search results
           });
 
           for (const channel in messages) {
             for (const message of messages[channel]) {
-              allMessages.push({ ...message, c: channel });
+              allMessages.push({ ...message, c: channel, id: `${channel}-${message.t}` });
             }
           }
 
@@ -168,8 +168,8 @@
 
       const MessagesList = ({ messages }) => (
         <ul className="MessagesList">
-          {messages.map(({ t, ...props }) => (
-            <Message {...props} t={t} key={t} />
+          {messages.map(({ id, t, ...props }) => (
+            <Message {...props} t={t} key={id || t} />
           ))}
         </ul>
       );
