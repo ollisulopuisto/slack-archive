@@ -5,10 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
-## [26.06.14.118] - 2026-06-14
+## [26.06.14.119] - 2026-06-14
 
 ### Added
-- Added `ALLOWED_CHANNELS` and `ALLOWED_USERS` access control restrictions to the Slackbot. You can now restrict who can use the bot and in which channels by setting these environment variables.
+- Added a global debug middleware to the Slackbot to log all incoming payload events received via Socket Mode. This helps diagnose why the bot might not be receiving or responding to mentions in Slack.
+
+### Removed
+- Removed the experimental `ALLOWED_CHANNELS` and `ALLOWED_USERS` access control restrictions to keep the bot focus on core functionality.
 
 ## [26.06.14.117] - 2026-06-14
 
