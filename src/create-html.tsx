@@ -2,7 +2,7 @@ import { format } from "date-fns";
 import fs from "fs-extra";
 import path from "path";
 import React from "react";
-import ReactDOMServer from "react-dom/server.js";
+import ReactDOMServer from "react-dom/server";
 import ora, { Ora } from "ora";
 import { chunk, sortBy } from "lodash-es";
 import { dirname } from "path";
