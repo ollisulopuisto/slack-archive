@@ -134,19 +134,11 @@ async function createSearchHTML() {
     getScript("minisearch@7.2.0/dist/umd/index.min.js"),
   );
 
-  const sharedQueryLogicTs = fs.readFileSync(
-    path.join(__dirname, "./search-query.ts"),
-    "utf8",
-  );
-  // Simple "transpilation" to remove types for the browser
-  const sharedQueryLogicJs = sharedQueryLogicTs
-    .replace(/export /g, "")
-    .replace(/: {[^}]+}/g, "")
-    .replace(/: string\[\]/g, "")
-    .replace(/: string/g, "")
-    .replace(/<T extends { m\?: string }>/g, "")
-    .replace(/: T\[\]/g, "")
-    .replace(/: any/g, "");
+  // Read the compiled JS (types already stripped by tsc), then remove
+  // `export` keywords so the functions are globals in the browser.
+  const sharedQueryLogicJs = fs
+    .readFileSync(path.join(__dirname, "./search-query.js"), "utf8")
+    .replace(/export /g, "");
 
   template = template.replace(
     "<!-- search-query-logic -->",
