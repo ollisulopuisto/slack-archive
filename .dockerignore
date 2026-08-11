@@ -1,0 +1,21 @@
+# Built on the wrong libc otherwise, and it is rebuilt in the image anyway.
+node_modules
+
+# Build output. The image compiles it from src/; copying a host build in would
+# defeat the entire reason this service is being containerised - a running
+# artifact that traces to no commit.
+lib
+
+# The archive itself: 582 MB of Slack history, mounted as a volume at runtime.
+slack-archive/
+data/
+data_backup_*/
+
+# Secrets. systemd supplies these via EnvironmentFile; the image is a
+# distributable artifact and must not carry them.
+.env
+.env.*
+
+.git
+.github
+*~
