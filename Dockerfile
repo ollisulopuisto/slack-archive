@@ -7,31 +7,39 @@
 # tagged with that commit.
 
 FROM node:18-alpine AS builder
+# sqlite3 is a native module and there is no prebuilt binary for musl, so
+# node-gyp compiles it here.
+RUN apk add --no-cache python3 make g++
 WORKDIR /app
 
-# --ignore-scripts is required, not stylistic: package.json has
-# `"prepare": "npm run compile"`, which npm runs at the end of install. At that
-# point src/ has not been copied yet, so tsc would fail the build with a pile
-# of "file not found" errors that look nothing like the real cause.
-COPY package*.json ./
-RUN npm ci --ignore-scripts
-
+# Everything is copied BEFORE npm ci, which costs the dependency layer cache but
+# is what makes the build work at all: package.json has
+# `"prepare": "npm run compile"`, and npm runs it at the end of install. With
+# only package*.json present it fires before src/ exists and tsc fails. With the
+# source already here it compiles exactly as intended, and the same install
+# builds the native modules.
 COPY . .
-RUN npm run compile
+RUN npm ci
 
 FROM node:18-alpine AS runtime
 WORKDIR /app
 
-# Production dependencies only. --ignore-scripts again: typescript lives in
-# devDependencies, so the `prepare` hook would try to compile with no compiler.
-COPY package*.json ./
-RUN npm ci --omit=dev --ignore-scripts
-
-# Only the built output and what it needs at runtime. src/ and the TypeScript
-# toolchain stay behind in the builder stage.
+# node_modules comes from the builder with its compiled bindings intact.
+# Reinstalling here instead was the first attempt and it failed at runtime:
+# `npm ci --omit=dev --ignore-scripts` skips node-gyp, so sqlite3 arrived with
+# no binding at all - "Could not locate the bindings file". --ignore-scripts was
+# needed there only to stop `prepare` running without a compiler, so copying
+# sidesteps both problems.
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/lib ./lib
+COPY --from=builder /app/package*.json ./
 COPY bin ./bin
 COPY static ./static
+
+# Drop devDependencies now that the compile is done. `prune` does not run
+# lifecycle scripts, so `prepare` stays quiet, and it leaves the already-built
+# native modules of the production deps alone.
+RUN npm prune --omit=dev
 
 # The archive tree is a mounted volume. Creating it here only guarantees the
 # mount point exists and is owned by the unprivileged user when nothing is
