@@ -50,4 +50,17 @@ RUN mkdir -p /app/slack-archive && chown -R node:node /app
 USER node
 ENV NODE_ENV=production
 
+# The version this image IS, baked at build time from the CalVer the pipeline
+# already computes for the tag.
+#
+# Until now nothing inside the image knew its own version, so the infra repo
+# declared it by hand in the Quadlet (Environment=APP_VERSION=...) and the
+# dashboard read that. A hand-maintained copy of "which build is running" drifts:
+# paikallislehti's sat two deploys behind before anything compared them. Baking
+# it here makes the image self-describing, and the Quadlet line can go away.
+#
+# Placed immediately before CMD so a version change invalidates only this layer.
+ARG APP_VERSION=dev
+ENV APP_VERSION=${APP_VERSION}
+
 CMD ["node", "bin/slack-archive.js", "--bot"]

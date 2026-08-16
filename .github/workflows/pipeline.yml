@@ -52,6 +52,8 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            APP_VERSION=v${{ steps.calver.outputs.version }}
           tags: |
             ghcr.io/ollisulopuisto/slack-archive:latest
             ghcr.io/ollisulopuisto/slack-archive:${{ steps.calver.outputs.version }}
