@@ -36,15 +36,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Emulation for the arm64 leg, and here that is the right call rather
-      # than a compromise. This repository is PUBLIC, so anyone can open a pull
-      # request - which is exactly why it has no self-hosted runner, and why the
-      # native ARM box that builds backlog is not an option for this image.
-      # Public repositories are also discounted separately from the account
-      # allowance, so the slow emulated leg is free where a private repo's would
-      # not be. It is slow: sqlite3 compiles from source and the whole
-      # devDependency tree installs for the tsc build.
-      - uses: docker/setup-qemu-action@v3
 
       - uses: docker/setup-buildx-action@v3
 
@@ -58,9 +49,6 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          # oraakkeli3 is an Ampere A1, so this image must exist for aarch64.
-          # One tag, both arches, as a manifest list - each host resolves its own.
-          platforms: linux/amd64,linux/arm64
           # A fork's PR must not be able to publish an image the hosts pull.
           push: ${{ github.event_name != 'pull_request' }}
           cache-from: type=gha
@@ -71,3 +59,71 @@ jobs:
             ghcr.io/ollisulopuisto/slack-archive:latest
             ghcr.io/ollisulopuisto/slack-archive:${{ steps.calver.outputs.version }}
             ghcr.io/ollisulopuisto/slack-archive:${{ steps.calver.outputs.sha7 }}
+
+  # The arm64 half, native, on a GitHub-hosted ARM runner.
+  #
+  # This replaced QEMU emulation on 2026-08-21. Emulating was never the right
+  # answer here - this image compiles sqlite3 from source through node-gyp and
+  # runs a full tsc build, which is the worst possible workload to emulate - but
+  # it looked like the only one, because this repo is PUBLIC and so gets no
+  # self-hosted runner (anyone can open a pull request, and our runner shares a
+  # disk with production secrets; agents.md 6b).
+  #
+  # ubuntu-24.04-arm is the third option: native aarch64, and free for public
+  # repositories. Being public costs this repo the self-hosted runner and then
+  # hands back something better.
+  build-arm64:
+    needs: build-and-push
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Required for `cache-to: type=gha`. Without it buildx uses the default
+      # `docker` driver, which cannot export a cache, and the build dies at the
+      # end of setup with "Cache export is not supported for the docker driver".
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Same CalVer as build-and-push
+        id: calver
+        run: echo "version=$(date +'%y.%m.%d').$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+
+      # No platforms: and no QEMU - the runner IS aarch64.
+      - name: Build and push arm64
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          provenance: false
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,mode=max,scope=arm64
+          build-args: |
+            APP_VERSION=v${{ steps.calver.outputs.version }}
+          tags: ghcr.io/ollisulopuisto/slack-archive:${{ steps.calver.outputs.version }}-arm64
+
+      # Replace the tags the host pins with manifest lists CONTAINING the amd64
+      # images build-and-push already pushed, so an x86 host rolling back
+      # resolves to the identical digest it had before.
+      - name: Publish multi-arch manifests
+        env:
+          VER: ${{ steps.calver.outputs.version }}
+        run: |
+          for TAG in "$VER" latest; do
+            docker buildx imagetools create \
+              --tag "ghcr.io/ollisulopuisto/slack-archive:$TAG" \
+              "ghcr.io/ollisulopuisto/slack-archive:$VER" \
+              "ghcr.io/ollisulopuisto/slack-archive:$VER-arm64"
+            echo "published multi-arch :$TAG"
+          done
