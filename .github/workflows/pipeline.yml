@@ -36,6 +36,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Emulation for the arm64 leg, and here that is the right call rather
+      # than a compromise. This repository is PUBLIC, so anyone can open a pull
+      # request - which is exactly why it has no self-hosted runner, and why the
+      # native ARM box that builds backlog is not an option for this image.
+      # Public repositories are also discounted separately from the account
+      # allowance, so the slow emulated leg is free where a private repo's would
+      # not be. It is slow: sqlite3 compiles from source and the whole
+      # devDependency tree installs for the tsc build.
+      - uses: docker/setup-qemu-action@v3
+
       - uses: docker/setup-buildx-action@v3
 
       - name: Generate CalVer
@@ -48,6 +58,9 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          # oraakkeli3 is an Ampere A1, so this image must exist for aarch64.
+          # One tag, both arches, as a manifest list - each host resolves its own.
+          platforms: linux/amd64,linux/arm64
           # A fork's PR must not be able to publish an image the hosts pull.
           push: ${{ github.event_name != 'pull_request' }}
           cache-from: type=gha
