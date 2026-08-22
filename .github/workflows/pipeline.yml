@@ -20,6 +20,9 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.calver.outputs.version }}
+      publish_version: ${{ steps.calver.outputs.publish_version }}
     permissions:
       contents: read
       packages: write
@@ -49,8 +52,14 @@ jobs:
           # and two parallel branches produce the same count. Kept alongside a
           # hand-written CHANGELOG the two drift; five of eight repos here were
           # drifting on 2026-08-22.
-          echo "version=$(bash scripts/release_version.sh)" >> "$GITHUB_OUTPUT"
-          echo "sha7=$(echo "${GITHUB_SHA}" | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          #
+          # release_tags.sh also decides whether this build may CLAIM the
+          # version tag. Under the old count scheme every push to main produced
+          # a different number, so a version tag could never be reused. A
+          # declared version removes that: a docs-only push re-reads the same
+          # heading and would republish an already-claimed tag with different
+          # bits. It ships :latest and :sha7 instead, and says so in the summary.
+          bash scripts/release_tags.sh ghcr.io/ollisulopuisto/slack-archive
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -62,10 +71,7 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             APP_VERSION=v${{ steps.calver.outputs.version }}
-          tags: |
-            ghcr.io/ollisulopuisto/slack-archive:latest
-            ghcr.io/ollisulopuisto/slack-archive:${{ steps.calver.outputs.version }}
-            ghcr.io/ollisulopuisto/slack-archive:${{ steps.calver.outputs.sha7 }}
+          tags: ${{ steps.calver.outputs.tags }}
 
   # The arm64 half, native, on a GitHub-hosted ARM runner.
   #
@@ -81,7 +87,12 @@ jobs:
   # hands back something better.
   build-arm64:
     needs: build-and-push
-    if: github.event_name != 'pull_request'
+    # Also gated on the version being NEW. This leg's whole output is folded
+    # into the multi-arch manifest under :VERSION, so running it for a version
+    # that already exists would republish that manifest with different bits -
+    # exactly the overwrite build-and-push now refuses. Skipping it leaves the
+    # published multi-arch image intact.
+    if: github.event_name != 'pull_request' && needs.build-and-push.outputs.publish_version == 'true'
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read

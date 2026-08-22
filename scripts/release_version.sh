@@ -82,7 +82,7 @@ case "${1:-}" in
         printf '%s.%d\n' "$(date +%y.%m.%d)" "$((highest + 1))"
         ;;
     -h|--help)
-        sed -n '2,40p' "$0"
+        sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
         ;;
     *)
         die "unknown option: $1
