@@ -41,7 +41,8 @@
 #   "do not claim it".
 #
 # Usage (in CI):
-#   scripts/release_tags.sh ghcr.io/ollisulopuisto/thing
+#   scripts/release_tags.sh ghcr.io/ollisulopuisto/thing        # tags: 26.08.22.1
+#   scripts/release_tags.sh ghcr.io/ollisulopuisto/thing v      # tags: v26.08.22.1
 #     -> writes version=, publish_version=, and a summary line
 #
 # Env: GITHUB_TOKEN and GITHUB_ACTOR for a private package. Without them only
@@ -52,6 +53,12 @@ set -uo pipefail
 
 IMAGE="${1:-}"
 [[ -n "$IMAGE" ]] || { echo "release_tags.sh: need an image, e.g. ghcr.io/owner/name" >&2; exit 2; }
+
+# Some repos publish their image tags with a leading `v` (vst-tools does) and
+# some without. That is a published fact about each package, not a preference:
+# changing it silently would orphan every tag a host already pins. Pass the
+# prefix the repo already uses.
+TAG_PREFIX="${2:-}"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VERSION="$(bash "$HERE/release_version.sh")" || exit 1
@@ -83,13 +90,40 @@ TOKEN="$(curl -s "${AUTH_ARGS[@]+"${AUTH_ARGS[@]}"}" \
     "https://ghcr.io/token?scope=repository:${REPO_PATH}:pull" 2>/dev/null \
     | python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))' 2>/dev/null || true)"
 
-CODE=000
-if [[ -n "$TOKEN" ]]; then
-    CODE="$(curl -s -o /dev/null -w '%{http_code}' -m 30 \
-        -H "Authorization: Bearer $TOKEN" \
-        -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json' \
-        "https://ghcr.io/v2/${REPO_PATH}/manifests/${VERSION}" 2>/dev/null || echo 000)"
+# A MISCONFIGURATION MUST NOT DEGRADE INTO SILENCE.
+#
+# ghcr answers an anonymous probe of a PRIVATE package with 401 at the token
+# endpoint. No token, so no probe, so "uncertain", so the version tag is
+# withheld - on every run, forever, while every run stays green and the
+# explanation sits in a job summary nobody opens on a successful build. Four of
+# the five packages in this estate are private, and the rollout that introduced
+# this script passed no token at all, so all four would have quietly stopped
+# publishing versions.
+#
+# It is the same shape as the `curl -u ":"` bug one layer down: a broken check
+# wearing the safe behaviour as a disguise. Fail-closed is right for a REGISTRY
+# THAT DID NOT ANSWER, and wrong for credentials that were never supplied - the
+# first is a blip and the second is a standing condition that will never fix
+# itself. So they are separated here.
+#
+# Found by the podpuri session, which measured it against a private package;
+# the original verification used a public one and could not have seen it.
+if [[ -z "$TOKEN" ]]; then
+    if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+        echo "::error::release_tags.sh got no GITHUB_TOKEN, so it cannot ask whether ${VERSION} is already published. A private package answers an anonymous probe with 401, which would silently withhold the version tag on every run. Pass GITHUB_TOKEN (and GITHUB_ACTOR) into this step." >&2
+    else
+        echo "::error::release_tags.sh could not get a pull token for ${REPO_PATH}. The GITHUB_TOKEN supplied is out of scope for this package - the job needs 'packages: write' (or at least read)." >&2
+    fi
+    exit 1
 fi
+
+# The manifest probe. 404 means the version is free, 200 means it is taken, and
+# anything else means the registry did not answer - which is a blip, and the one
+# case where withholding the tag silently is the right call.
+CODE="$(curl -s -o /dev/null -w '%{http_code}' -m 30 \
+    -H "Authorization: Bearer $TOKEN" \
+    -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json' \
+    "https://ghcr.io/v2/${REPO_PATH}/manifests/${TAG_PREFIX}${VERSION}" 2>/dev/null || echo 000)"
 
 SHA7="$(printf '%s' "${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}" | cut -c1-7)"
 
@@ -102,7 +136,7 @@ out "sha7=$SHA7"
 # withheld, which is the whole reason withholding it is acceptable.
 emit_tags() {
     echo "$IMAGE:latest"
-    [[ "$1" == "true" ]] && echo "$IMAGE:$VERSION"
+    [[ "$1" == "true" ]] && echo "$IMAGE:${TAG_PREFIX}${VERSION}"
     echo "$IMAGE:$SHA7"
 }
 

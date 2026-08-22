@@ -44,6 +44,13 @@ jobs:
 
       - name: Generate CalVer
         id: calver
+        env:
+          # The probe reads the package to see whether this version already
+          # exists. Four of five packages here are PRIVATE, and ghcr answers an
+          # anonymous probe of a private package with 401 - no token, no probe,
+          # version tag withheld on every run, forever, with the run still green.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
         run: |
           # Read, not computed: scripts/release_version.sh takes the top
           # CHANGELOG heading and exits non-zero rather than inventing a name.
