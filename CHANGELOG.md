@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.22.130] - 2026-08-22
+
+### Changed
+- **The version number comes from this file now, not from `git rev-list --count HEAD`.**
+  A count is derived, and a derived number cannot be authoritative: a squash
+  merge moves it by an amount unrelated to what shipped, a rebase changes it
+  wholesale, and two branches developed in parallel produce the same count - so
+  two machines committing at once can genuinely claim one number.
+
+  Running both schemes at once is worse than either. paikallislehti did, they
+  drifted four apart, and two sessions concluded the live site had to be rolled
+  BACK when the two numbers were the same build. Across the estate on
+  2026-08-22, five of eight repos keeping both were drifting: -3 to +5. This one
+  was behind its count.
+
+  `scripts/release_version.sh` reads the top heading here and exits non-zero
+  rather than inventing a name. Numbers may be skipped; the file is the source
+  of truth, not a count of anything.
+
+  **This entry's number is deliberately past the old count**, so no tag the
+  previous scheme published is ever reissued or gone backwards over. It is a
+  one-time correction: from here the file is alone, and nothing consults the
+  count again.
+
 ## [26.06.14.124] - 2026-06-14
 
 ### Added

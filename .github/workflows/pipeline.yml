@@ -42,7 +42,14 @@ jobs:
       - name: Generate CalVer
         id: calver
         run: |
-          echo "version=$(date +'%y.%m.%d').$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+          # Read, not computed: scripts/release_version.sh takes the top
+          # CHANGELOG heading and exits non-zero rather than inventing a name.
+          # `git rev-list --count HEAD` is derived - a squash merge moves it by
+          # an amount unrelated to what shipped, a rebase changes it wholesale,
+          # and two parallel branches produce the same count. Kept alongside a
+          # hand-written CHANGELOG the two drift; five of eight repos here were
+          # drifting on 2026-08-22.
+          echo "version=$(bash scripts/release_version.sh)" >> "$GITHUB_OUTPUT"
           echo "sha7=$(echo "${GITHUB_SHA}" | cut -c1-7)" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
@@ -98,7 +105,12 @@ jobs:
 
       - name: Same CalVer as build-and-push
         id: calver
-        run: echo "version=$(date +'%y.%m.%d').$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+        # Same source as build-and-push, and that is the point: both legs of a
+        # multi-arch build must name one version. When each computed its own
+        # from `git rev-list --count HEAD` they agreed only because they ran on
+        # the same commit - and the date part could still differ across a UTC
+        # midnight, tagging the two halves of one image differently.
+        run: echo "version=$(bash scripts/release_version.sh)" >> "$GITHUB_OUTPUT"
 
       # No platforms: and no QEMU - the runner IS aarch64.
       - name: Build and push arm64
