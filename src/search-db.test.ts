@@ -15,8 +15,18 @@ const CHANNELS = [
   { id: "C2", name: "random", kind: "public" as const, isArchived: true },
   { id: "C3", name: "salainen", kind: "private" as const, isArchived: false },
   { id: "D1", name: "olli", kind: "im" as const, isArchived: false },
-  { id: "C1_FILES", name: "kuvakanava", kind: "public" as const, isArchived: false },
-  { id: "D1_FILES", name: "yksityinen", kind: "im" as const, isArchived: false },
+  {
+    id: "C1_FILES",
+    name: "kuvakanava",
+    kind: "public" as const,
+    isArchived: false,
+  },
+  {
+    id: "D1_FILES",
+    name: "yksityinen",
+    kind: "im" as const,
+    isArchived: false,
+  },
   // Deliberately supplies no kind: see the fail-closed test below.
   { id: "C9", name: "tuntematon" },
 ];
@@ -164,8 +174,9 @@ describe("channel kind", () => {
 
   it("records archived channels as archived", () => {
     const db = openSearchDatabase(dbPath);
-    const rows = db.all("SELECT id, is_archived FROM channels") as unknown as
-      Array<{ id: string; is_archived: number | null }>;
+    const rows = db.all(
+      "SELECT id, is_archived FROM channels",
+    ) as unknown as Array<{ id: string; is_archived: number | null }>;
     const byId = Object.fromEntries(rows.map((row) => [row.id, row]));
 
     expect(byId["C2"].is_archived).toBe(1);
@@ -189,7 +200,6 @@ describe("channel kind", () => {
   });
 });
 
-
 // Attachments. The archive holds 40 124 images and many were posted with no
 // caption, leaving the message text empty. Without the file's name and title
 // in the index, no search term reaches them.
@@ -208,7 +218,9 @@ describe("file attachments", () => {
 
   it("ties a file to the message it arrived with", () => {
     const db = openSearchDatabase(dbPath);
-    const row = db.get("SELECT message_id, channel_id FROM files WHERE id = 'F_CAT'") as any;
+    const row = db.get(
+      "SELECT message_id, channel_id FROM files WHERE id = 'F_CAT'",
+    ) as any;
 
     expect(row.message_id).toBe("C1_FILES-1700000010.0001");
     expect(row.channel_id).toBe("C1_FILES");
@@ -250,10 +262,9 @@ describe("file attachments", () => {
 
     const hits = searchDatabase(db, "kissa-salaisuus");
     for (const hit of hits) {
-      const channel = db.get(
-        "SELECT kind FROM channels WHERE id = ?",
-        [hit.c],
-      ) as any;
+      const channel = db.get("SELECT kind FROM channels WHERE id = ?", [
+        hit.c,
+      ]) as any;
       // The hit may exist in the index, but its channel kind has to be known
       // so that a reader can refuse to show it.
       expect(channel.kind).toBe("im");
@@ -272,7 +283,9 @@ describe("file attachments", () => {
   // Slack's fields, not from the filename.
   it("trusts mimetype over the filename extension", () => {
     const db = openSearchDatabase(dbPath);
-    const row = db.get("SELECT is_image FROM files WHERE id = 'F_NOEXT'") as any;
+    const row = db.get(
+      "SELECT is_image FROM files WHERE id = 'F_NOEXT'",
+    ) as any;
     expect(row.is_image).toBe(1);
     db.close();
   });
@@ -326,5 +339,64 @@ describe("searchDatabase", () => {
     expect(searchDatabase(db, "NOT intel")).toHaveLength(0);
     expect(searchDatabase(db, "^ ( )")).toEqual([]);
     db.close();
+  });
+});
+
+describe("user_names", () => {
+  const NAMES = {
+    U1: [
+      {
+        nick: "dst",
+        first: "2016-10-06T00:00:00.000Z",
+        last: "2016-11-22T00:00:00.000Z",
+        sources: ["mention"],
+      },
+      {
+        nick: "beerhana",
+        first: "2023-04-19T00:00:00.000Z",
+        last: "2025-08-07T00:00:00.000Z",
+        sources: ["attachment", "html"],
+      },
+    ],
+  };
+
+  it("stores every name a person has gone by", async () => {
+    const dbPath = path.join(dir, "names.db");
+    await buildSearchDatabase(dbPath, {
+      users: { U1: "bentsohana" },
+      names: NAMES,
+      channels: [{ id: "C1", name: "offtopic", kind: "public" }],
+      loadMessages: async () => [{ t: "1.0", u: "U1", m: "moi" }],
+    });
+
+    const db = openSearchDatabase(dbPath);
+    const rows = db.all(
+      "SELECT nick, first, last, sources FROM user_names WHERE user_id = 'U1' ORDER BY first",
+    ) as unknown as Array<{
+      nick: string;
+      first: string;
+      last: string;
+      sources: string;
+    }>;
+    db.close();
+
+    expect(rows.map((r) => r.nick)).toEqual(["dst", "beerhana"]);
+    expect(rows[1].sources).toBe("attachment,html");
+    expect(rows[1].first).toBe("2023-04-19T00:00:00.000Z");
+  });
+
+  it("is empty rather than absent when no history exists", async () => {
+    const dbPath = path.join(dir, "no-names.db");
+    await buildSearchDatabase(dbPath, {
+      users: { U1: "bentsohana" },
+      channels: [{ id: "C1", name: "offtopic", kind: "public" }],
+      loadMessages: async () => [{ t: "1.0", u: "U1", m: "moi" }],
+    });
+
+    const db = openSearchDatabase(dbPath);
+    const row = db.get("SELECT COUNT(*) AS count FROM user_names") as any;
+    db.close();
+
+    expect(Number(row.count)).toBe(0);
   });
 });

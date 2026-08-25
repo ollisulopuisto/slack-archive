@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.138] - 2026-08-25
+
+### Added
+- **The name history is now visible, not just recorded.** .136 and .137 wrote
+  `data/user-names.json` and nothing read it.
+
+  Every message's author carries `title="Also known as: ..."`, so hovering a
+  ten-year-old message signed `bentsohana` shows dst, katthufvud, Mikael
+  Gabriel and the rest. The current name is left out of that list, because
+  "also known as bentsohana" beside bentsohana is noise.
+
+  `html/names.html` lists everyone with each name and the window it was seen
+  in, linked from the index under People. Dates are when a name was SEEN rather
+  than when it was adopted, and each row shows which source it came from -
+  a mention is dated by its message, a name recovered from an older rendering
+  of these pages only by when that page was written. Showing the source keeps
+  that difference visible instead of implied.
+
+  In the JSON as well: `search.js` gains `names` (user id -> every name, oldest
+  first) and the database gains a `user_names` table, indexed on both the user
+  and the nick, so looking up who was "John Stuart Bill" in 2021 is a query
+  rather than a grep. A `search.js` written before this exists reads back with
+  an empty `names`, which is what the older archives on disk will do.
+
 ## [v26.08.25.137] - 2026-08-25
 
 ### Added

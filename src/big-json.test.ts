@@ -182,6 +182,7 @@ const SEARCH_DATA = {
     C2: [],
   },
   pages: { C1: ["3.0", "1.0"], C2: [] },
+  names: { U1: ["dst", "katthufvud", "beerhana"], U2: [] },
 };
 
 /** What the one-shot writer used to produce, and what archives contain. */
@@ -217,7 +218,13 @@ describe("writeSearchDataSync", () => {
   });
 
   it("writes an empty search file", () => {
-    const empty = { users: {}, channels: {}, messages: {}, pages: {} };
+    const empty = {
+      users: {},
+      channels: {},
+      messages: {},
+      pages: {},
+      names: {},
+    };
     writeSearchDataSync(file("search.js"), empty);
 
     expect(readSearchDataSync(file("search.js"))).toEqual(empty);
@@ -231,6 +238,7 @@ describe("readSearchDataSync", () => {
       channels: {},
       messages: {},
       pages: {},
+      names: {},
     });
   });
 
@@ -262,6 +270,23 @@ describe("readSearchDataSync", () => {
       expect(
         readSearchDataSync(file("search.js"), { maxStringLength: 8 }),
       ).toEqual(readSearchDataSync(file("search.js")));
+    }
+  });
+
+  // Every search.js written before the name history existed lacks the key.
+  it("reads a file written before names existed", () => {
+    const legacy = {
+      users: { U1: "dst" },
+      channels: {},
+      messages: {},
+      pages: {},
+    };
+    fs.writeFileSync(file("search.js"), legacySearchData(legacy));
+
+    for (const options of [{}, { maxStringLength: 8 }]) {
+      const read = readSearchDataSync(file("search.js"), options);
+      expect(read.names).toEqual({});
+      expect(read.users).toEqual({ U1: "dst" });
     }
   });
 

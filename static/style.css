@@ -370,3 +370,42 @@ audio, video {
   background: white;
   min-width: 150px;
 }
+/* Names over the years: one block per person, one row per name they used. */
+#names {
+  padding: 20px 30px;
+  overflow-y: auto;
+  height: 100vh;
+}
+
+#names .person {
+  margin-bottom: 28px;
+}
+
+#names .person h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+
+#names .person h2 .avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+}
+
+#names table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+#names td {
+  padding: 2px 12px 2px 0;
+  vertical-align: top;
+}
+
+#names td.timestamp {
+  white-space: nowrap;
+  width: 1%;
+}

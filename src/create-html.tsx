@@ -10,7 +10,12 @@ import { fileURLToPath } from "url";
 import esMain from "es-main";
 import slackMarkdown from "slack-markdown";
 
-import { getChannels, getMessages, getUsers } from "./data-load.js";
+import {
+  getChannels,
+  getMessages,
+  getUsers,
+  getUserNames,
+} from "./data-load.js";
 import {
   ArchiveMessage,
   Channel,
@@ -24,6 +29,7 @@ import {
 import {
   getHTMLFilePath,
   INDEX_PATH,
+  NAMES_PATH,
   OUT_DIR,
   MESSAGES_JS_PATH,
   FORCE_HTML_GENERATION,
@@ -34,6 +40,7 @@ import { write } from "./data-write.js";
 import { getSlackArchiveData } from "./archive-data.js";
 import { getEmojiFilePath, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
 import { getName } from "./users.js";
+import { formerNames, UserNames } from "./user-names.js";
 import {
   isBotChannel,
   isDmChannel,
@@ -48,6 +55,7 @@ const MESSAGE_CHUNK = 1000;
 // was surprisingly slow. Global variables are cool again!
 // Set by createHtmlForChannels().
 let users: Users = {};
+let userNames: UserNames = {};
 let slackArchiveData: SlackArchiveData = { channels: {} };
 let me: User | null;
 
@@ -193,6 +201,10 @@ interface MessageProps {
 const Message: React.FunctionComponent<MessageProps> = (props) => {
   const { message } = props;
   const username = getName(message.user, users);
+  // People here rename themselves constantly, so a ten-year-old message signed
+  // with today's name is unreadable. The archive knows the old ones; the title
+  // is where they fit without changing what the message looks like.
+  const alsoKnownAs = formerNames(userNames, message.user, username);
   const slackCallbacks = {
     user: ({ id }: { id: string }) => `@${getName(id, users)}`,
   };
@@ -203,7 +215,16 @@ const Message: React.FunctionComponent<MessageProps> = (props) => {
         <Avatar userId={message.user} />
       </div>
       <div className="">
-        <span className="sender">{username}</span>
+        <span
+          className="sender"
+          title={
+            alsoKnownAs.length > 0
+              ? `Also known as: ${alsoKnownAs.join(", ")}`
+              : undefined
+          }
+        >
+          {username}
+        </span>
         <span className="timestamp">
           <span className="c-timestamp__label">{formatTimestamp(message)}</span>
         </span>
@@ -373,6 +394,14 @@ const IndexPage: React.FunctionComponent<IndexPageProps> = (props) => {
           <ul>{privateArchivedChannels}</ul>
           <p className="section">DMs (Deleted Users)</p>
           <ul>{dmDeletedChannels}</ul>
+          <p className="section">People</p>
+          <ul>
+            <li>
+              <a href="html/names.html" target="iframe">
+                Names over the years
+              </a>
+            </li>
+          </ul>
         </div>
         <div id="messages">
           <iframe name="iframe" src={`html/${channels[0].id!}-0.html`} />
@@ -514,6 +543,70 @@ const Pagination: React.FunctionComponent<PaginationProps> = (props) => {
   );
 };
 
+/**
+ * Everyone the archive knows, and everything they have been called.
+ *
+ * Slack keeps no rename history, so this page is the only place the answer
+ * exists. Dates are when a name was SEEN, not when it was adopted: a name mined
+ * from a mention is dated by the message, one recovered from an older rendering
+ * of these pages by when that page was written, which is coarser. The source is
+ * shown for each so the difference is visible rather than implied.
+ */
+const NamesPage: React.FunctionComponent = () => {
+  const people = Object.entries(userNames)
+    .map(([userId, names]) => ({
+      userId,
+      current: getName(userId, users),
+      names,
+    }))
+    .filter((person) => person.names.length > 0)
+    .sort((a, b) => b.names.length - a.names.length);
+
+  const day = (iso: string) => iso.slice(0, 10);
+
+  return (
+    <HtmlPage>
+      <div id="names">
+        <h1>Names over the years</h1>
+        <p className="topic">
+          {people.length} people,{" "}
+          {people.reduce((n, p) => n + p.names.length, 0)} names. Slack keeps no
+          rename history - these were recovered from the messages themselves,
+          and are kept from here on.
+        </p>
+        {people.map((person) => (
+          <div className="person" key={person.userId}>
+            <h2>
+              <Avatar userId={person.userId} /> {person.current}
+            </h2>
+            <table>
+              <tbody>
+                {person.names.map((name) => (
+                  <tr key={name.nick}>
+                    <td className="timestamp">
+                      {day(name.first)}
+                      {day(name.last) !== day(name.first)
+                        ? ` - ${day(name.last)}`
+                        : ""}
+                    </td>
+                    <td className="sender">{name.nick}</td>
+                    <td className="timestamp">{name.sources.join(", ")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+    </HtmlPage>
+  );
+};
+
+async function renderNamesPage() {
+  base = "";
+  return renderAndWrite(<NamesPage />, NAMES_PATH);
+}
+
 async function renderIndexPage() {
   base = "html/";
   const channels = await getChannels();
@@ -648,6 +741,7 @@ export async function createHtmlForChannels(channels: Array<Channel> = []) {
   console.log(`\n Creating HTML files for ${channels.length} channels...`);
 
   users = await getUsers();
+  userNames = await getUserNames();
   slackArchiveData = await getSlackArchiveData();
   me = slackArchiveData.auth?.user_id
     ? users[slackArchiveData.auth?.user_id]
@@ -662,6 +756,7 @@ export async function createHtmlForChannels(channels: Array<Channel> = []) {
     await createHtmlForChannel({ channel, i, total: channels.length });
   }
 
+  await renderNamesPage();
   await renderIndexPage();
 
   // Copy in fonts & css

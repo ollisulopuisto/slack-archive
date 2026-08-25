@@ -132,6 +132,26 @@ function add(
 }
 
 /**
+ * The names a person is no longer using, oldest first.
+ *
+ * Their current name is excluded: the archive already shows that one, and
+ * "also known as bentsohana" next to bentsohana is noise.
+ */
+export function formerNames(
+  history: UserNames,
+  userId: string | undefined,
+  currentName: string | undefined,
+): Array<string> {
+  if (!userId) return [];
+
+  const current = (currentName || "").trim().toLowerCase();
+
+  return (history[userId] || [])
+    .map((name) => name.nick)
+    .filter((nick) => nick.trim().toLowerCase() !== current);
+}
+
+/**
  * Fold sightings into the history, widening the window on a name we already
  * know rather than adding it twice. Returns a new object; the input is not
  * touched.

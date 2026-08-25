@@ -18,6 +18,7 @@ import {
   getChannels,
   getMessages,
   getSearchFile,
+  getUserNames,
   getUsers,
 } from "./data-load.js";
 import { buildSearchDatabase } from "./search-db.js";
@@ -81,6 +82,7 @@ export async function createSearchDatabase(spinner: Ora) {
 
   await buildSearchDatabase(SEARCH_DB_PATH, {
     users: names,
+    names: await getUserNames(),
     channels: channels
       .filter((channel) => !!channel.id)
       .map((channel) => ({
@@ -130,11 +132,20 @@ async function createSearchFile(spinner: Ora) {
   const existingData = await getSearchFile();
   const users = await getUsers();
   const channels = await getChannels();
+  const userNames = await getUserNames();
   const result: SearchFile = {
     channels: {},
     users: {},
     messages: {},
     pages: { ...existingData.pages, ...INDEX_OF_PAGES },
+    // Oldest first. Somebody looking for a name that was dropped in 2019 is
+    // searching for the person, and this is the only place that connects them.
+    names: Object.fromEntries(
+      Object.entries(userNames).map(([userId, names]) => [
+        userId,
+        names.map((name) => name.nick),
+      ]),
+    ),
   };
 
   // Users

@@ -1,5 +1,7 @@
 import fs from "fs-extra";
 import path from "path";
+
+import { UserNames } from "./user-names.js";
 // A default import, not `import { Database }`: the package is CommonJS, and
 // Node's named-export detection cannot see through its bundled output. The
 // named form typechecks and then throws "does not provide an export named
@@ -76,14 +78,7 @@ export interface SearchDbMessage {
  * findable by name and none has anything to preview: is_image = 0 is the
  * right answer for every one, not a gap where a picture fell through.
  */
-const IMAGE_FILETYPES = new Set([
-  "jpg",
-  "jpeg",
-  "png",
-  "gif",
-  "webp",
-  "heic",
-]);
+const IMAGE_FILETYPES = new Set(["jpg", "jpeg", "png", "gif", "webp", "heic"]);
 
 function isImageFile(file: SearchDbFile): boolean {
   if (file.mimetype && file.mimetype.startsWith("image/")) return true;
@@ -116,6 +111,8 @@ function indexableText(message: SearchDbMessage): string {
 export interface SearchDbInput {
   /** User id -> display name */
   users: Record<string, string>;
+  /** User id -> every name they have gone by, oldest first */
+  names?: UserNames;
   channels: Array<SearchDbChannel>;
   loadMessages: (channelId: string) => Promise<Array<SearchDbMessage>>;
   /** Called before a channel is indexed, for progress reporting */
@@ -164,7 +161,7 @@ export function countMessages(db: SearchDatabase): number {
 
 export async function buildSearchDatabase(
   dbPath: string,
-  { users, channels, loadMessages, onChannel }: SearchDbInput,
+  { users, names, channels, loadMessages, onChannel }: SearchDbInput,
 ): Promise<void> {
   // Start fresh rather than update in place: the archive is rebuilt wholesale,
   // and a fresh file cannot inherit rows for messages that have since gone.
@@ -186,6 +183,19 @@ export async function buildSearchDatabase(
       is_archived INTEGER
     )`);
     db.exec("CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT)");
+
+    // Every name a person has gone by, one row each. Not a column on `users`:
+    // somebody here has had 33, and the question "who was John Stuart Bill in
+    // 2021" is a lookup, not a string somebody has to split.
+    db.exec(`CREATE TABLE user_names (
+      user_id TEXT,
+      nick    TEXT,
+      first   TEXT,
+      last    TEXT,
+      sources TEXT
+    )`);
+    db.exec("CREATE INDEX user_names_user_id ON user_names (user_id)");
+    db.exec("CREATE INDEX user_names_nick ON user_names (nick)");
     db.exec(`CREATE TABLE messages (
       id TEXT PRIMARY KEY,
       channel_id TEXT,
@@ -222,6 +232,23 @@ export async function buildSearchDatabase(
       userStmt.run([userId, name]);
     }
     userStmt.finalize();
+
+    const nameStmt = db.prepare(
+      `INSERT INTO user_names (user_id, nick, first, last, sources)
+       VALUES (?, ?, ?, ?, ?)`,
+    );
+    for (const [userId, userNames] of Object.entries(names || {})) {
+      for (const name of userNames) {
+        nameStmt.run([
+          userId,
+          name.nick,
+          name.first,
+          name.last,
+          name.sources.join(","),
+        ]);
+      }
+    }
+    nameStmt.finalize();
 
     const channelStmt = db.prepare(
       "INSERT OR REPLACE INTO channels (id, name, kind, is_archived) VALUES (?, ?, ?, ?)",

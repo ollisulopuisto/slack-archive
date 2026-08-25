@@ -51,6 +51,9 @@ export type SearchFile = {
   channels: Record<string, string>; // channelId -> channelName
   messages: Record<string, Array<SearchMessage>>;
   pages: SearchPageIndex;
+  // userId -> every name they have gone by, oldest first. Searching for a name
+  // somebody dropped in 2019 is the whole point of keeping the history.
+  names?: Record<string, Array<string>>;
 };
 
 export type SearchMessage = {

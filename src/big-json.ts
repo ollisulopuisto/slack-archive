@@ -123,6 +123,7 @@ export function writeSearchDataSync(filePath: string, data: SearchFile): void {
     write(`\n"users":${stringifyValue(data.users || {})},`);
     write(`\n"channels":${stringifyValue(data.channels || {})},`);
     write(`\n"pages":${stringifyValue(data.pages || {})},`);
+    write(`\n"names":${stringifyValue(data.names || {})},`);
     write(`\n"messages":{`);
 
     let firstChannel = true;
@@ -192,6 +193,7 @@ export function readSearchDataSync(
     channels: {},
     messages: {},
     pages: {},
+    names: {},
   };
 
   if (!fs.existsSync(filePath)) {
@@ -222,7 +224,12 @@ export function readSearchDataSync(
           (element) => JSON.parse(element.toString("utf8")) as SearchMessage,
         );
       }
-    } else if (key === "users" || key === "channels" || key === "pages") {
+    } else if (
+      key === "users" ||
+      key === "channels" ||
+      key === "pages" ||
+      key === "names"
+    ) {
       result[key] = JSON.parse(value.toString("utf8"));
     }
   }
