@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.132] - 2026-08-25
+
+### Fixed
+- **`npx github:ollisulopuisto/slack-archive` aborted with `Invalid Version:
+  26.06.14.124` for anyone who had ever run it before.** package.json carried a
+  four-number CalVer, which is not semver. npm does not warn about that - when
+  it finds an already-installed copy of a package it is about to replace, it
+  compares the two with `semver.lt`, and an unparseable version throws. The
+  npx cache holds exactly such a copy after the first run, so the second run
+  onward failed, on every new commit to main, for that user, permanently. A
+  first-time user saw nothing wrong.
+
+  package.json's version is now `26.8.25+132`: the same CalVer mapped into
+  semver, month and day without their leading zeros (illegal in a semver
+  number) and the build number as build metadata, which is the only place
+  semver has for a fourth component. `src/version.test.ts` checks both that it
+  parses and that it still says what the CHANGELOG says - the field had sat at
+  26.06.14.124 through six releases, and nothing noticed.
+
+  **A poisoned npx cache does not heal itself.** The bad version is in the
+  *installed* copy, so npm throws while reading it, before it can replace it.
+  Anyone who hit this needs to delete the cache entry once:
+
+      rm -rf ~/.npm/_npx/cf8fe5454af0d9a2
+
+  (the hash npm names in the error path, one per package spec) - or
+  `npm cache clean --force` to clear all of them. After that `npx` works and
+  keeps working.
+
 ## [v26.08.25.131] - 2026-08-25
 
 ### Changed
