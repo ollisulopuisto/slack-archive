@@ -22,7 +22,7 @@ export interface UserName {
 
 export type UserNames = Record<string, Array<UserName>>;
 
-export type NameSource = "mention" | "profile" | "username";
+export type NameSource = "attachment" | "mention" | "profile" | "username";
 
 export interface NameSighting {
   userId: string;
@@ -39,6 +39,9 @@ export interface NameSighting {
  * that day - the only retroactive one there is.
  */
 const MENTION_WITH_NAME = /<@(U[A-Z0-9]+)\|([^>]*)>/g;
+
+/** A Slack member id, as opposed to a bot or an app. */
+const MEMBER_ID = /^U[A-Z0-9]+$/;
 
 /** A Slack timestamp ("1475062758.000002") as an ISO 8601 string. */
 export function slackTimestampToIso(ts: string | undefined): string | null {
@@ -66,6 +69,19 @@ export function mineNames(message: ArchiveMessage): Array<NameSighting> {
     // Bot and legacy messages carry the posting name directly.
     if (message.user && typeof message.username === "string") {
       add(sightings, message.user, message.username, seen, "username");
+    }
+
+    // Sharing a message quotes it as an attachment carrying the author's
+    // DISPLAY name that day. The pipe-form mention above dried up around 2018;
+    // this did not, which makes it the only source covering the middle years.
+    // An attachment with no author_id is a link unfurl - "Helsingin Sanomat" is
+    // a newspaper, not a member - so the id is what qualifies it.
+    for (const attachment of message.attachments || []) {
+      if (!MEMBER_ID.test(String(attachment?.author_id || ""))) continue;
+
+      for (const name of [attachment.author_name, attachment.author_subname]) {
+        add(sightings, attachment.author_id, name, seen, "attachment");
+      }
     }
   }
 
@@ -106,9 +122,11 @@ function add(
   seen: string,
   source: NameSource,
 ) {
-  const trimmed = (nick || "").trim();
+  const trimmed = typeof nick === "string" ? nick.trim() : "";
 
-  if (!userId || trimmed.length === 0) return;
+  // A name that is itself an id is what getName() prints when it has nothing,
+  // so recording it would teach the history that a person is called U2GV75QA2.
+  if (!userId || trimmed.length === 0 || MEMBER_ID.test(trimmed)) return;
 
   sightings.push({ userId, nick: trimmed, seen, source });
 }

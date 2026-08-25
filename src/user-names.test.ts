@@ -89,6 +89,76 @@ describe("mineNames", () => {
     expect(mineNames({ ts: "", text: "<@U1|aame>" })).toEqual([]);
   });
 
+  // Sharing a Slack message quotes it as an attachment carrying the author's
+  // DISPLAY name as it was that day. Unlike the pipe-form mention, which Slack
+  // stopped sending around 2018, this keeps appearing - it is the only source
+  // that spans all ten years of this archive.
+  it("reads the display name off a shared message", () => {
+    const found = mineNames({
+      ts: "1600000000.0",
+      attachments: [
+        { author_id: "U2NC0RZ7G", author_name: "John Stuart Mill" },
+      ],
+    });
+
+    expect(found).toEqual([
+      {
+        userId: "U2NC0RZ7G",
+        nick: "John Stuart Mill",
+        seen: "2020-09-13T12:26:40.000Z",
+        source: "attachment",
+      },
+    ]);
+  });
+
+  it("reads author_subname too, which carries the same name", () => {
+    const found = mineNames({
+      ts: "1600000000.0",
+      attachments: [
+        {
+          author_id: "U1",
+          author_name: "Keyser Soze",
+          author_subname: "Keyser Soze",
+        },
+      ],
+    });
+
+    expect(found.map((f) => f.nick)).toEqual(["Keyser Soze", "Keyser Soze"]);
+  });
+
+  it("ignores a link unfurl, which names an author who is not a member", () => {
+    expect(
+      mineNames({
+        ts: "1600000000.0",
+        attachments: [
+          { author_name: "Helsingin Sanomat", service_name: "hs.fi" },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it("mines attachments inside thread replies", () => {
+    const found = mineNames({
+      ts: "1600000000.0",
+      replies: [
+        {
+          ts: "1600000100.0",
+          attachments: [{ author_id: "U1", author_name: "Junes Locke" }],
+        },
+      ],
+    });
+
+    expect(found.map((f) => f.nick)).toEqual(["Junes Locke"]);
+  });
+
+  // A message can carry `name`, and it is the CHANNEL's name - offtopic, hodl,
+  // twitter. Reading it as a nickname put 361 channel names in the history.
+  it("never reads a message's name field as a person", () => {
+    expect(
+      mineNames({ ts: "1600000000.0", user: "U1", name: "offtopic" }),
+    ).toEqual([]);
+  });
+
   it("skips an empty name", () => {
     expect(mineNames({ ts: "1475062758.0", text: "<@U1|>" })).toEqual([]);
   });

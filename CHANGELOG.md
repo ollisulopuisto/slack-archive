@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.137] - 2026-08-25
+
+### Added
+- **Nickname history now covers all ten years, not just 2016-2018.** The
+  pipe-form mention `<@U2H06BCQZ|jaricurry>` that .136 mines dried up when Slack
+  changed what it sends, around 2018, so the recovered history stopped there -
+  30 names for 13 users, nearly all of them from the first two years. This
+  workspace has had far more than that.
+
+  Sharing a Slack message quotes it as an attachment, and the attachment keeps
+  `author_id` beside `author_name`: the author's **display name** as it was the
+  day it was shared. That never stopped, so it spans the whole archive. Mining
+  it takes the recovered history from 30 names to **103, for 16 users**, and the
+  date ranges come out contiguous and non-overlapping, which is what a rename
+  history looks like:
+
+      Info Sota -> Minna Amaranth -> Sakari Puisto -> Jonathan Haidt ->
+      Matteo Salvini -> Junes Locke -> John Stuart Mill -> John Stuart Bill ->
+      Jari Sarasvuo -> Keyser Soze -> Theodore J. Kaczynski
+
+  An attachment with no `author_id` is a link unfurl - "Helsingin Sanomat" is a
+  newspaper, not a member - so the id is what qualifies a name as somebody's.
+
+  Two things deliberately NOT read, both found by checking the output against
+  the real archive rather than trusting the shape:
+
+  A message's `name` field is the **channel's** name. Reading it as a person's
+  put `offtopic`, `hodl` and `twitter` in the history, 361 of them.
+
+  A file's `name` and `title` sit next to the uploader's `user` id, which makes
+  them look like a name for that person. They are `IMG_1234.jpg`. That pattern
+  matched 30,118 pairs, and every one of them was wrong.
+
+  One attachment in the archive does name somebody `EjKLSbdWsAEhOVA.png`. It is
+  left in: a filter for filename-shaped nicknames would eventually eat a real
+  one in a workspace whose members have called themselves "Analprint scan".
+
+  A name that is itself a user id is dropped, because that is what `getName()`
+  prints when it knows nothing, and recording it would teach the history that
+  somebody is called `U2GV75QA2`.
+
 ## [v26.08.25.136] - 2026-08-25
 
 ### Added
