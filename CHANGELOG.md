@@ -5,6 +5,88 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.131] - 2026-08-25
+
+### Changed
+- **The search database is SQLite compiled to WebAssembly (`node-sqlite3-wasm`),
+  not the `sqlite3` native addon.**
+
+  `npx github:ollisulopuisto/slack-archive` was dead on Node 26:
+
+      Error: Could not locate the bindings file. Tried:
+       -> .../node_modules/sqlite3/lib/binding/node-v147-darwin-arm64/node_sqlite3.node
+
+  That is not a bug in this repo's code, and it is not fixable by pinning a
+  version. `sqlite3` is built by node-gyp and shipped as prebuilt binaries per
+  (ABI x platform x arch). Every new Node release invents an ABI that has no
+  prebuilt binary until someone publishes one, and when the download misses,
+  the fallback is compiling from source - so the tool works only on machines
+  that happen to be behind the prebuilds, or that have a compiler. A user who
+  upgrades Node loses a tool that was working.
+
+  A `.wasm` build has no ABI to match: one file, byte-identical on every
+  platform and architecture, nothing to download per-platform and nothing to
+  compile. It also settles a question Node's own `node:sqlite` does not:
+  official Node binaries are built WITHOUT FTS5, and full-text search is the
+  entire point of this database.
+
+  Cost, measured on the real 1,077,096-message archive: the rebuild takes about
+  100 seconds and produces the same 369 MB index; a bot query answers in
+  ~160 ms. The existing `search.db` is unchanged in format and does not need
+  rebuilding.
+
+- **The container image no longer installs python3, make and g++.** They were
+  there for exactly one reason - no musl prebuilt for `sqlite3`, so node-gyp
+  compiled it inside the image. Nothing compiles now.
+
+### Added
+- **A test job in CI, and tests for it to run.** `src/search-db.test.ts` builds
+  a real database and queries it: prefix matching, AND across words, quoted
+  phrases, the result limit, and what happens when someone types FTS5 operators
+  into a Slack message.
+
+  The pipeline previously documented, correctly, why it had no test job:
+  package.json's `test` was the npm stub, so a gate would have failed every
+  build while proving nothing. `test` is `vitest run` now.
+
+- **`npm run smoke`, run in CI after the tests.** vitest transforms the source,
+  which means it cannot see a class of bug the emitted ESM in `lib/` has:
+  `node-sqlite3-wasm` is CommonJS, and `import { Database } from` it typechecks
+  and passes vitest, then throws `does not provide an export named 'Database'`
+  the first time real Node loads it. This happened during this change. The
+  smoke step loads `lib/search-db.js` under plain `node`.
+
+- **The `channels` table records what a conversation IS** - `kind` (`public` /
+  `private` / `mpim` / `im`) and `is_archived` - so a reader can withhold what
+  it should not hand out. `bot.ts` today has no access control whatsoever: it
+  FTS-matches all 1,077,096 rows, DMs and private channels included, and will
+  DM the results to whoever asks. Nothing in the database let it do otherwise.
+
+  In this archive 44 of 72 conversations are DMs or group DMs, so that is the
+  majority of what the bot answers from, not an edge case.
+
+  `channelKind()` in `channels.ts` resolves the flags in one place and in one
+  order - im, then mpim, then private - because Slack sets `is_private: true`
+  on DMs and group DMs as well. Private-first would mislabel all 14 group DMs
+  here as private channels. A channel supplied without a kind stores NULL
+  rather than `public`: public is the one value a reader may hand to anybody,
+  so it is not the value to guess.
+
+### Fixed
+- Search queries are now quoted before they reach FTS5, so a message
+  containing `*`, `^`, `(` or `NOT` is searched for as words rather than
+  parsed as query syntax.
+- **`tsconfig.json` now pins `rootDir` and `include`.** With neither set, tsc
+  infers the input root from the common parent of every `.ts` file it finds.
+  Adding `vitest.config.ts` at the repo root moved that parent from `src/` to
+  `.`, which relocated the whole build from `lib/*.js` to `lib/src/*.js` -
+  exit code 0, no warning. `bin/slack-archive.js` does
+  `import('../lib/cli.js')`, so a clean checkout - which is what the image
+  builds from - would have produced a container that failed at startup. Spotted
+  as `npm run compile` quietly not updating `lib/`, then confirmed by
+  `npm run smoke`, which is the step that would have failed the build in CI
+  rather than shipping it.
+
 ## [v26.08.22.130] - 2026-08-22
 
 ### Changed

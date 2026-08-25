@@ -30,6 +30,14 @@ export type Reaction = {
   [key: string]: any;
 };
 
+/**
+ * What a conversation is, as one value rather than a set of flags that can
+ * contradict each other. Slack reports overlapping booleans - a DM carries
+ * `is_private` too - so the archive stores the resolved answer instead of
+ * asking every reader to resolve it again, identically, forever.
+ */
+export type ChannelKind = "public" | "private" | "mpim" | "im";
+
 export type Users = Record<string, User>;
 
 export type Emojis = Record<string, string>;

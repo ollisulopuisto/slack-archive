@@ -4,11 +4,12 @@ name: Build and publish
 # registry - no colour slots, no route, no published port - so the blue-green
 # deploy machinery does not apply. The host pins a tag in its Quadlet.
 #
-# No test job either, deliberately. package.json's test script is the npm
-# default stub (`echo "Error: no test specified" && exit 1`), so a test gate
-# here would fail every build while proving nothing. `tsc` running inside the
-# image build is the real check: it will not produce lib/ if the source does
-# not typecheck.
+# The test job exists as of 26.08.25.131. It did not before, and the reason it
+# did not was accurate at the time: package.json's test script was the npm
+# default stub, so a gate here would have failed every build while proving
+# nothing. There is a real vitest suite now - it covers the search query
+# parsing and the FTS5 database the bot answers from - so the gate proves
+# something. `tsc` inside the image build still typechecks; that has not moved.
 
 on:
   push:
@@ -18,7 +19,26 @@ on:
   workflow_dispatch:
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      # `npm ci` runs `prepare` (tsc), so this typechecks before it tests.
+      - run: npm ci
+      - run: npm test
+      # vitest transforms the source; it does not prove the EMITTED ESM in lib/
+      # loads. It does not: node-sqlite3-wasm is CommonJS, and `import
+      # { Database } from` it typechecks, passes vitest, and then throws
+      # "does not provide an export named 'Database'" the first time the
+      # container runs bot mode. This step is the one that catches that.
+      - run: npm run smoke
+
   build-and-push:
+    needs: test
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.calver.outputs.version }}
@@ -83,9 +103,10 @@ jobs:
   # The arm64 half, native, on a GitHub-hosted ARM runner.
   #
   # This replaced QEMU emulation on 2026-08-21. Emulating was never the right
-  # answer here - this image compiles sqlite3 from source through node-gyp and
-  # runs a full tsc build, which is the worst possible workload to emulate - but
-  # it looked like the only one, because this repo is PUBLIC and so gets no
+  # answer here - the image ran a full tsc build and, at the time, compiled
+  # sqlite3 from source through node-gyp, which is the worst possible workload
+  # to emulate - but it looked like the only one, because this repo is PUBLIC
+  # and so gets no
   # self-hosted runner (anyone can open a pull request, and our runner shares a
   # disk with production secrets; agents.md 6b).
   #

@@ -18,7 +18,7 @@ can still enjoy in 20 years. This tool will help you do that.
 ## Using it
 
 1. Do you already have a user token for your workspace? If not, read on below on how to get a token.
-2. Make sure you have [`node` and `npm`](https://nodejs.org/en/) installed (Node v20.19.0 or newer is recommended).
+2. Make sure you have [`node` and `npm`](https://nodejs.org/en/) installed (Node v20.19.0 or newer is recommended). No compiler needed - there are no native modules, so a brand-new Node release works the day it ships.
 3. Run `slack-archive`, which will interactively guide you through the options.
 
 To run this forked version (with advanced search and bot features):

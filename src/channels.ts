@@ -5,7 +5,7 @@ import {
 import ora from "ora";
 import { NO_SLACK_CONNECT } from "./config.js";
 
-import { Channel, Users } from "./interfaces.js";
+import { Channel, ChannelKind, Users } from "./interfaces.js";
 import { downloadUser, getName } from "./users.js";
 import { getWebClient } from "./web-client.js";
 
@@ -13,6 +13,23 @@ export function getChannelName(channel: Channel) {
   return (
     channel.name || channel.id || channel.purpose?.value || "Unknown channel"
   );
+}
+
+/**
+ * Resolve a conversation to exactly one kind.
+ *
+ * The order is the whole point. Slack sets `is_private: true` on direct
+ * messages and group DMs as well as on private channels, so asking "is it
+ * private?" first labels every DM in the archive a private channel - and a
+ * reader gating on that would hand out direct messages to anyone who could see
+ * any private channel. DMs are settled first, then group DMs, and `private`
+ * only gets what is left.
+ */
+export function channelKind(channel: Channel): ChannelKind {
+  if (channel.is_im) return "im";
+  if (channel.is_mpim) return "mpim";
+  if (channel.is_private) return "private";
+  return "public";
 }
 
 export function isPublicChannel(channel: Channel) {

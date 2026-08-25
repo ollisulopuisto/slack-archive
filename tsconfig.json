@@ -49,6 +49,7 @@
     // "sourceMap": true,                                /* Create source map files for emitted JavaScript files. */
     // "outFile": "./",                                  /* Specify a file that bundles all outputs into one JavaScript file. If `declaration` is true, also designates a file that bundles all .d.ts output. */
     "outDir": "./lib",                                   /* Specify an output folder for all emitted files. */
+    "rootDir": "./src",                                  /* Pin the input root, so output lands in lib/*.js. See the note by "include" below. */
     // "removeComments": true,                           /* Disable emitting comments. */
     // "noEmit": true,                                   /* Disable emitting files from a compilation. */
     // "importHelpers": true,                            /* Allow importing helper functions from tslib once per project, instead of including them per-file. */
@@ -98,6 +99,15 @@
     // "skipDefaultLibCheck": true,                      /* Skip type checking .d.ts files that are included with TypeScript. */
     "skipLibCheck": true                                 /* Skip type checking all .d.ts files. */
   },
+  /* Both of these pin where the build lands, and they are load-bearing.
+     With neither set, tsc infers rootDir from the common parent of every .ts
+     file it happens to find. Adding vitest.config.ts at the repo root moved
+     that parent from src/ to ., which silently relocated the whole build from
+     lib/*.js to lib/src/*.js - so bin/slack-archive.js (`import('../lib/cli.js')`)
+     and `npm run smoke` both pointed at files that no longer existed, on a
+     clean checkout and therefore inside the image. Naming the root means a new
+     file outside src/ cannot move the output again. */
+  "include": ["src"],
   "ts-node": {
     "esm": true,
     "transpileOnly": true

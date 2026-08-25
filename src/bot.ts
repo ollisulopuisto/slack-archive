@@ -1,8 +1,11 @@
 import { App } from "@slack/bolt";
-import sqlite3 from "sqlite3";
 import fs from "fs-extra";
 import { SEARCH_DB_PATH } from "./config.js";
-import { filterResultsByPhrases, parseSearchQuery } from "./search-query.js";
+import {
+  countMessages,
+  openSearchDatabase,
+  searchDatabase,
+} from "./search-db.js";
 
 export async function runBot() {
   const token = process.env.SLACK_BOT_TOKEN;
@@ -33,16 +36,14 @@ export async function runBot() {
     process.exit(1);
   }
 
-  const db = new sqlite3.Database(SEARCH_DB_PATH);
+  const db = openSearchDatabase(SEARCH_DB_PATH);
   console.log("Database connection established.");
 
-  db.get("SELECT COUNT(*) AS count FROM messages", (err, row: any) => {
-    if (err) {
-      console.error("Error checking messages count:", err.message);
-    } else {
-      console.log(`Database stats: ${row ? row.count : 0} messages in index.`);
-    }
-  });
+  try {
+    console.log(`Database stats: ${countMessages(db)} messages in index.`);
+  } catch (error) {
+    console.error("Error checking messages count:", error);
+  }
 
   // Log all incoming payloads for debugging
   app.use(async ({ payload, next }) => {
@@ -63,48 +64,7 @@ export async function runBot() {
 
     console.log(`Bot search query: ${query}`);
 
-    const { cleanQuery, phrases } = parseSearchQuery(query);
-
-    let results: any[] = [];
-    if (cleanQuery) {
-      const ftsQuery = cleanQuery
-        .split(/\s+/)
-        .filter((word) => word.length > 0)
-        .map((word) => `${word}*`)
-        .join(" AND ");
-
-      if (ftsQuery) {
-        results = await new Promise<any[]>((resolve) => {
-          db.all(
-            `SELECT 
-              m.timestamp AS t, 
-              m.user_id AS u, 
-              m.message AS m, 
-              m.channel_id AS c,
-              c_tbl.name AS channelName,
-              u_tbl.name AS userName
-            FROM messages m
-            JOIN messages_fts fts ON m.id = fts.id
-            LEFT JOIN channels c_tbl ON m.channel_id = c_tbl.id
-            LEFT JOIN users u_tbl ON m.user_id = u_tbl.id
-            WHERE messages_fts MATCH ?
-            ORDER BY rank
-            LIMIT 100`,
-            [ftsQuery],
-            (err, rows) => {
-              if (err) {
-                console.error("Database search error:", err);
-                resolve([]);
-              } else {
-                resolve(rows || []);
-              }
-            },
-          );
-        });
-      }
-    }
-
-    results = filterResultsByPhrases(results, phrases);
+    const results = searchDatabase(db, query);
 
     const topResults = DefenseSlice(results, 5);
 

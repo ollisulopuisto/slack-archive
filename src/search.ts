@@ -2,7 +2,7 @@ import fs from "fs-extra";
 import path from "path";
 import { fileURLToPath } from "url";
 import ora, { Ora } from "ora";
-import { getChannelName } from "./channels.js";
+import { channelKind, getChannelName } from "./channels.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -20,7 +20,7 @@ import {
   getSearchFile,
   getUsers,
 } from "./data-load.js";
-import sqlite3 from "sqlite3";
+import { buildSearchDatabase } from "./search-db.js";
 
 // Format:
 // channelId: [ timestamp0, timestamp1, timestamp2, ... ]
@@ -73,106 +73,42 @@ export async function createSearchDatabase(spinner: Ora) {
   const users = await getUsers();
   const channels = await getChannels();
 
-  // Delete existing database file to start fresh and avoid locks
-  if (fs.existsSync(SEARCH_DB_PATH)) {
-    fs.unlinkSync(SEARCH_DB_PATH);
-  }
-
-  const db = new sqlite3.Database(SEARCH_DB_PATH);
-
-  const run = (sql: string, params: any[] = []) => new Promise<void>((resolve, reject) => {
-    db.run(sql, params, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    db.serialize(() => {
-      // Create tables
-      db.run("CREATE TABLE channels (id TEXT PRIMARY KEY, name TEXT)");
-      db.run("CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT)");
-      db.run(`CREATE TABLE messages (
-        id TEXT PRIMARY KEY,
-        channel_id TEXT,
-        user_id TEXT,
-        timestamp TEXT,
-        message TEXT
-      )`);
-      db.run("CREATE VIRTUAL TABLE messages_fts USING fts5(id UNINDEXED, message)");
-
-      // Begin transaction
-      db.run("BEGIN TRANSACTION", (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  });
-
-  // Insert Users
-  const userStmt = db.prepare("INSERT OR REPLACE INTO users (id, name) VALUES (?, ?)");
+  const names: Record<string, string> = {};
   for (const userId in users) {
-    const name = users[userId].name || users[userId].real_name || "Unknown";
-    userStmt.run(userId, name);
-  }
-  userStmt.finalize();
-
-  // Now insert the messages in batches
-  for (const channel of channels) {
-    if (!channel.id) continue;
-    const name = getChannelName(channel);
-    
-    spinner.text = `Indexing database messages for channel ${name}`;
-    spinner.render();
-
-    // Fetch messages async BEFORE entering db.serialize
-    const rawMessages = await getMessages(channel.id!, true);
-    let messages: SearchMessage[] = rawMessages.map((message) => ({
-      m: message.text,
-      u: message.user,
-      t: message.ts,
-    }));
-
-    // Fallback to existing search data if the raw channel JSON file is empty/missing
-    if (messages.length === 0 && existingData.messages && existingData.messages[channel.id!]) {
-      messages = existingData.messages[channel.id!];
-    }
-
-    await new Promise<void>((resolve, reject) => {
-      db.serialize(() => {
-        db.run("INSERT OR REPLACE INTO channels (id, name) VALUES (?, ?)", channel.id, name);
-        
-        const msgStmt = db.prepare("INSERT OR REPLACE INTO messages (id, channel_id, user_id, timestamp, message) VALUES (?, ?, ?, ?, ?)");
-        const ftsStmt = db.prepare("INSERT OR REPLACE INTO messages_fts (id, message) VALUES (?, ?)");
-        
-        for (const msg of messages) {
-          const id = `${channel.id}-${msg.t}`;
-          const text = msg.m || "";
-          msgStmt.run(id, channel.id, msg.u, msg.t, text);
-          ftsStmt.run(id, text);
-        }
-        
-        msgStmt.finalize();
-        ftsStmt.finalize();
-        
-        // Use a dummy query to signal when all queued statements are done
-        db.run("SELECT 1", (err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-    });
+    names[userId] = users[userId].name || users[userId].real_name || "Unknown";
   }
 
-  // Commit transaction
-  await run("COMMIT");
+  await buildSearchDatabase(SEARCH_DB_PATH, {
+    users: names,
+    channels: channels
+      .filter((channel) => !!channel.id)
+      .map((channel) => ({
+        id: channel.id!,
+        name: getChannelName(channel),
+        kind: channelKind(channel),
+        isArchived: !!channel.is_archived,
+      })),
+    onChannel: (channel) => {
+      spinner.text = `Indexing database messages for channel ${channel.name}`;
+      spinner.render();
+    },
+    loadMessages: async (channelId) => {
+      const messages: SearchMessage[] = (
+        await getMessages(channelId, true)
+      ).map((message) => ({
+        m: message.text,
+        u: message.user,
+        t: message.ts,
+      }));
 
-  // Close database connection
-  await new Promise<void>((resolve, reject) => {
-    db.close((err) => {
-      if (err) reject(err);
-      else resolve();
-    });
+      // Fall back to existing search data if the raw channel JSON file is
+      // empty or missing.
+      if (messages.length === 0 && existingData.messages?.[channelId]) {
+        return existingData.messages[channelId];
+      }
+
+      return messages;
+    },
   });
 }
 
@@ -217,7 +153,11 @@ async function createSearchFile(spinner: Ora) {
       return searchMessage;
     });
 
-    if (messages.length === 0 && existingData.messages && existingData.messages[channel.id]) {
+    if (
+      messages.length === 0 &&
+      existingData.messages &&
+      existingData.messages[channel.id]
+    ) {
       messages = existingData.messages[channel.id];
     }
 

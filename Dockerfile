@@ -7,29 +7,25 @@
 # tagged with that commit.
 
 FROM node:18-alpine AS builder
-# sqlite3 is a native module and there is no prebuilt binary for musl, so
-# node-gyp compiles it here.
-RUN apk add --no-cache python3 make g++
+# No build toolchain: nothing here compiles any more. The search database used
+# to be `sqlite3`, a node-gyp addon with no musl prebuilt, which is why this
+# stage carried python3/make/g++. It is now node-sqlite3-wasm - a .wasm file,
+# identical on every platform and architecture.
 WORKDIR /app
 
 # Everything is copied BEFORE npm ci, which costs the dependency layer cache but
 # is what makes the build work at all: package.json has
 # `"prepare": "npm run compile"`, and npm runs it at the end of install. With
 # only package*.json present it fires before src/ exists and tsc fails. With the
-# source already here it compiles exactly as intended, and the same install
-# builds the native modules.
+# source already here it compiles exactly as intended.
 COPY . .
 RUN npm ci
 
 FROM node:18-alpine AS runtime
 WORKDIR /app
 
-# node_modules comes from the builder with its compiled bindings intact.
-# Reinstalling here instead was the first attempt and it failed at runtime:
-# `npm ci --omit=dev --ignore-scripts` skips node-gyp, so sqlite3 arrived with
-# no binding at all - "Could not locate the bindings file". --ignore-scripts was
-# needed there only to stop `prepare` running without a compiler, so copying
-# sidesteps both problems.
+# node_modules is copied rather than reinstalled, which also keeps the runtime
+# stage free of `prepare` (it runs tsc, and the compile already happened).
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/package*.json ./
@@ -37,8 +33,7 @@ COPY bin ./bin
 COPY static ./static
 
 # Drop devDependencies now that the compile is done. `prune` does not run
-# lifecycle scripts, so `prepare` stays quiet, and it leaves the already-built
-# native modules of the production deps alone.
+# lifecycle scripts, so `prepare` stays quiet.
 RUN npm prune --omit=dev
 
 # The archive tree is a mounted volume. Creating it here only guarantees the
