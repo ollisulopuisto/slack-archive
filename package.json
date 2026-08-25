@@ -1,6 +1,6 @@
 {
   "name": "slack-archive",
-  "version": "26.8.25+150",
+  "version": "26.8.25+151",
   "description": "Create static HTML archives for your Slack workspaces",
   "scripts": {
     "prettier": "npx prettier --write src/*",
@@ -30,7 +30,6 @@
   "author": "Felix Rieseberg <felix@felixrieseberg.com>",
   "license": "MIT",
   "dependencies": {
-    "@slack/bolt": "^4.7.2",
     "@slack/web-api": "^7.15.2",
     "date-fns": "^4.1.0",
     "emoji-datasource": "^16.0.0",

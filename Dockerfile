@@ -41,7 +41,9 @@ RUN npm prune --omit=dev
 # mounted over it.
 RUN mkdir -p /app/slack-archive && chown -R node:node /app
 
-# No EXPOSE: bot mode is a Slack socket-mode client. Outbound WebSocket only.
+# No EXPOSE and no server: this image archives a workspace and exits. The bot
+# that used to live here has moved to backlog, which has its own gate, its own
+# search and its own deployment.
 USER node
 ENV NODE_ENV=production
 
@@ -58,4 +60,7 @@ ENV NODE_ENV=production
 ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}
 
-CMD ["node", "bin/slack-archive.js", "--bot"]
+# The archiver, which is what this image is for. Callers that want something
+# else - a rerun with different exclusions, a publish render - pass their own
+# command; the NAS job does exactly that.
+CMD ["node", "bin/slack-archive.js", "--automatic"]

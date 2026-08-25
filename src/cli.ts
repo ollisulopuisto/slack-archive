@@ -50,11 +50,8 @@ import { downloadAllUsers, downloadAvatars } from "./users.js";
 import { downloadChannels } from "./channels.js";
 import { authTest } from "./web-client.js";
 import { User, Channel, SlackArchiveChannelData } from "./interfaces.js";
-import { runBot } from "./bot.js";
 
 const { prompt } = inquirer;
-
-const BOT_MODE = process.argv.includes("--bot");
 
 async function selectMergeFiles(): Promise<boolean> {
   const defaultResponse = true;
@@ -280,11 +277,6 @@ async function getAuthTest() {
 }
 
 export async function main() {
-  if (BOT_MODE) {
-    await runBot();
-    return;
-  }
-
   console.log(`Welcome to slack-archive${getLastSuccessfulRun()}`);
 
   if (AUTOMATIC_MODE) {

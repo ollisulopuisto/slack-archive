@@ -11,7 +11,7 @@ can still enjoy in 20 years. This tool will help you do that.
 - **JSON included**: All data is also stored as JSON, so you can consume it with other tools later.
 - **No cloud, free**: Do all of this for free, without giving anyone your information.
 - **Advanced search**: Features a fast, browser-based search with channel/user filters and exact phrase matching - thread replies included.
-- **Slack Bot Integration**: Search your archive directly from Slack with a Socket Mode bot.
+- **Searchable from Slack**: the index is a plain SQLite file, so a bot can read it directly.
 - **It remembers what Slack forgets**: names people used to go by, and the profile pictures they used to have. Slack keeps no history of either.
 - **Statistics**: a page for the workspace, one per channel and one per person, with a year -> month -> day -> hour drill-down.
 - **Publishable**: render an archive without the direct messages in it, and serve the attachments from somewhere other than the pages.
@@ -217,59 +217,22 @@ https://{your-team-name}.slack.com/api/oauth.access?client_id={your-client-id}&c
 
 Your browser should now be returning some JSON including a token. Make a note of it - that's what we'll use. Paste it in the command line, OR create a file called `.token` in the slack-archive directory (created when the command is first run) and paste it in there.
 
-## Slack Bot Integration
+## Searching from Slack
 
-You can run a Slack bot that allows users to search the archive directly from Slack. The bot uses Socket Mode, so you don't need a public URL.
+The Slack bot that used to live in this repository has moved to a separate
+service, which does the same search with a per-user access gate, image search
+and its own login. This tool builds the index it reads: `data/search.db`.
 
-### Setup
-
-1. Create a new Slack App at [api.slack.com/apps](https://api.slack.com/apps).
-2. Enable **Socket Mode**.
-3. Under **App-Level Tokens**, click "Generate" and create a token with `connections:write` scope (save this as `SLACK_APP_TOKEN`).
-4. Under **OAuth & Permissions**, add the following **Bot Token Scopes**:
-   - `app_mentions:read`
-   - `chat:write`
-5. Install the app to your workspace and copy the **Bot User OAuth Token** (save this as `SLACK_BOT_TOKEN`).
-6. Enable **Event Subscriptions**, and under "Subscribe to bot events", add `app_mention`.
-
-### Usage
-
-Run the bot with the following command:
-
-```bash
-export SLACK_BOT_TOKEN=xoxb-...
-export SLACK_APP_TOKEN=xapp-...
-npm run cli -- --bot
-```
-
-### Commands
-
-- `@YourBotName query` - Search for messages containing `query`.
-- `@YourBotName "exact phrase"` - Search for messages containing the exact phrase.
-
-The bot will return the top 5 matches, including the channel, user, date, and a snippet of the message.
-
-### Lightweight VPS Deployment
-
-To run the bot on a VPS with limited storage you **do not need the generated
-HTML files**, and you do not need the message JSON either. The bot opens one
-file:
-
-- `data/search.db` - the SQLite index, which carries the messages, users and
-  channels it needs
-
-`data/search.js` is a separate thing: it is what the browser search page loads,
-and what `npm run build-db` falls back to when rebuilding an index on a machine
-that has no per-channel JSON. Ship it alongside if you want that rebuild to be
-possible; the bot itself never reads it.
-
-Two things to know when copying an index onto a running host:
+To run a bot of your own against an archive, that file is the whole interface -
+SQLite with `messages`, `messages_fts`, `channels`, `users`, `user_names`,
+`files`, `reactions` and `reaction_users`. Two things to know when copying one
+onto a running host:
 
 - **Mount the directory, not the file.** A container with the file bind-mounted
   keeps serving the old inode after the file is replaced, and nothing anywhere
-  reports it - the index is updated, the bot is still answering from the
+  reports it - the index is updated and the bot is still answering from the
   previous one.
-- **The index is built with whatever exclusions were passed to the run that
-  built it.** Rebuilding it on the VPS from `search.js` reapplies only what
-  that file already had, so an index rebuilt there can quietly reinstate what
-  the archiving machine excluded.
+- **The index carries whatever exclusions built it.** Rebuilding it elsewhere
+  from `search.js` reapplies only what that file already had, so an index
+  rebuilt on the serving host can quietly reinstate what the archiving machine
+  excluded.

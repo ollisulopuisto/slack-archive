@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.151] - 2026-08-25
+
+### Removed
+- **Bot mode.** `--bot`, `src/bot.ts` and the `@slack/bolt` dependency are gone,
+  and the image's `CMD` is the archiver rather than a Slack client.
+
+  The bot that reads these archives now lives in its own service, with a
+  per-user access gate, image search and its own login - none of which belongs
+  in a tool whose job is to turn a workspace into static files. What this
+  repository provides is the interface between them: `data/search.db`, a plain
+  SQLite index.
+
+  `search-db.ts` is kept whole, `searchDatabase()` included, even though nothing
+  in this repository now calls it. It is the documented way to read an index
+  this tool writes, and it carries the tests asserting that a file in a direct
+  message never comes back from a query. Deleting a tested access gate because
+  its only caller moved out is how the property gets quietly lost when the next
+  caller arrives.
+
 ## [v26.08.25.150] - 2026-08-25
 
 ### Changed
