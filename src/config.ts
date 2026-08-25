@@ -66,6 +66,27 @@ export const FORCE_HTML_GENERATION = findCliParameter(
 export const EXCLUDE_CHANNELS = getCliParameter("--exclude-channels");
 
 /**
+ * Where attachments are served from, if not from beside the HTML.
+ *
+ * The pages are 563 MB and fit on a small VPS; the attachments are 41 GB and do
+ * not. With this set to e.g. `https://host/media/` the generated HTML points at
+ * a proxy in front of the storage box holding them, and nothing else changes.
+ * Empty means relative `files/...`, which is what a local archive wants.
+ */
+export function normalizeBaseUrl(value: string): string {
+  const trimmed = (value || "").trim();
+
+  // Exactly one trailing slash, or nothing at all. Getting this wrong is
+  // invisible in review and produces https://host/mediafiles/C123/F1.png on
+  // every image in the archive.
+  return trimmed ? `${trimmed.replace(/\/+$/, "")}/` : "";
+}
+
+export const FILES_BASE_URL = normalizeBaseUrl(
+  getCliParameter("--files-base-url") || "",
+);
+
+/**
  * Channel kinds the search index must never hold, e.g. `im,mpim`.
  *
  * Empty by default: an archive of your own workspace is not automatically a
@@ -122,6 +143,18 @@ export const NAMES_PATH = path.join(HTML_DIR, "names.html");
 export const STATS_PATH = path.join(HTML_DIR, "stats.html");
 export const BOTS_PATH = path.join(HTML_DIR, "bots.html");
 
+/**
+ * Where a past profile picture lives. Keyed by the date in Slack's own URL,
+ * which is what identifies one picture rather than another.
+ */
+export function getAvatarHistoryFilePath(
+  userId: string,
+  date: string,
+  extension: string,
+) {
+  return path.join(AVATARS_DIR, "history", userId, `${date}${extension}`);
+}
+
 export function getChannelStatsFilePath(channelId: string) {
   return path.join(HTML_DIR, `channel-${channelId}.html`);
 }
@@ -138,6 +171,7 @@ export const CHANNELS_DATA_PATH = path.join(DATA_DIR, "channels.json");
 export const USERS_DATA_PATH = path.join(DATA_DIR, "users.json");
 export const EMOJIS_DATA_PATH = path.join(DATA_DIR, "emojis.json");
 export const USER_NAMES_DATA_PATH = path.join(DATA_DIR, "user-names.json");
+export const USER_AVATARS_DATA_PATH = path.join(DATA_DIR, "user-avatars.json");
 export const SLACK_ARCHIVE_DATA_PATH = path.join(
   DATA_DIR,
   "slack-archive.json",

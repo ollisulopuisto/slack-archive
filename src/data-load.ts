@@ -8,6 +8,7 @@ import {
   Users,
 } from "./interfaces.js";
 import { UserNames } from "./user-names.js";
+import { UserAvatars } from "./user-avatars.js";
 import {
   CHANNELS_DATA_PATH,
   EMOJIS_DATA_PATH,
@@ -15,6 +16,7 @@ import {
   SEARCH_DATA_PATH,
   USERS_DATA_PATH,
   USER_NAMES_DATA_PATH,
+  USER_AVATARS_DATA_PATH,
 } from "./config.js";
 import { retry } from "./retry.js";
 import { readJsonArraySync, readSearchDataSync } from "./big-json.js";
@@ -68,6 +70,10 @@ export async function getUsers(): Promise<Users> {
 
 export async function getEmoji(): Promise<Emojis> {
   return getFile<Emojis>(EMOJIS_DATA_PATH, {});
+}
+
+export async function getUserAvatars(): Promise<UserAvatars> {
+  return getFile<UserAvatars>(USER_AVATARS_DATA_PATH, {});
 }
 
 export async function getUserNames(): Promise<UserNames> {

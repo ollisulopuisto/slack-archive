@@ -38,6 +38,18 @@ export async function downloadURL(
 
   try {
     const response = await fetch(url, { headers });
+
+    // A refusal has a body too. Slack answers an expired avatar or file link
+    // with a 243-byte XML document, and writing that under the requested name
+    // produces an error page called avatar.png: a broken image that looks
+    // downloaded, and that the existence check above then skips forever.
+    if (!response.ok) {
+      console.warn(
+        `Failed to download file ${url}: ${response.status} ${response.statusText}`,
+      );
+      return;
+    }
+
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     fs.outputFileSync(filePath, buffer);

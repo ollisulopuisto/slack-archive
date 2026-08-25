@@ -1,3 +1,4 @@
+import path from "path";
 import { uniqBy } from "lodash-es";
 import inquirer from "inquirer";
 import fs from "fs-extra";
@@ -16,12 +17,15 @@ import {
   DATE_FILE,
   EMOJIS_DATA_PATH,
   USER_NAMES_DATA_PATH,
+  USER_AVATARS_DATA_PATH,
+  getAvatarHistoryFilePath,
   NO_SLACK_CONNECT,
+  NO_FILE_DOWNLOAD,
   EXCLUDE_CHANNELS,
 } from "./config.js";
 import { downloadExtras } from "./messages.js";
 import { downloadMessages } from "./messages.js";
-import { downloadFilesForChannel } from "./download-files.js";
+import { downloadFilesForChannel, downloadURL } from "./download-files.js";
 import {
   createHtmlForChannels,
   getChannelsToCreateFilesFor,
@@ -36,8 +40,10 @@ import {
   getUsers,
   getChannels,
   getUserNames,
+  getUserAvatars,
 } from "./data-load.js";
 import { mineNames, recordNames, snapshotNames } from "./user-names.js";
+import { mineAvatars, recordAvatars, UserAvatars } from "./user-avatars.js";
 import { getSlackArchiveData, setSlackArchiveData } from "./archive-data.js";
 import { downloadEmojiList, downloadEmojis } from "./emoji.js";
 import { downloadAllUsers, downloadAvatars } from "./users.js";
@@ -309,6 +315,7 @@ export async function main() {
     await getUserNames(),
     snapshotNames(users, new Date().toISOString()),
   );
+  let userAvatars: UserAvatars = await getUserAvatars();
 
   const channels = await downloadChannels({ types: channelTypes }, users);
   const selectedChannels = await selectChannels(
@@ -376,19 +383,68 @@ export async function main() {
 
       for (const message of await getMessages(channel.id, true)) {
         userNames = recordNames(userNames, mineNames(message));
+        userAvatars = recordAvatars(userAvatars, mineAvatars(message));
       }
     }
 
     await write(USER_NAMES_DATA_PATH, JSON.stringify(userNames, undefined, 2));
 
+    await write(
+      USER_AVATARS_DATA_PATH,
+      JSON.stringify(userAvatars, undefined, 2),
+    );
+
     const nicks = Object.values(userNames).reduce(
       (total, names) => total + names.length,
       0,
     );
+    const faces = Object.values(userAvatars).reduce(
+      (total, avatars) => total + avatars.length,
+      0,
+    );
 
     spinner.succeed(
-      `Recorded ${nicks} names for ${Object.keys(userNames).length} users.`,
+      `Recorded ${nicks} names and ${faces} faces for ${
+        Object.keys(userNames).length
+      } users.`,
     );
+
+    await downloadAvatarHistory();
+  }
+
+  /**
+   * Fetch the past profile pictures themselves.
+   *
+   * The URLs stay valid on Slack's CDN for now, which is exactly why they
+   * should not be relied on: an archive that renders somebody's 2017 face by
+   * hot-linking Slack is an archive of a link, not of a face. They are small,
+   * public, and there are a couple of hundred of them.
+   */
+  async function downloadAvatarHistory() {
+    const entries = Object.entries(userAvatars);
+    if (entries.length === 0 || NO_FILE_DOWNLOAD) return;
+
+    const spinner = ora("Downloading past profile pictures...").start();
+    let downloaded = 0;
+
+    for (const [userId, avatars] of entries) {
+      for (const avatar of avatars) {
+        const extension = path.extname(new URL(avatar.url).pathname) || ".jpg";
+        const filePath = getAvatarHistoryFilePath(
+          userId,
+          avatar.date,
+          extension,
+        );
+
+        if (fs.existsSync(filePath)) continue;
+
+        spinner.text = `Downloading past profile pictures (${++downloaded})`;
+        spinner.render();
+        await downloadURL(avatar.url, filePath, { authorize: false });
+      }
+    }
+
+    spinner.succeed(`Downloaded ${downloaded} past profile pictures.`);
   }
 
   async function downloadEachChannel() {

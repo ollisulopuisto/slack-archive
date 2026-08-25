@@ -744,3 +744,32 @@ table.timeline td.timestamp {
   line-height: 1;
   min-width: 18px;
 }
+
+/* Faces over the years: one picture per change, oldest first. */
+.faces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.faces li {
+  width: 64px;
+  text-align: center;
+}
+
+.faces img {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--viz-series-soft);
+  display: block;
+}
+
+.faces .timestamp {
+  font-size: 10px;
+  color: var(--viz-ink-muted);
+}

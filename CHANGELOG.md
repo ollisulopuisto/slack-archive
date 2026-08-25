@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.144] - 2026-08-25
+
+### Added
+- **Faces over the years.** Profile pictures have no more history in Slack's API
+  than names do, but an avatar URL carries its upload date in its own path, and
+  a shared message quotes its author's avatar. Mined across this archive that is
+  **212 dated pictures for 13 people** - one of them 81 changes deep, from 2017
+  to 2026.
+
+  The pictures are downloaded into the archive rather than hot-linked: an
+  archive that renders somebody's 2017 face by fetching Slack is an archive of a
+  link. Profile pages show them oldest first, and "new picture" now appears in
+  the timeline beside the renames.
+
+  **141 of the 212 arrived; Slack now refuses the rest.** The row shows the ones
+  that are actually here, because a line of broken images is worse than a
+  shorter line of real ones.
+
+- **`--files-base-url`** points attachment URLs somewhere other than beside the
+  HTML - e.g. a proxy in front of a storage box - for archives whose 563 MB of
+  pages and 41 GB of media do not live in the same place. It normalises to
+  exactly one trailing slash, with a test, because getting that wrong yields
+  `https://host/mediafiles/C123/F1.png` on every image and looks fine in review.
+
+### Fixed
+- **A refused download was written to disk as the file it failed to fetch.**
+  `downloadURL` never checked the response status, and Slack answers an expired
+  avatar or attachment link with a 243-byte XML document. That was saved under
+  the requested name - an error page called `avatar.png`, a broken image that
+  looks downloaded, and which the "already have it" check then skips forever on
+  every later run. Found while downloading avatars, but it applies to every
+  attachment the archiver has ever fetched.
+
 ## [v26.08.25.143] - 2026-08-25
 
 ### Changed

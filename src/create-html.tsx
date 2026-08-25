@@ -15,6 +15,7 @@ import {
   getMessages,
   getUsers,
   getUserNames,
+  getUserAvatars,
   getEmoji,
 } from "./data-load.js";
 import {
@@ -33,6 +34,8 @@ import {
   NAMES_PATH,
   STATS_PATH,
   BOTS_PATH,
+  FILES_BASE_URL,
+  getAvatarHistoryFilePath,
   getProfileFilePath,
   getChannelStatsFilePath,
   OUT_DIR,
@@ -47,6 +50,7 @@ import { getEmojiFilePath, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
 import { getName } from "./users.js";
 import { formerNames, UserNames } from "./user-names.js";
 import { botUserIds } from "./search-filter.js";
+import { UserAvatars } from "./user-avatars.js";
 import {
   ChannelStats,
   createStats,
@@ -82,6 +86,7 @@ const MESSAGE_CHUNK = 1000;
 let users: Users = {};
 let userNames: UserNames = {};
 let stats: WorkspaceStats | null = null;
+let userAvatars: UserAvatars = {};
 let slackArchiveData: SlackArchiveData = { channels: {} };
 let me: User | null;
 
@@ -108,7 +113,9 @@ const Files: React.FunctionComponent<FilesProps> = (props) => {
   const fileElements = files.map((file: any) => {
     const { thumb_1024, thumb_720, thumb_480, thumb_pdf } = file;
     const thumb = thumb_1024 || thumb_720 || thumb_480 || thumb_pdf;
-    let src = `files/${channelId}/${file.id}.${file.filetype}`;
+    // Relative when the attachments sit beside the HTML; absolute when they
+    // live somewhere the pages do not, e.g. a storage box behind a proxy.
+    let src = `${FILES_BASE_URL}files/${channelId}/${file.id}.${file.filetype}`;
     let href = src;
 
     if (file.mimetype?.startsWith("image")) {
@@ -765,7 +772,22 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
 }) => {
   const names = userNames[userId] || [];
   const current = getName(userId, users);
-  const events = stats ? profileEvents(userId, stats, userNames) : [];
+  const events = stats
+    ? profileEvents(userId, stats, userNames, userAvatars)
+    : [];
+  // Only the ones that are actually here. Slack refuses a good number of the
+  // older avatar URLs now, and a row of broken images is worse than a shorter
+  // row of real ones.
+  const faces = (userAvatars[userId] || [])
+    .map((avatar) => ({
+      date: avatar.date,
+      extension: (avatar.url.match(/\.[a-z0-9]+$/i) || [".jpg"])[0],
+    }))
+    .filter((face) =>
+      fs.existsSync(
+        getAvatarHistoryFilePath(userId, face.date, face.extension),
+      ),
+    );
   const years = yearData(person.byYear);
   const activeYears = Object.keys(person.byYear).length;
 
@@ -816,6 +838,30 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
         >
           <Columns data={hourData(person.byHour)} labelEvery={3} />
         </Figure>
+
+        {faces.length > 0 ? (
+          <div className="viz-figure">
+            <div className="viz-figure-caption">
+              Faces over the years
+              <span className="viz-note">
+                {" "}
+                dated by when Slack stored the picture
+              </span>
+            </div>
+            <ul className="faces">
+              {faces.map((face) => (
+                <li key={face.date}>
+                  <img
+                    src={`avatars/history/${userId}/${face.date}${face.extension}`}
+                    alt={`${current} in ${face.date.slice(0, 4)}`}
+                    loading="lazy"
+                  />
+                  <span className="timestamp">{face.date}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         <details className="drill" open>
           <summary>
@@ -1427,6 +1473,7 @@ export async function createHtmlForChannels(channels: Array<Channel> = []) {
 
   users = await getUsers();
   userNames = await getUserNames();
+  userAvatars = await getUserAvatars();
   slackArchiveData = await getSlackArchiveData();
   me = slackArchiveData.auth?.user_id
     ? users[slackArchiveData.auth?.user_id]

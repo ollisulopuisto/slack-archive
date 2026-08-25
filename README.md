@@ -51,6 +51,9 @@ slack-archive --bot
 --search-exclude-users      Users whose messages the index must never hold,
                             by handle, display name or id. e.g. historia,backlog
 --no-file-download:         Don't download files.
+--files-base-url            Serve attachments from here instead of from beside
+                            the HTML, e.g. https://host/media/. For archives
+                            whose pages and media live in different places.
 --no-slack-connect:         Don't connect to Slack, just generate HTML from local data.
 --force-html-generation:    Force regeneration of HTML files. Useful after slack-archive upgrades.
 ```

@@ -1,5 +1,6 @@
 import { ArchiveMessage, Channel } from "./interfaces.js";
 import { UserNames } from "./user-names.js";
+import { UserAvatars } from "./user-avatars.js";
 
 /** A channel somebody posted in, and how much. */
 export interface ChannelUse {
@@ -393,6 +394,7 @@ export function profileEvents(
   userId: string,
   stats: WorkspaceStats,
   userNames: UserNames,
+  userAvatars: UserAvatars = {},
 ): Array<ProfileEvent> {
   const person = stats.byUser[userId];
   const events: Array<ProfileEvent> = [];
@@ -402,6 +404,16 @@ export function profileEvents(
       ts: isoToSlackTs(name.first),
       kind: "name",
       detail: `Known as ${name.nick}`,
+    });
+  }
+
+  for (const avatar of userAvatars[userId] || []) {
+    events.push({
+      // The date in the URL is when Slack stored the picture, which is when
+      // they changed it - a better answer than the message that quoted it.
+      ts: isoToSlackTs(`${avatar.date}T12:00:00.000Z`),
+      kind: "avatar",
+      detail: "New profile picture",
     });
   }
 
