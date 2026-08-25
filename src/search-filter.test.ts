@@ -78,3 +78,27 @@ describe("isMessageSearchable", () => {
     expect(isMessageSearchable({}, new Set(["U1"]))).toBe(true);
   });
 });
+
+// isMessageSearchable reads `u`, the mapped short field. An archive message
+// calls the same thing `user`, and ArchiveMessage has an index signature, so
+// reading `.u` off one is legal and always undefined - the guard then returns
+// true for every message and excludes nothing while reporting that it did.
+// That shipped: a rebuild kept all 61 421 Slackbot messages.
+//
+// These pin the precondition, since the type system cannot.
+describe("isMessageSearchable operates on mapped messages", () => {
+  const hidden = new Set(["USLACKBOT"]);
+
+  it("excludes a mapped message from a hidden user", () => {
+    expect(isMessageSearchable({ u: "USLACKBOT", m: "x", t: "1" }, hidden)).toBe(false);
+  });
+
+  it("does NOT recognise the raw archive field, which is why order matters", () => {
+    const rawShape = { user: "USLACKBOT", text: "x", ts: "1" } as any;
+    expect(isMessageSearchable(rawShape, hidden)).toBe(true);
+  });
+
+  it("keeps a message with no user at all", () => {
+    expect(isMessageSearchable({ m: "x", t: "1" }, hidden)).toBe(true);
+  });
+});

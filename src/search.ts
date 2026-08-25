@@ -123,26 +123,42 @@ export async function createSearchDatabase(spinner: Ora) {
       spinner.render();
     },
     loadMessages: async (channelId) => {
-      const messages: SearchMessage[] = (
-        await getMessages(channelId, true)
-      ).map((message) => ({
-        m: message.text,
-        u: message.user,
-        t: message.ts,
-        // Attachment metadata travels with the message so that a caption-less
-        // image is findable by its filename. Only the fields search needs:
-        // Slack's file object is large and the rest does not belong in an
-        // index.
-        files: (message.files || [])
-          .filter((file: any) => file && file.id)
-          .map((file: any) => ({
-            id: file.id,
-            name: file.name,
-            title: file.title,
-            filetype: file.filetype,
-            mimetype: file.mimetype,
-          })),
-      }));
+      const messages: SearchMessage[] = (await getMessages(channelId, true))
+        .map((message) => ({
+          m: message.text,
+          u: message.user,
+          t: message.ts,
+          // Attachment metadata travels with the message so that a
+          // caption-less image is findable by its filename. Only the fields
+          // search needs: Slack's file object is large and the rest does not
+          // belong in an index.
+          files: (message.files || [])
+            .filter((file: any) => file && file.id)
+            .map((file: any) => ({
+              id: file.id,
+              name: file.name,
+              title: file.title,
+              filetype: file.filetype,
+              mimetype: file.mimetype,
+            })),
+          // Reactions likewise. The index has held a table for them since
+          // 7a47f2d; nothing was filling it, because the schema and the write
+          // path landed without this line.
+          reactions: (message.reactions || [])
+            .filter((reaction: any) => reaction && reaction.name)
+            .map((reaction: any) => ({
+              name: reaction.name,
+              count: reaction.count,
+              users: reaction.users,
+            })),
+        }))
+        // AFTER the map, not before. isMessageSearchable reads `u`, the mapped
+        // short field, and an archive message calls it `user` - so filtering
+        // the raw message tested a property that is never there, returned true
+        // for everything, and excluded nothing while reporting that it had.
+        // The types did not catch it: ArchiveMessage has an index signature,
+        // so `.u` is a legal read that is always undefined.
+        .filter((message) => isMessageSearchable(message, hiddenUsers));
 
       // Fall back to existing search data if the raw channel JSON file is
       // empty or missing - filtered the same way. The fallback reads the
