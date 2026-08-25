@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.139] - 2026-08-25
+
+### Added
+- **Profile pages, one per person, and a stats page for the whole workspace.**
+
+  `html/user-<id>.html` opens with the shape of somebody's decade in one screen
+  - messages, names, channels, files, reactions received, active years - then
+  messages per year and hour of day, and below that a timeline that reads as one
+  dated story: renamed, joined #channel, first message, most recent. Everything
+  past the overview is a `<details>`, because the thing that makes a page like
+  this useless is scrolling through forty channels to reach the next section.
+
+  `html/stats.html` is the same idea for ten years of everything: totals,
+  messages per month across the whole span, per year, hour of day, day of week,
+  then who talks, busiest channels and most-used reactions - each ranking
+  linked to the page it describes.
+
+  Charts are inline SVG with no library, because these pages are opened from a
+  NAS over `file://` with no network and a CDN script tag would render an empty
+  box. Hover text is a native `<title>`; every chart also carries its numbers as
+  a collapsible table, which is the accessible reading of the same data rather
+  than a fallback.
+
+  One hue throughout (validated at >= 3:1 against the page), because every chart
+  here measures the same thing - how many messages - against a different axis. A
+  second colour would claim a second measure.
+
+  Two bugs in this that only rendering it caught, both invisible in review: a
+  `prefers-color-scheme: dark` block on the chart tokens alone painted white
+  text onto the archive's white page, since the rest of the archive has no dark
+  theme and does not change with the OS; and `preserveAspectRatio="none"`
+  stretched the axis labels along with the marks, ten times over, into an
+  unreadable smear.
+
+  Counting is a `<details>`-free matter of arithmetic and lives in `src/stats.ts`
+  with tests, including the one that matters for honesty: a `channel_join` is a
+  message Slack wrote, not something a person said, so it does not count toward
+  anybody's total - it becomes a timeline entry instead.
+
 ## [v26.08.25.138] - 2026-08-25
 
 ### Added

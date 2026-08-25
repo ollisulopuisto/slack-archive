@@ -409,3 +409,223 @@ audio, video {
   white-space: nowrap;
   width: 1%;
 }
+
+/* ---------------------------------------------------------------------------
+   Stats and profiles.
+
+   One hue for every chart (--viz-series), because every chart on these pages
+   measures the same thing - how many messages - against a different axis. A
+   second colour would claim a second measure. The value is validated for >= 3:1
+   against both surfaces; the dark block is stepped for the dark surface rather
+   than being the light value inverted.
+   --------------------------------------------------------------------------- */
+:root {
+  --viz-surface: #ffffff;
+  --viz-series: #4a3aa7;
+  --viz-series-soft: #4a3aa71f;
+  --viz-axis: #e2e2e2;
+  --viz-ink: #1d1c1d;
+  --viz-ink-muted: #616061;
+}
+
+/* No dark block on purpose. The rest of this archive is a light page with a
+   white background and no theme switch, so flipping only the chart tokens on
+   prefers-color-scheme paints white text onto a white page - which is exactly
+   what it did the first time this was rendered. The charts follow the page. */
+
+#stats,
+#profile,
+#names {
+  padding: 24px 30px 60px;
+  overflow-y: auto;
+  height: 100vh;
+  max-width: 900px;
+}
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+
+.profile-head .avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+}
+
+.profile-head h1 {
+  margin: 0;
+}
+
+/* Above the fold: the shape of the whole thing in one row. */
+.viz-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 10px;
+  margin: 18px 0 26px;
+}
+
+.viz-tile {
+  border: 1px solid var(--viz-axis);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.viz-tile-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--viz-ink);
+  line-height: 1.2;
+}
+
+.viz-tile-label {
+  font-size: 12px;
+  color: var(--viz-ink-muted);
+}
+
+.viz-tile-hint {
+  font-size: 11px;
+  color: var(--viz-ink-muted);
+  margin-top: 2px;
+}
+
+.viz-figure {
+  margin: 0 0 26px;
+}
+
+.viz-figure figcaption {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.viz-note {
+  font-weight: 400;
+  color: var(--viz-ink-muted);
+}
+
+/* preserveAspectRatio="none" stretches the marks; the labels are drawn in the
+   same space, so they stretch too. A fixed height keeps that distortion small
+   and predictable rather than dependent on the window. */
+/* Height follows the viewBox rather than being fixed: with a fixed height the
+   uniform scaling letterboxes the drawing inside it and leaves dead space above
+   and below. Width drives it, the aspect ratio does the rest. */
+svg.viz {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.viz-mark {
+  fill: var(--viz-series);
+}
+
+.viz-axis {
+  stroke: var(--viz-axis);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.viz-line {
+  fill: none;
+  stroke: var(--viz-series);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+}
+
+.viz-area {
+  fill: var(--viz-series-soft);
+}
+
+.viz-label {
+  fill: var(--viz-ink-muted);
+  font-size: 13px;
+  font-family: 'Lato', sans-serif;
+}
+
+/* Rankings: name, bar, number. Direct labels on every row, so the bar is the
+   comparison and the number is the fact - neither has to carry both. */
+.viz-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.viz-bars li {
+  display: grid;
+  grid-template-columns: minmax(90px, 210px) 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+}
+
+.viz-bars-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viz-bars-track {
+  background: var(--viz-series-soft);
+  border-radius: 4px;
+  height: 12px;
+}
+
+.viz-bars-fill {
+  display: block;
+  background: var(--viz-series);
+  border-radius: 4px;
+  height: 100%;
+}
+
+.viz-bars-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--viz-ink-muted);
+  white-space: nowrap;
+}
+
+.viz-table summary,
+.drill summary {
+  cursor: pointer;
+  color: var(--viz-ink-muted);
+  font-size: 12px;
+  padding: 4px 0;
+}
+
+.drill {
+  border-top: 1px solid var(--viz-axis);
+  padding: 6px 0;
+}
+
+.drill > summary {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--viz-ink);
+}
+
+.drill .count {
+  color: var(--viz-ink-muted);
+  font-weight: 400;
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+table.timeline {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 6px 0 14px;
+}
+
+table.timeline td {
+  padding: 3px 12px 3px 0;
+  vertical-align: top;
+}
+
+table.timeline td.kind,
+table.timeline td.timestamp {
+  color: var(--viz-ink-muted);
+  white-space: nowrap;
+  width: 1%;
+}

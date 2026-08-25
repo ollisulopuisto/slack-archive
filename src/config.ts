@@ -86,6 +86,11 @@ export const EMOJIS_DIR = path.join(HTML_DIR, "emojis");
 export const INDEX_PATH = path.join(OUT_DIR, "index.html");
 export const SEARCH_PATH = path.join(OUT_DIR, "search.html");
 export const NAMES_PATH = path.join(HTML_DIR, "names.html");
+export const STATS_PATH = path.join(HTML_DIR, "stats.html");
+
+export function getProfileFilePath(userId: string) {
+  return path.join(HTML_DIR, `user-${userId}.html`);
+}
 export const MESSAGES_JS_PATH = path.join(__dirname, "../static/scroll.js");
 export const SEARCH_TEMPLATE_PATH = path.join(
   __dirname,

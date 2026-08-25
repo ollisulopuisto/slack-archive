@@ -30,6 +30,8 @@ import {
   getHTMLFilePath,
   INDEX_PATH,
   NAMES_PATH,
+  STATS_PATH,
+  getProfileFilePath,
   OUT_DIR,
   MESSAGES_JS_PATH,
   FORCE_HTML_GENERATION,
@@ -41,6 +43,22 @@ import { getSlackArchiveData } from "./archive-data.js";
 import { getEmojiFilePath, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
 import { getName } from "./users.js";
 import { formerNames, UserNames } from "./user-names.js";
+import {
+  createStats,
+  profileEvents,
+  ProfileEvent,
+  UserStats,
+  WorkspaceStats,
+} from "./stats.js";
+import {
+  Area,
+  Bars,
+  Columns,
+  Datum,
+  Figure,
+  formatCount,
+  Tile,
+} from "./charts.js";
 import {
   isBotChannel,
   isDmChannel,
@@ -56,6 +74,7 @@ const MESSAGE_CHUNK = 1000;
 // Set by createHtmlForChannels().
 let users: Users = {};
 let userNames: UserNames = {};
+let stats: WorkspaceStats | null = null;
 let slackArchiveData: SlackArchiveData = { channels: {} };
 let me: User | null;
 
@@ -394,8 +413,13 @@ const IndexPage: React.FunctionComponent<IndexPageProps> = (props) => {
           <ul>{privateArchivedChannels}</ul>
           <p className="section">DMs (Deleted Users)</p>
           <ul>{dmDeletedChannels}</ul>
-          <p className="section">People</p>
+          <p className="section">The archive itself</p>
           <ul>
+            <li>
+              <a href="html/stats.html" target="iframe">
+                Ten years in numbers
+              </a>
+            </li>
             <li>
               <a href="html/names.html" target="iframe">
                 Names over the years
@@ -577,7 +601,8 @@ const NamesPage: React.FunctionComponent = () => {
         {people.map((person) => (
           <div className="person" key={person.userId}>
             <h2>
-              <Avatar userId={person.userId} /> {person.current}
+              <Avatar userId={person.userId} />{" "}
+              <a href={`user-${person.userId}.html`}>{person.current}</a>
             </h2>
             <table>
               <tbody>
@@ -605,6 +630,341 @@ const NamesPage: React.FunctionComponent = () => {
 async function renderNamesPage() {
   base = "";
   return renderAndWrite(<NamesPage />, NAMES_PATH);
+}
+
+/** Slack timestamp -> "12.4.2019". */
+function formatDay(ts: string): string {
+  const seconds = Number.parseFloat(ts || "");
+  if (!Number.isFinite(seconds) || seconds <= 0) return "";
+  return format(seconds * 1000, "d.M.yyyy");
+}
+
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function yearData(byYear: Record<string, number>): Array<Datum> {
+  const years = Object.keys(byYear).sort();
+  if (years.length === 0) return [];
+
+  // Every year between the first and the last, so a silent year reads as a gap
+  // rather than being closed up as if it never happened.
+  const from = Number(years[0]);
+  const to = Number(years[years.length - 1]);
+  const all: Array<Datum> = [];
+  for (let year = from; year <= to; year++) {
+    all.push({ label: String(year), value: byYear[String(year)] || 0 });
+  }
+  return all;
+}
+
+function hourData(byHour: Array<number>): Array<Datum> {
+  return byHour.map((value, hour) => ({
+    label: String(hour),
+    value,
+    title: `${String(hour).padStart(2, "0")}:00 - ${formatCount(value)} messages`,
+  }));
+}
+
+function weekdayData(byWeekday: Array<number>): Array<Datum> {
+  return byWeekday.map((value, i) => ({ label: WEEKDAYS[i], value }));
+}
+
+function monthData(byMonth: Record<string, number>): Array<Datum> {
+  const months = Object.keys(byMonth).sort();
+  if (months.length === 0) return [];
+
+  const all: Array<Datum> = [];
+  const [firstYear, firstMonth] = months[0].split("-").map(Number);
+  const [lastYear, lastMonth] = months[months.length - 1]
+    .split("-")
+    .map(Number);
+  let year = firstYear;
+  let month = firstMonth;
+
+  while (year < lastYear || (year === lastYear && month <= lastMonth)) {
+    const key = `${year}-${String(month).padStart(2, "0")}`;
+    all.push({ label: key, value: byMonth[key] || 0 });
+    month++;
+    if (month > 12) {
+      month = 1;
+      year++;
+    }
+  }
+
+  return all;
+}
+
+const EVENT_WORDS: Record<ProfileEvent["kind"], string> = {
+  name: "renamed",
+  avatar: "new picture",
+  joined: "joined",
+  "first-message": "arrived",
+  "last-message": "latest",
+};
+
+interface ProfilePageProps {
+  userId: string;
+  person: UserStats;
+}
+
+/**
+ * One page per person: the shape of ten years above the fold, the detail below
+ * it.
+ *
+ * Everything that would need scrolling past is a <details>. The complaint that
+ * makes a page like this useless is having to scroll through somebody's forty
+ * channels to reach the next thing, so the summary line answers the question
+ * and opening it shows the working.
+ */
+const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
+  userId,
+  person,
+}) => {
+  const names = userNames[userId] || [];
+  const current = getName(userId, users);
+  const events = stats ? profileEvents(userId, stats, userNames) : [];
+  const years = yearData(person.byYear);
+  const activeYears = Object.keys(person.byYear).length;
+
+  return (
+    <HtmlPage>
+      <div id="profile">
+        <div className="profile-head">
+          <Avatar userId={userId} />
+          <div>
+            <h1>{current}</h1>
+            <p className="topic">
+              {names.length > 1
+                ? `${names.length} names over the years`
+                : "One name, as far as the archive knows"}
+              {person.first
+                ? ` · ${formatDay(person.first)} - ${formatDay(person.last)}`
+                : ""}
+            </p>
+          </div>
+        </div>
+
+        <div className="viz-tiles">
+          <Tile label="Messages" value={formatCount(person.messages)} />
+          <Tile label="Names" value={formatCount(names.length)} />
+          <Tile label="Channels" value={formatCount(person.channels.length)} />
+          <Tile label="Files" value={formatCount(person.files)} />
+          <Tile
+            label="Reactions received"
+            value={formatCount(person.reactionsReceived)}
+          />
+          <Tile label="Active years" value={formatCount(activeYears)} />
+        </div>
+
+        <Figure title="Messages per year" data={years}>
+          <Columns data={years} />
+        </Figure>
+
+        <Figure
+          title="When they post"
+          note="hour of day, archive time"
+          data={hourData(person.byHour)}
+        >
+          <Columns data={hourData(person.byHour)} labelEvery={3} />
+        </Figure>
+
+        <details className="drill" open>
+          <summary>
+            Timeline <span className="count">{events.length}</span>
+          </summary>
+          <table className="timeline">
+            <tbody>
+              {events.map((event, i) => (
+                <tr key={`${event.ts}-${i}`}>
+                  <td className="timestamp">{formatDay(event.ts)}</td>
+                  <td className="kind">{EVENT_WORDS[event.kind]}</td>
+                  <td>{event.detail}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+
+        <details className="drill">
+          <summary>
+            Channels <span className="count">{person.channels.length}</span>
+          </summary>
+          <Bars
+            data={person.channels.slice(0, 30).map((channel) => ({
+              label: `#${channel.name}`,
+              value: channel.messages,
+              href: `${channel.id}-0.html`,
+            }))}
+          />
+        </details>
+
+        <details className="drill">
+          <summary>
+            Every name <span className="count">{names.length}</span>
+          </summary>
+          <table className="timeline">
+            <tbody>
+              {names.map((name) => (
+                <tr key={name.nick}>
+                  <td className="timestamp">
+                    {name.first.slice(0, 10)}
+                    {name.last.slice(0, 10) !== name.first.slice(0, 10)
+                      ? ` - ${name.last.slice(0, 10)}`
+                      : ""}
+                  </td>
+                  <td className="sender">{name.nick}</td>
+                  <td className="kind">{name.sources.join(", ")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+
+        <p className="viz-note">
+          Weekdays:{" "}
+          {weekdayData(person.byWeekday)
+            .map((d) => `${d.label} ${formatCount(d.value)}`)
+            .join(" · ")}
+        </p>
+      </div>
+    </HtmlPage>
+  );
+};
+
+/** The whole workspace, ten years of it. */
+const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
+  data,
+}) => {
+  const people = Object.values(data.byUser)
+    .filter((person) => person.messages > 0)
+    .sort((a, b) => b.messages - a.messages);
+
+  const channels = Object.entries(data.channelNames)
+    .map(([id, name]) => ({
+      id,
+      name,
+      messages: people.reduce(
+        (total, person) =>
+          total + (person.channels.find((c) => c.id === id)?.messages || 0),
+        0,
+      ),
+    }))
+    .filter((channel) => channel.messages > 0)
+    .sort((a, b) => b.messages - a.messages);
+
+  const years = yearData(data.byYear);
+  const months = monthData(data.byMonth);
+  const emoji = Object.entries(data.emoji)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([name, value]) => ({ label: `:${name}:`, value }));
+
+  return (
+    <HtmlPage>
+      <div id="stats">
+        <h1>Ten years of it</h1>
+        <p className="topic">
+          {formatDay(data.first)} - {formatDay(data.last)}
+        </p>
+
+        <div className="viz-tiles">
+          <Tile label="Messages" value={formatCount(data.messages)} />
+          <Tile label="People who posted" value={formatCount(people.length)} />
+          <Tile label="Channels" value={formatCount(channels.length)} />
+          <Tile label="Files" value={formatCount(data.files)} />
+          <Tile label="Reactions" value={formatCount(data.reactions)} />
+          <Tile
+            label="Thread replies"
+            value={formatCount(data.replies)}
+            hint={`${Math.round((data.replies / Math.max(1, data.messages)) * 100)}% of everything`}
+          />
+        </div>
+
+        <Figure title="Messages per month" data={months}>
+          <Area data={months} />
+        </Figure>
+
+        <Figure title="Messages per year" data={years}>
+          <Columns data={years} />
+        </Figure>
+
+        <Figure
+          title="Hour of day"
+          note="when this workspace is awake"
+          data={hourData(data.byHour)}
+        >
+          <Columns data={hourData(data.byHour)} labelEvery={2} />
+        </Figure>
+
+        <Figure title="Day of week" data={weekdayData(data.byWeekday)}>
+          <Columns data={weekdayData(data.byWeekday)} />
+        </Figure>
+
+        <details className="drill" open>
+          <summary>
+            Who talks <span className="count">{people.length}</span>
+          </summary>
+          <Bars
+            data={people.slice(0, 25).map((person) => ({
+              label: getName(person.userId, users) || person.userId,
+              value: person.messages,
+              href: `user-${person.userId}.html`,
+            }))}
+          />
+        </details>
+
+        <details className="drill">
+          <summary>
+            Busiest channels <span className="count">{channels.length}</span>
+          </summary>
+          <Bars
+            data={channels.slice(0, 25).map((channel) => ({
+              label: `#${channel.name}`,
+              value: channel.messages,
+              href: `${channel.id}-0.html`,
+            }))}
+          />
+        </details>
+
+        <details className="drill">
+          <summary>
+            Most-used reactions <span className="count">{emoji.length}</span>
+          </summary>
+          <Bars data={emoji} />
+        </details>
+      </div>
+    </HtmlPage>
+  );
+};
+
+async function renderStatsAndProfiles(channels: Array<Channel>) {
+  const spinner = ora("Counting ten years of messages...").start();
+  const accumulator = createStats();
+
+  for (const channel of channels) {
+    if (!channel.id) continue;
+    spinner.text = `Counting ${channel.name || channel.id}`;
+    spinner.render();
+    accumulator.addChannel(channel, await getMessages(channel.id, true));
+  }
+
+  stats = accumulator.result();
+  base = "";
+
+  await renderAndWrite(<StatsPage data={stats} />, STATS_PATH);
+
+  let written = 0;
+  for (const person of Object.values(stats.byUser)) {
+    if (person.messages === 0) continue;
+    await renderAndWrite(
+      <ProfilePage userId={person.userId} person={person} />,
+      getProfileFilePath(person.userId),
+    );
+    written++;
+  }
+
+  spinner.succeed(
+    `Counted ${formatCount(stats.messages)} messages: stats page and ${written} profiles.`,
+  );
 }
 
 async function renderIndexPage() {
@@ -757,6 +1117,7 @@ export async function createHtmlForChannels(channels: Array<Channel> = []) {
   }
 
   await renderNamesPage();
+  await renderStatsAndProfiles(await getChannels());
   await renderIndexPage();
 
   // Copy in fonts & css
