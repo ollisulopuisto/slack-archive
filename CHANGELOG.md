@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.150] - 2026-08-25
+
+### Changed
+- **The README describes what the tool now does.** It documented an archive of
+  channel pages and a search box; since then it has grown statistics pages for
+  the workspace, each channel and each person, a year/month/day/hour
+  drill-down, recovered name and profile-picture history, reaction and custom
+  emoji figures, and flags for publishing an archive without its direct
+  messages.
+
+  Also corrected: the VPS section said the bot needs `search.js`, `users.json`
+  and `channels.json`. It opens `search.db` and finds users and channels inside
+  it. The rest of that advice was accurate when the index was a JavaScript file
+  and has been wrong since it became SQLite.
+
 ## [v26.08.25.149] - 2026-08-25
 
 ### Changed
