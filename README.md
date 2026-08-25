@@ -45,6 +45,10 @@ slack-archive --bot
 --no-backup:                Don't create backups. Not recommended.
 --keep-backups <n>          How many data_backup_* directories to keep. Default 2.
 --no-search:                Don't create a search file, saving disk space.
+--search-exclude-kinds      Channel kinds the search index must never hold,
+                            e.g. im,mpim (public, private, mpim, im).
+--search-exclude-users      Users whose messages the index must never hold,
+                            by handle, display name or id. e.g. historia,backlog
 --no-file-download:         Don't download files.
 --no-slack-connect:         Don't connect to Slack, just generate HTML from local data.
 --force-html-generation:    Force regeneration of HTML files. Useful after slack-archive upgrades.

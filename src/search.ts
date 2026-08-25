@@ -8,6 +8,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import {
   NO_SEARCH,
+  SEARCH_EXCLUDE_KINDS,
+  SEARCH_EXCLUDE_USERS,
   SEARCH_DATA_PATH,
   SEARCH_DB_PATH,
   SEARCH_PATH,
@@ -22,6 +24,11 @@ import {
   getUsers,
 } from "./data-load.js";
 import { buildSearchDatabase } from "./search-db.js";
+import {
+  excludedUserIds,
+  isChannelSearchable,
+  isMessageSearchable,
+} from "./search-filter.js";
 import { writeSearchData } from "./data-write.js";
 
 // Format:
@@ -80,10 +87,25 @@ export async function createSearchDatabase(spinner: Ora) {
     names[userId] = users[userId].name || users[userId].real_name || "Unknown";
   }
 
+  // Withheld before anything is written, not filtered when something is read.
+  const hiddenUsers = excludedUserIds(SEARCH_EXCLUDE_USERS, users);
+  const searchable = channels.filter((channel) =>
+    isChannelSearchable(channel, SEARCH_EXCLUDE_KINDS),
+  );
+
+  if (searchable.length < channels.length) {
+    spinner.info(
+      `Search index excludes ${channels.length - searchable.length} channels (${[
+        ...SEARCH_EXCLUDE_KINDS,
+      ].join(", ")}) and ${hiddenUsers.size} users.`,
+    );
+    spinner.start();
+  }
+
   await buildSearchDatabase(SEARCH_DB_PATH, {
     users: names,
     names: await getUserNames(),
-    channels: channels
+    channels: searchable
       .filter((channel) => !!channel.id)
       .map((channel) => ({
         id: channel.id!,
@@ -118,9 +140,14 @@ export async function createSearchDatabase(spinner: Ora) {
       }));
 
       // Fall back to existing search data if the raw channel JSON file is
-      // empty or missing.
+      // empty or missing - filtered the same way. The fallback reads the
+      // PREVIOUS search.js, which was written before anything was excluded, so
+      // handing it back unfiltered would quietly reinstate exactly what was
+      // just withheld.
       if (messages.length === 0 && existingData.messages?.[channelId]) {
-        return existingData.messages[channelId];
+        return existingData.messages[channelId].filter((message) =>
+          isMessageSearchable(message, hiddenUsers),
+        );
       }
 
       return messages;
@@ -153,8 +180,14 @@ async function createSearchFile(spinner: Ora) {
     result.users[user] = users[user].name || users[user].real_name || "Unknown";
   }
 
+  const hiddenUsers = excludedUserIds(SEARCH_EXCLUDE_USERS, users);
+
   // Channels & Messages
   for (const [i, channel] of channels.entries()) {
+    if (!isChannelSearchable(channel, SEARCH_EXCLUDE_KINDS)) {
+      continue;
+    }
+
     if (!channel.id) {
       console.warn(
         `Can't create search file for channel ${channel.name}: No id found`,
@@ -199,7 +232,10 @@ async function createSearchFile(spinner: Ora) {
       existingData.messages &&
       existingData.messages[channel.id]
     ) {
-      messages = existingData.messages[channel.id];
+      // Filtered too: the previous search.js predates the exclusions.
+      messages = existingData.messages[channel.id].filter((message) =>
+        isMessageSearchable(message, hiddenUsers),
+      );
     }
 
     result.messages![channel.id] = messages;

@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.141] - 2026-08-25
+
+### Added
+- **The search index can be told what not to hold.** `--search-exclude-kinds
+  im,mpim` keeps direct and group messages out of it; `--search-exclude-users
+  historia,backlog` keeps a bot's chatter out, by handle, display name or id,
+  so nobody has to look up `U08NYQN3469`.
+
+  Both exclude at **build time**, not query time. The channel row has carried a
+  `kind` since .131 and no query has ever filtered on it, which means the index
+  held every direct message in the workspace and only good manners kept them out
+  of results. A database that cannot answer a question is a different thing from
+  one that merely does not: the second leaks the day someone writes a new query,
+  or opens the file directly - which is exactly what a bot on a VPS does.
+
+  The fallback path is filtered too, and that is the part worth knowing about.
+  When a channel yields no messages, both builders fall back to the previous
+  `search.js` - a file written before any of this existed. Handing it back
+  unfiltered would quietly reinstate precisely what was just withheld, for the
+  channels most likely to be empty.
+
+  Empty by default. Archiving your own workspace is not the same as publishing
+  it, and silently dropping half of somebody's existing index on upgrade would
+  be its own kind of surprise.
+
 ## [v26.08.25.140] - 2026-08-25
 
 ### Added

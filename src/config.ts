@@ -66,6 +66,28 @@ export const FORCE_HTML_GENERATION = findCliParameter(
 export const EXCLUDE_CHANNELS = getCliParameter("--exclude-channels");
 
 /**
+ * Channel kinds the search index must never hold, e.g. `im,mpim`.
+ *
+ * Empty by default: an archive of your own workspace is not automatically a
+ * thing you are publishing, and silently dropping half of somebody's index on
+ * upgrade would be its own surprise. The archives that ARE published say so.
+ */
+export const SEARCH_EXCLUDE_KINDS = new Set(
+  (getCliParameter("--search-exclude-kinds") || "")
+    .split(",")
+    .map((kind) => kind.trim().toLowerCase())
+    .filter((kind) => kind.length > 0),
+);
+
+/** Users whose messages the search index must never hold, by handle or id. */
+export const SEARCH_EXCLUDE_USERS = (
+  getCliParameter("--search-exclude-users") || ""
+)
+  .split(",")
+  .map((name) => name.trim())
+  .filter((name) => name.length > 0);
+
+/**
  * How many `data_backup_<timestamp>` directories to keep, newest first.
  *
  * Each run copies the whole data directory before touching it, so on a nightly
