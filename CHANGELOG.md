@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.152] - 2026-08-25
+
+### Fixed
+- **The archive shipped an unfilled copy of the search template.**
+  `static/search.html` is the template `createSearchHTML` fills in - script tags
+  substituted for placeholder comments - and writes to the archive root. The
+  wholesale copy of `static/` into `html/` also delivered the raw version, so
+  every archive contained `html/search.html`: a page that looks like a second
+  search page, is missing every script, and is exactly what somebody assembling
+  a site would reasonably pick up. It is no longer copied; `style.css`,
+  `drilldown.js`, `scroll.js` and the fonts still are.
+
 ## [v26.08.25.151] - 2026-08-25
 
 ### Removed

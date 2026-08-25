@@ -1522,7 +1522,14 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
   await renderIndexPage();
 
   // Copy in fonts & css
-  fs.copySync(path.join(_dirname, "../static"), path.join(OUT_DIR, "html/"));
+  // static/search.html is the TEMPLATE for the search page, with placeholder
+  // comments where the scripts go. createSearchHTML fills it in and writes the
+  // result to the archive root. Copying it here as well shipped the unfilled
+  // template into html/, where it looks like a second, broken search page -
+  // and it is what somebody assembling a site would reasonably pick up.
+  fs.copySync(path.join(_dirname, "../static"), path.join(OUT_DIR, "html/"), {
+    filter: (src) => path.basename(src) !== "search.html",
+  });
 }
 
 if (esMain(import.meta)) {
