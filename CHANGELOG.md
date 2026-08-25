@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.135] - 2026-08-25
+
+### Fixed
+- **Backups piled up forever on any unattended run.** Every run copies the whole
+  data directory to `data_backup_<timestamp>` before touching it - about a
+  gigabyte for a workspace of this size - and `deleteOlderBackups()` began with
+  a check for automatic mode, printed "in automatic mode: Proceeding without
+  deleting them", and returned. That is exactly backwards. Automatic mode is the
+  one that runs unattended, nightly, with nobody watching the disk fill;
+  interactive mode is the one with someone there to answer a question.
+
+  Retention is now bounded in both modes and is no longer a question:
+  `--keep-backups` (default 2 - the run before this one, and the one before
+  that). The prompt is gone, because how many backups to keep is a decision
+  worth making once rather than one that can only be answered by whoever happens
+  to be watching.
+
+  The companion half is `deleteBackup()`, which tries `trash()` and, when that
+  throws, prints "Set TRASH_HARDER=1 to delete files permanently" and leaves the
+  copy where it is. That is unchanged and still worth knowing: on Linux the
+  `trash` package is a pure-JS freedesktop implementation, so when it *succeeds*
+  it moves the directory to a hidden `.Trash-<uid>` on the same volume, which
+  frees nothing. Stranded `data_backup_*` directories on two different machines
+  is how both halves showed up. A scheduled run wants `TRASH_HARDER=1` set.
+
+  Also fixed while in there: `const { isDirectory } = fs.statSync(dir)` reads the
+  function rather than calling it, and a function is always truthy, so a *file*
+  named `data_backup_1234` counted as a backup and would have been deleted with
+  them.
+
 ## [v26.08.25.134] - 2026-08-25
 
 ### Added

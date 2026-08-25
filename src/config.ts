@@ -32,6 +32,25 @@ function getCliParameter(param: string) {
   return null;
 }
 
+function getNumberCliParameter(param: string, fallback: number) {
+  const value = getCliParameter(param);
+
+  if (value === null) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+
+  if (Number.isNaN(parsed) || parsed < 0) {
+    console.warn(
+      `Ignoring ${param}=${value}: expected a number of zero or more. Using ${fallback}.`,
+    );
+    return fallback;
+  }
+
+  return parsed;
+}
+
 export const AUTOMATIC_MODE = findCliParameter("--automatic");
 export const USE_PREVIOUS_CHANNEL_CONFIG = findCliParameter(
   "--use-previous-channel-config",
@@ -45,6 +64,15 @@ export const FORCE_HTML_GENERATION = findCliParameter(
   "--force-html-generation",
 );
 export const EXCLUDE_CHANNELS = getCliParameter("--exclude-channels");
+
+/**
+ * How many `data_backup_<timestamp>` directories to keep, newest first.
+ *
+ * Each run copies the whole data directory before touching it, so on a nightly
+ * schedule this is the difference between a constant amount of disk and a
+ * growing one. Two: the run before this one, and the one before that.
+ */
+export const KEEP_BACKUPS = getNumberCliParameter("--keep-backups", 2);
 export const BASE_DIR = process.cwd();
 export const OUT_DIR = path.join(BASE_DIR, "slack-archive");
 export const TOKEN_FILE = path.join(OUT_DIR, ".token");

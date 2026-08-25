@@ -43,6 +43,7 @@ slack-archive --bot
                             (public_channel, private_channel, mpim, im)
 --exclude-channels          Comma-separated list of channels to exclude, in automatic mode
 --no-backup:                Don't create backups. Not recommended.
+--keep-backups <n>          How many data_backup_* directories to keep. Default 2.
 --no-search:                Don't create a search file, saving disk space.
 --no-file-download:         Don't download files.
 --no-slack-connect:         Don't connect to Slack, just generate HTML from local data.

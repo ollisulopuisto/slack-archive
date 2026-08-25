@@ -1,12 +1,9 @@
 import fs from "fs-extra";
-import inquirer from "inquirer";
 import path from "path";
 import trash from "trash";
 import { rimraf } from "rimraf";
 
-import { AUTOMATIC_MODE, DATA_DIR, NO_BACKUP, OUT_DIR } from "./config.js";
-
-const { prompt } = inquirer;
+import { DATA_DIR, KEEP_BACKUPS, NO_BACKUP, OUT_DIR } from "./config.js";
 
 let backupDir = `${DATA_DIR}_backup_${Date.now()}`;
 
@@ -57,47 +54,61 @@ export async function deleteBackup() {
   }
 }
 
+/**
+ * Keep the newest `KEEP_BACKUPS` backups and delete the rest.
+ *
+ * This used to ask, and in automatic mode it used to see that nobody was there
+ * to answer and return without deleting anything. That is backwards: automatic
+ * mode is the unattended one, running every night, and a copy of the entire
+ * data directory per run is roughly a gigabyte a night that nothing ever
+ * reclaimed. Stranded `data_backup_*` directories on two different machines is
+ * how it showed up.
+ *
+ * A bounded retention is what both modes wanted, so it is no longer a question:
+ * how many to keep is `--keep-backups`, decided once, rather than a prompt that
+ * can only be answered by whoever happens to be watching.
+ */
 export async function deleteOlderBackups() {
-  try {
-    const oldBackupNames: Array<string> = [];
-    const oldBackupPaths: Array<string> = [];
-
-    for (const entry of fs.readdirSync(OUT_DIR)) {
-      const isBackup = entry.startsWith("data_backup_");
-      if (!isBackup) continue;
-
-      const dir = path.join(OUT_DIR, entry);
-      const { isDirectory } = fs.statSync(dir);
-      if (!isDirectory) continue;
-
-      oldBackupPaths.push(dir);
-      oldBackupNames.push(entry);
+  for (const dir of listBackups().slice(KEEP_BACKUPS)) {
+    try {
+      console.log(`Deleting old backup: ${path.basename(dir)}`);
+      fs.removeSync(dir);
+    } catch (error) {
+      console.log(`Could not delete old backup ${dir}:`, error);
     }
-
-    if (oldBackupPaths.length === 0) return;
-
-    if (AUTOMATIC_MODE) {
-      console.log(
-        `Found existing older backups, but in automatic mode: Proceeding without deleting them.`,
-      );
-      return;
-    }
-
-    const { del } = await prompt([
-      {
-        type: "confirm",
-        default: true,
-        name: "del",
-        message: `We've found existing backups (${oldBackupNames.join(
-          ", ",
-        )}). Do you want to delete them?`,
-      },
-    ]);
-
-    if (del) {
-      oldBackupPaths.forEach((v) => fs.removeSync(v));
-    }
-  } catch (error) {
-    // noop
   }
+}
+
+/** Existing backup directories, newest first. */
+function listBackups(): Array<string> {
+  const backups: Array<{ dir: string; timestamp: number }> = [];
+
+  let entries: Array<string> = [];
+
+  try {
+    entries = fs.readdirSync(OUT_DIR);
+  } catch (error) {
+    return [];
+  }
+
+  for (const entry of entries) {
+    const match = entry.match(/^data_backup_(\d+)$/);
+    if (!match) continue;
+
+    const dir = path.join(OUT_DIR, entry);
+
+    // Called, not merely read: `const { isDirectory } = fs.statSync(dir)` hands
+    // back the function itself, which is always truthy, so a FILE named
+    // data_backup_1234 used to count as a backup and get deleted with them.
+    if (!fs.statSync(dir).isDirectory()) continue;
+
+    backups.push({ dir, timestamp: Number(match[1]) });
+  }
+
+  // By timestamp, not by name. They are the same order today - millisecond
+  // timestamps have had 13 digits since 2001 and will until 2286 - but the
+  // question being asked is which is newest.
+  return backups
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .map((backup) => backup.dir);
 }
