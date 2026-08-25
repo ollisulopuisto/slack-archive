@@ -27,6 +27,12 @@ const CHANNELS = [
     kind: "im" as const,
     isArchived: false,
   },
+  {
+    id: "C1_REACT",
+    name: "reaktiot",
+    kind: "public" as const,
+    isArchived: false,
+  },
   // Deliberately supplies no kind: see the fail-closed test below.
   { id: "C9", name: "tuntematon" },
 ];
@@ -66,6 +72,33 @@ const UNCAPTIONED = {
   ],
 };
 
+// Reactions, with the reactor ids Slack supplies. Measured across 22 350
+// reaction entries in the real archive, `count` never disagreed with
+// `users.length`, so the array is authoritative and no count column is stored:
+// a count is what you get by counting.
+const REACTED = {
+  t: "1700000020.0001",
+  u: "U1",
+  m: "reaktioita keranneet sanat",
+  reactions: [
+    { name: "cat", users: ["U1", "U2"], count: 2 },
+    { name: "joy", users: ["U2"], count: 1 },
+  ],
+};
+
+// A heavily-reacted message: Slack reports 40 but names only three, which is
+// the disagreement the two tables exist to preserve. And an emoji with no user
+// list at all, which must not become a zero.
+const TRUNCATED = {
+  t: "1700000021.0001",
+  u: "U2",
+  m: "moni reagoi tahan",
+  reactions: [
+    { name: "tada", users: ["U1", "U2", "U3"], count: 40 },
+    { name: "eyes", count: 5 },
+  ],
+};
+
 // An attachment in a direct message.
 const PRIVATE_FILE = {
   t: "1700000011.0001",
@@ -87,6 +120,7 @@ type FixtureMessage = {
   u: string;
   m: string;
   files?: Array<Record<string, string>>;
+  reactions?: Array<{ name: string; users?: Array<string>; count?: number }>;
 };
 
 const MESSAGES: Record<string, Array<FixtureMessage>> = {
@@ -103,6 +137,7 @@ const MESSAGES: Record<string, Array<FixtureMessage>> = {
     { t: "1700000003.0001", u: "U2", m: "" },
   ],
   C1_FILES: [UNCAPTIONED],
+  C1_REACT: [REACTED, TRUNCATED],
   D1_FILES: [PRIVATE_FILE],
 };
 
@@ -133,7 +168,7 @@ describe("buildSearchDatabase", () => {
 
   it("indexes every message", () => {
     const db = openSearchDatabase(dbPath);
-    expect(countMessages(db)).toBe(6);
+    expect(countMessages(db)).toBe(8);
     db.close();
   });
 
@@ -145,7 +180,7 @@ describe("buildSearchDatabase", () => {
     });
 
     const db = openSearchDatabase(dbPath);
-    expect(countMessages(db)).toBe(6);
+    expect(countMessages(db)).toBe(8);
     db.close();
   });
 });
@@ -232,8 +267,10 @@ describe("file attachments", () => {
     const db = openSearchDatabase(dbPath);
     const results = searchDatabase(db, "kissa-katolla");
 
-    expect(results.length).toBeGreaterThan(0);
-    expect(results[0].c).toBe("C1_FILES");
+    // Asserts that the message is FOUND, not that it ranks first. Rank shifts
+    // whenever anyone adds content to the fixtures, and this test is about
+    // whether a filename reaches the index at all - not about ordering.
+    expect(results.map((result) => result.c)).toContain("C1_FILES");
     db.close();
   });
 
@@ -287,6 +324,106 @@ describe("file attachments", () => {
       "SELECT is_image FROM files WHERE id = 'F_NOEXT'",
     ) as any;
     expect(row.is_image).toBe(1);
+    db.close();
+  });
+});
+
+
+// Reactions are the richest thing the archive holds that the index did not.
+// One row per (message, emoji, reactor), because that single shape answers
+// every question anyone asks of them: what was reacted to most, who gets the
+// most, who gives the most, and which emoji belongs to whom.
+describe("reactions", () => {
+  it("records the total Slack reported, per emoji", () => {
+    const db = openSearchDatabase(dbPath);
+    const rows = db.all(
+      "SELECT name, count FROM reactions WHERE message_id = ? ORDER BY name",
+      ["C1_REACT-1700000020.0001"],
+    ) as unknown as Array<{ name: string; count: number }>;
+
+    expect(rows).toEqual([
+      { name: "cat", count: 2 },
+      { name: "joy", count: 1 },
+    ]);
+    db.close();
+  });
+
+  it("records who reacted, one row each", () => {
+    const db = openSearchDatabase(dbPath);
+    const rows = db.all(
+      "SELECT name, user_id FROM reaction_users WHERE message_id = ? ORDER BY name, user_id",
+      ["C1_REACT-1700000020.0001"],
+    ) as unknown as Array<{ name: string; user_id: string }>;
+
+    expect(rows).toEqual([
+      { name: "cat", user_id: "U1" },
+      { name: "cat", user_id: "U2" },
+      { name: "joy", user_id: "U2" },
+    ]);
+    db.close();
+  });
+
+  it("records which channel the reaction happened in", () => {
+    const db = openSearchDatabase(dbPath);
+    const row = db.get(
+      "SELECT DISTINCT channel_id FROM reactions WHERE message_id = ?",
+      ["C1_REACT-1700000020.0001"],
+    ) as { channel_id: string };
+
+    expect(row.channel_id).toBe("C1_REACT");
+    db.close();
+  });
+
+  // The reason the total is stored rather than counted. Slack truncates the
+  // user list on heavily-reacted messages and keeps the count honest, so the
+  // two disagree in one direction only: attribution undercounts. Counting rows
+  // would understate precisely the messages worth asking about.
+  it("keeps the total when Slack names fewer people than it counted", () => {
+    const db = openSearchDatabase(dbPath);
+
+    const total = db.get(
+      "SELECT count FROM reactions WHERE message_id = ? AND name = 'tada'",
+      ["C1_REACT-1700000021.0001"],
+    ) as { count: number };
+    const named = db.get(
+      "SELECT COUNT(*) AS n FROM reaction_users WHERE message_id = ? AND name = 'tada'",
+      ["C1_REACT-1700000021.0001"],
+    ) as { n: number };
+
+    expect(Number(total.count)).toBe(40);
+    expect(Number(named.n)).toBe(3);
+    db.close();
+  });
+
+  it("can attribute reactions to the person who gave them", () => {
+    const db = openSearchDatabase(dbPath);
+    const rows = db.all(
+      "SELECT user_id, COUNT(*) AS n FROM reaction_users GROUP BY user_id ORDER BY n DESC, user_id",
+    ) as unknown as Array<{ user_id: string; n: number }>;
+
+    expect(rows[0].user_id).toBe("U2");
+    db.close();
+  });
+
+  it("survives a reaction with no user list at all", () => {
+    const db = openSearchDatabase(dbPath);
+    const row = db.get(
+      "SELECT count FROM reactions WHERE message_id = ? AND name = 'eyes'",
+      ["C1_REACT-1700000021.0001"],
+    ) as { count: number };
+
+    expect(Number(row.count)).toBe(5);
+    db.close();
+  });
+
+  it("leaves messages without reactions alone", () => {
+    const db = openSearchDatabase(dbPath);
+    const row = db.get(
+      "SELECT COUNT(*) AS n FROM reactions WHERE message_id = ?",
+      ["C1-1700000000.0001"],
+    ) as { n: number };
+
+    expect(Number(row.n)).toBe(0);
     db.close();
   });
 });

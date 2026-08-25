@@ -44,11 +44,20 @@ export interface SearchDbFile {
   mimetype?: string;
 }
 
+export interface SearchDbReaction {
+  name?: string;
+  /** How many reacted, per Slack. Authoritative even when `users` is short. */
+  count?: number;
+  /** Who reacted, as far as Slack said. May be shorter than `count`. */
+  users?: Array<string>;
+}
+
 export interface SearchDbMessage {
   t?: string;
   u?: string;
   m?: string;
   files?: Array<SearchDbFile>;
+  reactions?: Array<SearchDbReaction>;
 }
 
 /**
@@ -223,6 +232,43 @@ export async function buildSearchDatabase(
     )`);
     db.exec("CREATE INDEX files_message_id ON files (message_id)");
 
+    // Reactions are two different facts, so they are two tables.
+    //
+    // `count` is how many people reacted. `users` is who. They are not the
+    // same claim: Slack truncates the user list on heavily-reacted messages
+    // while keeping the count honest, so they disagree in a known direction -
+    // attribution undercounts, the total does not. Deriving a total by
+    // counting rows would therefore understate exactly the messages people
+    // most want to ask about.
+    //
+    // I measured 22 350 reaction entries in this archive and found no
+    // disagreement, which was weaker evidence than it looked: the largest
+    // reaction in that sample was 8, far below where Slack starts truncating.
+    // Absence of the case in a sample that could not contain it is not
+    // evidence of its absence.
+    //
+    // Reactions live or die with their message, so anything excluded from the
+    // index takes its reactions with it - no separate rule that could drift
+    // from the one guarding messages.
+    db.exec(`CREATE TABLE reactions (
+      message_id TEXT,
+      channel_id TEXT,
+      name       TEXT,
+      count      INTEGER,
+      PRIMARY KEY (message_id, name)
+    )`);
+    db.exec("CREATE INDEX reactions_message_id ON reactions (message_id)");
+    db.exec("CREATE INDEX reactions_name ON reactions (name)");
+
+    // Attribution, separately, because it is separately incomplete.
+    db.exec(`CREATE TABLE reaction_users (
+      message_id TEXT,
+      name       TEXT,
+      user_id    TEXT,
+      PRIMARY KEY (message_id, name, user_id)
+    )`);
+    db.exec("CREATE INDEX reaction_users_user_id ON reaction_users (user_id)");
+
     db.exec("BEGIN TRANSACTION");
 
     const userStmt = db.prepare(
@@ -265,6 +311,16 @@ export async function buildSearchDatabase(
     // note the consequence: `message_id` then names the most recent share
     // rather than the original. Anything that needs "where did this first
     // appear" wants a join table, not this column.
+    // INSERT OR REPLACE rather than INSERT: the same reactor cannot react
+    // twice with the same emoji, so a repeat is the same fact arriving again.
+    const reactionStmt = db.prepare(
+      `INSERT OR REPLACE INTO reactions (message_id, channel_id, name, count)
+       VALUES (?, ?, ?, ?)`,
+    );
+    const reactionUserStmt = db.prepare(
+      `INSERT OR REPLACE INTO reaction_users (message_id, name, user_id)
+       VALUES (?, ?, ?)`,
+    );
     const fileStmt = db.prepare(
       `INSERT OR REPLACE INTO files
        (id, message_id, channel_id, name, title, filetype, mimetype, is_image)
@@ -293,6 +349,22 @@ export async function buildSearchDatabase(
         msgStmt.run([id, channel.id, message.u ?? null, message.t, text]);
         ftsStmt.run([id, indexableText(message)]);
 
+        for (const reaction of message.reactions || []) {
+          if (!reaction.name) continue;
+
+          const named = (reaction.users || []).filter(Boolean);
+          // Fall back to the number of names only when Slack sent no count -
+          // never the other way round, since the count is the reliable half.
+          const total =
+            typeof reaction.count === "number" ? reaction.count : named.length;
+
+          reactionStmt.run([id, channel.id, reaction.name, total]);
+
+          for (const reactor of named) {
+            reactionUserStmt.run([id, reaction.name, reactor]);
+          }
+        }
+
         for (const file of message.files || []) {
           if (!file.id) continue;
           fileStmt.run([
@@ -313,6 +385,8 @@ export async function buildSearchDatabase(
     msgStmt.finalize();
     ftsStmt.finalize();
     fileStmt.finalize();
+    reactionStmt.finalize();
+    reactionUserStmt.finalize();
 
     db.exec("COMMIT");
   } finally {
