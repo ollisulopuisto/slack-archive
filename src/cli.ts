@@ -28,7 +28,7 @@ import {
 import { createBackup, deleteBackup, deleteOlderBackups } from "./backup.js";
 import { isValid, parseISO } from "date-fns";
 import { createSearch } from "./search.js";
-import { write, writeAndMerge } from "./data-write.js";
+import { write, writeAndMerge, writeJsonArray } from "./data-write.js";
 import { messagesCache, getUsers, getChannels } from "./data-load.js";
 import { getSlackArchiveData, setSlackArchiveData } from "./archive-data.js";
 import { downloadEmojiList, downloadEmojis } from "./emoji.js";
@@ -372,10 +372,7 @@ export async function main() {
       });
 
       await writeAndMerge(USERS_DATA_PATH, users);
-      fs.outputFileSync(
-        getChannelDataFilePath(channel.id),
-        JSON.stringify(result, undefined, 2),
-      );
+      await writeJsonArray(getChannelDataFilePath(channel.id), result);
 
       // Download files. This needs to run after the messages are saved to disk
       // since it uses the message data to find which files to download.

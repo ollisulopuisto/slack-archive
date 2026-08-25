@@ -21,6 +21,7 @@ import {
   getUsers,
 } from "./data-load.js";
 import { buildSearchDatabase } from "./search-db.js";
+import { writeSearchData } from "./data-write.js";
 
 // Format:
 // channelId: [ timestamp0, timestamp1, timestamp2, ... ]
@@ -165,8 +166,7 @@ async function createSearchFile(spinner: Ora) {
     result.channels[channel.id] = name;
   }
 
-  const jsContent = `window.search_data = ${JSON.stringify(result)};`;
-  await fs.outputFile(SEARCH_DATA_PATH, jsContent);
+  await writeSearchData(SEARCH_DATA_PATH, result);
 }
 
 async function createSearchHTML() {

@@ -15,6 +15,7 @@ import {
   USERS_DATA_PATH,
 } from "./config.js";
 import { retry } from "./retry.js";
+import { readJsonArraySync, readSearchDataSync } from "./big-json.js";
 
 async function getFile<T>(filePath: string, returnIfEmpty: T): Promise<T> {
   if (!fs.existsSync(filePath)) {
@@ -37,9 +38,26 @@ export async function getMessages(
   }
 
   const filePath = getChannelDataFilePath(channelId);
-  messagesCache[channelId] = await getFile<Array<ArchiveMessage>>(filePath, []);
+  messagesCache[channelId] = await readMessagesFile(filePath);
 
   return messagesCache[channelId];
+}
+
+/**
+ * A busy channel's message file can be bigger than the longest string V8 will
+ * make, which `readJSONSync` would need. `readJsonArraySync` only takes that
+ * path when the file is small enough for it.
+ */
+async function readMessagesFile(
+  filePath: string,
+): Promise<Array<ArchiveMessage>> {
+  if (!fs.existsSync(filePath)) {
+    return [];
+  }
+
+  return retry({ name: `Loading messages from ${filePath}` }, () =>
+    readJsonArraySync<ArchiveMessage>(filePath),
+  );
 }
 
 export async function getUsers(): Promise<Users> {
@@ -55,22 +73,11 @@ export async function getChannels(): Promise<Array<Channel>> {
 }
 
 export async function getSearchFile(): Promise<SearchFile> {
-  const returnIfEmpty = { users: {}, channels: {}, messages: {}, pages: {} };
-
-  if (!fs.existsSync(SEARCH_DATA_PATH)) {
-    return returnIfEmpty;
-  }
-
-  const contents = await readFile(SEARCH_DATA_PATH, "utf8");
-
-  // See search.ts, the file is actually JS (not JSON)
-  return JSON.parse(contents.slice(21, contents.length - 1));
-}
-
-export async function readFile(filePath: string, encoding = "utf8") {
-  return retry<string>({ name: `Reading ${filePath}` }, () => {
-    return fs.readFileSync(SEARCH_DATA_PATH, "utf8");
-  });
+  // See search.ts: the file is a JS assignment, not JSON, and it is far too
+  // big for one string once a workspace has a few hundred thousand messages.
+  return retry({ name: `Loading ${SEARCH_DATA_PATH}` }, () =>
+    readSearchDataSync(SEARCH_DATA_PATH),
+  );
 }
 
 export async function readJSON<T>(filePath: string) {

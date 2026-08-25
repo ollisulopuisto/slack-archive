@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.133] - 2026-08-25
+
+### Fixed
+- **Archiving a big channel died with `RangeError: Invalid string length`.**
+  Saving a channel called `JSON.stringify(messages, undefined, 2)`, and V8 will
+  not make a string longer than 536,870,888 characters. `offtopic` reached
+  706,371 messages - 538 MB on disk, more than that once indented - so the run
+  crashed at the moment it had finished downloading, every time, and no later
+  channel was ever reached.
+
+  Reading was over the same cliff: `readFileSync(path, "utf8")` on the file
+  already written throws `Cannot create a string longer than 0x1fffffe8
+  characters`, so the archive was one run away from being unopenable as well as
+  unwritable.
+
+  Nothing about the data is too big for disk or for memory - only for one
+  string. `src/big-json.ts` now writes the array element by element, each
+  `JSON.stringify`d on its own and streamed to a temporary file that is renamed
+  into place, and reads it back by slicing the file's *buffer* into elements
+  and parsing those, taking the plain `readJSONSync` path only when the file is
+  small enough for it. The scanner reads any valid JSON array, so archives
+  written by earlier versions - the pretty-printed ones that outgrew the limit
+  - open fine.
+
+  **`search.js` was next in line and is fixed in the same pass.** It is one
+  `JSON.stringify` of every message in the workspace - 1,084,375 of them,
+  111 MB - written as `window.search_data = {...};` and read back by slicing 21
+  characters off a string of the whole file. Both ends now stream: the object
+  is written a message at a time, and reading it slices the buffer into
+  channels and then into messages, taking the whole-string path only while the
+  file still fits in one. Verified against the live 111 MB file: both paths
+  return byte-identical data, and the rewritten file still evaluates as the JS
+  the search page loads.
+
+  Channel files written from now on are compact rather than indented, which is
+  incidentally a third smaller: `offtopic` went from 538 MB to 363 MB, same
+  content, same hash.
+
 ## [v26.08.25.132] - 2026-08-25
 
 ### Fixed
