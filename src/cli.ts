@@ -425,7 +425,9 @@ export async function main() {
     if (entries.length === 0 || NO_FILE_DOWNLOAD) return;
 
     const spinner = ora("Downloading past profile pictures...").start();
-    let downloaded = 0;
+    let attempted = 0;
+    let stored = 0;
+    let already = 0;
 
     for (const [userId, avatars] of entries) {
       for (const avatar of avatars) {
@@ -436,15 +438,28 @@ export async function main() {
           extension,
         );
 
-        if (fs.existsSync(filePath)) continue;
+        if (fs.existsSync(filePath)) {
+          already++;
+          continue;
+        }
 
-        spinner.text = `Downloading past profile pictures (${++downloaded})`;
+        attempted++;
+        spinner.text = `Downloading past profile pictures (${attempted})`;
         spinner.render();
         await downloadURL(avatar.url, filePath, { authorize: false });
+
+        // Asked for, and arrived, are different numbers: Slack refuses a good
+        // share of the older avatar URLs now. Counting attempts would report
+        // 212 downloads for 141 files, which is the same lie as a wrapper
+        // logging OK for a run that did nothing.
+        if (fs.existsSync(filePath)) stored++;
       }
     }
 
-    spinner.succeed(`Downloaded ${downloaded} past profile pictures.`);
+    const refused = attempted - stored;
+    spinner.succeed(
+      `Past profile pictures: ${stored} downloaded, ${refused} refused by Slack, ${already} already here.`,
+    );
   }
 
   async function downloadEachChannel() {

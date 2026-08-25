@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.147] - 2026-08-25
+
+### Fixed
+- **"Downloaded 212 past profile pictures" when 141 arrived.** The counter
+  counted attempts. Slack refuses a good share of older avatar URLs, those are
+  correctly not written to disk, and the summary line reported them as
+  downloads anyway - the same shape as a wrapper logging OK for a run that
+  archived nothing. It now says what happened: how many were stored, how many
+  Slack refused, how many were already there.
+
 ## [v26.08.25.146] - 2026-08-25
 
 ### Added
