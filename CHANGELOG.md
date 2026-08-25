@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.134] - 2026-08-25
+
+### Added
+- **Search finds images, including the ones nobody captioned.** The archiver
+  downloaded 42,422 attachments and the index threw every one of them away:
+  `buildSearchDatabase` stored `{t, u, m}` only. A picture posted without a
+  caption has an empty message text, so it was not merely hard to find - it was
+  not in the index at all.
+
+  Attachments now have a `files` table (Slack's file id, the message and
+  channel they belong to, name, title, filetype, mimetype, `is_image`), and
+  file names and titles go into the FTS content: `messages_fts.message` is
+  indexed as `${text} ${fileNames} ${fileTitles}` while `messages.message`
+  keeps the text the person actually wrote. One query finds captioned and
+  uncaptioned images alike, and the bot still echoes back the real message
+  rather than a name it invented.
+
+  The access gate comes along for free: files join to their message, and the
+  message carries the channel, so whatever withholds direct messages from
+  message search withholds their attachments too. There is a test asserting a
+  file in an `im` channel never comes back.
+
+  Image-ness comes from Slack's `mimetype`, then a `filetype` allowlist, never
+  from the filename - `download-files.ts` takes the extension from the download
+  URL, and some URLs carry none. Counted across all 74 channels and 1,084,375
+  messages: 42,422 attachments under 41,228 distinct file ids, 40,588 images
+  caught by mimetype, 0 by the filetype fallback, and 676 carrying neither
+  field. Those 676 are not files - 624 `hidden_by_limit`, 51 `tombstone`, one
+  `file_not_found` - and none carries a name, so `is_image = 0` is the right
+  answer for all of them rather than a gap.
+
+### Fixed
+- **Hyphenated search terms matched nothing.** The query tokenizer deleted
+  non-word characters inside each word, turning `kissa-katolla` into
+  `kissakatolla`, while FTS5 had indexed `kissa-katolla.png` as three tokens.
+  The two tokenizers have to agree; the query side now splits on runs of
+  non-word characters instead of deleting them. FTS5's operators still become
+  separators rather than syntax, which is what the deletion was for.
+
 ## [v26.08.25.133] - 2026-08-25
 
 ### Fixed
