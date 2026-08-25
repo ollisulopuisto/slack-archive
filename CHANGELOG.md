@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.145] - 2026-08-25
+
+### Fixed
+- **The search exclusions were computed, announced, and applied to nothing on
+  the path that builds `search.js`.** `.143` and `.144` printed how many
+  channels and users the index would exclude and then indexed them anyway on
+  the main path - only the fallback branch, which reads the previous
+  `search.js` when a channel's own JSON is missing, was filtered. `.144` fixed
+  that for the database builder; the browser-search builder still had it.
+
+  Both builders hand-rolled the same mapping, which is why fixing one left the
+  other untouched. There is now one `toSearchMessages`, used by both and
+  tested: it filters `bot_id` before the mapping and hidden users after it,
+  and carries attachments through so an uncaptioned image stays findable.
+
+  The **after** matters and is why the types did not catch any of this:
+  `isMessageSearchable` reads `u`, an archive message calls it `user`, and
+  `ArchiveMessage` has an index signature - so `.u` on a raw message is a legal
+  read that is always `undefined`, and the filter returned true for everything.
+  Clean `tsc`, green tests, nothing excluded. Only counting rows in a rebuilt
+  index catches that, so the test now pins the mapped shape.
+
 ## [v26.08.25.144] - 2026-08-25
 
 ### Added

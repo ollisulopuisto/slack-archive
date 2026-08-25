@@ -1,5 +1,5 @@
 import { channelKind } from "./channels.js";
-import { Channel, SearchMessage, Users } from "./interfaces.js";
+import { ArchiveMessage, Channel, SearchMessage, Users } from "./interfaces.js";
 
 /**
  * What the search index is allowed to see.
@@ -85,4 +85,54 @@ export function isMessageSearchable(
   excludedUsers: Set<string>,
 ): boolean {
   return !message.u || !excludedUsers.has(message.u);
+}
+
+export interface SearchMessageOptions {
+  hiddenUsers: Set<string>;
+  includeBots: boolean;
+}
+
+/**
+ * Archive messages -> index entries, filtered.
+ *
+ * One function because there are two builders - search.js and search.db - and
+ * they had drifted: the exclusions were computed in both, announced in both,
+ * and applied on only one of the four paths through them. Two hand-rolled
+ * copies of the same mapping is what let a fix to one leave the other exactly
+ * as it was.
+ *
+ * The filter runs AFTER the mapping. isMessageSearchable reads `u`; an archive
+ * message calls it `user`. ArchiveMessage carries an index signature, so
+ * reading `.u` off one is legal, always undefined, and silently keeps
+ * everything - which is how the exclusions passed tsc and 132 tests while
+ * excluding nothing.
+ */
+export function toSearchMessages(
+  messages: Array<ArchiveMessage>,
+  { hiddenUsers, includeBots }: SearchMessageOptions,
+): Array<SearchMessage> {
+  return messages
+    .filter((message) => includeBots || !message.bot_id)
+    .map((message) => {
+      const searchMessage: SearchMessage = {
+        m: message.text,
+        u: message.user,
+        t: message.ts,
+      };
+
+      const files = (message.files || [])
+        .filter((file: any) => file && file.id)
+        .map((file: any) => ({
+          id: file.id,
+          name: file.name,
+          title: file.title,
+          filetype: file.filetype,
+          mimetype: file.mimetype,
+        }));
+
+      if (files.length > 0) searchMessage.files = files;
+
+      return searchMessage;
+    })
+    .filter((message) => isMessageSearchable(message, hiddenUsers));
 }
