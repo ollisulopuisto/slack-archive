@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.136] - 2026-08-25
+
+### Added
+- **The archive now remembers what people used to be called.** Slack has no
+  rename history: `users.info` answers with whoever somebody is today, and every
+  name before that is gone. In a workspace where changing your handle is a
+  running joke this makes old messages unreadable - one member here has been
+  juusokarhu, kuningaslitmanen, reijotossavainen, hevosenkuerpae, ullaappelsin,
+  natsiblondi and lahtari, all within eleven months, and is called something
+  else again today.
+
+  Two sources, written to `data/user-names.json` as `{ nick, first, last,
+  sources }` per user, oldest first:
+
+  **Retroactively**, out of the messages already archived. Slack used to encode
+  a mention as `<@U2H06BCQZ|jaricurry>` - the name as it was the day that
+  message was posted. Mined across 1,129,109 messages here, that yields 30
+  names for 13 users, dated back to September 2016. It is the only record of a
+  past nickname that exists anywhere, and it was sitting in the message text the
+  whole time. Bot and legacy messages carrying a `username` field are read the
+  same way.
+
+  **Going forward**, a snapshot of every profile on every run, which is what
+  closes the gap: the pipe form is rare in modern messages, so from here the
+  record is kept rather than recovered.
+
+  The pass runs over every selected channel rather than inside the download
+  loop, because a channel marked `fullyDownloaded` never enters that loop, and
+  an archived channel is exactly where the oldest names are.
+
+- **The member list is fetched whole.** Users used to be discovered one at a
+  time - `users.info` for the author of each downloaded message - so anyone who
+  never posted in an archived channel was simply absent, and `getName` falls
+  back to printing the raw id, putting `U2GV75QA2` in the HTML where a person
+  belongs. One paginated `users.list` now answers for everybody, the
+  deactivated included, who are precisely the people no other lookup can still
+  resolve. A token without `users:read` fails this step and archives as before.
+
 ## [v26.08.25.135] - 2026-08-25
 
 ### Fixed

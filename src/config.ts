@@ -93,6 +93,7 @@ export const SEARCH_TEMPLATE_PATH = path.join(
 export const CHANNELS_DATA_PATH = path.join(DATA_DIR, "channels.json");
 export const USERS_DATA_PATH = path.join(DATA_DIR, "users.json");
 export const EMOJIS_DATA_PATH = path.join(DATA_DIR, "emojis.json");
+export const USER_NAMES_DATA_PATH = path.join(DATA_DIR, "user-names.json");
 export const SLACK_ARCHIVE_DATA_PATH = path.join(
   DATA_DIR,
   "slack-archive.json",

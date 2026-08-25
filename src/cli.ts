@@ -15,6 +15,7 @@ import {
   CHANNEL_TYPES,
   DATE_FILE,
   EMOJIS_DATA_PATH,
+  USER_NAMES_DATA_PATH,
   NO_SLACK_CONNECT,
   EXCLUDE_CHANNELS,
 } from "./config.js";
@@ -29,10 +30,17 @@ import { createBackup, deleteBackup, deleteOlderBackups } from "./backup.js";
 import { isValid, parseISO } from "date-fns";
 import { createSearch } from "./search.js";
 import { write, writeAndMerge, writeJsonArray } from "./data-write.js";
-import { messagesCache, getUsers, getChannels } from "./data-load.js";
+import {
+  messagesCache,
+  getMessages,
+  getUsers,
+  getChannels,
+  getUserNames,
+} from "./data-load.js";
+import { mineNames, recordNames, snapshotNames } from "./user-names.js";
 import { getSlackArchiveData, setSlackArchiveData } from "./archive-data.js";
 import { downloadEmojiList, downloadEmojis } from "./emoji.js";
-import { downloadAvatars } from "./users.js";
+import { downloadAllUsers, downloadAvatars } from "./users.js";
 import { downloadChannels } from "./channels.js";
 import { authTest } from "./web-client.js";
 import { User, Channel, SlackArchiveChannelData } from "./interfaces.js";
@@ -290,6 +298,18 @@ export async function main() {
 
   slackArchiveData.auth = await getAuthTest();
 
+  // Everybody, not only whoever posted. See downloadAllUsers.
+  if (!NO_SLACK_CONNECT) {
+    await downloadAllUsers(users);
+  }
+
+  // What people are called today. Slack keeps no rename history, so a run that
+  // does not write this down is a year of nicknames nobody can recover later.
+  let userNames = recordNames(
+    await getUserNames(),
+    snapshotNames(users, new Date().toISOString()),
+  );
+
   const channels = await downloadChannels({ types: channelTypes }, users);
   const selectedChannels = await selectChannels(
     channels,
@@ -309,6 +329,9 @@ export async function main() {
 
   // Download messages and extras for each channel
   await downloadEachChannel();
+
+  // Then mine the nicknames out of them
+  await recordUserNames();
 
   // Save data
   await setSlackArchiveData(slackArchiveData);
@@ -330,6 +353,43 @@ export async function main() {
   await writeLastSuccessfulArchive();
 
   console.log(`All done.`);
+
+  /**
+   * Write down what everyone has ever been called.
+   *
+   * Old mentions carry the name as it was that day - <@U2H06BCQZ|jaricurry> -
+   * and that is the only retroactive record of a past nickname that exists;
+   * Slack itself keeps none. This runs over every selected channel rather than
+   * inside the download loop, because a channel marked fullyDownloaded is
+   * skipped there, and an archived channel is exactly where the oldest names
+   * are. getMessages serves the cache for what was just downloaded and reads
+   * the rest from disk.
+   */
+  async function recordUserNames() {
+    const spinner = ora(`Recording nicknames...`).start();
+
+    for (const channel of selectedChannels) {
+      if (!channel.id) continue;
+
+      spinner.text = `Recording nicknames from ${channel.name || channel.id}`;
+      spinner.render();
+
+      for (const message of await getMessages(channel.id, true)) {
+        userNames = recordNames(userNames, mineNames(message));
+      }
+    }
+
+    await write(USER_NAMES_DATA_PATH, JSON.stringify(userNames, undefined, 2));
+
+    const nicks = Object.values(userNames).reduce(
+      (total, names) => total + names.length,
+      0,
+    );
+
+    spinner.succeed(
+      `Recorded ${nicks} names for ${Object.keys(userNames).length} users.`,
+    );
+  }
 
   async function downloadEachChannel() {
     if (NO_SLACK_CONNECT) return;
