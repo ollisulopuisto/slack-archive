@@ -110,6 +110,11 @@ export async function createSearchDatabase(spinner: Ora) {
 
   await buildSearchDatabase(SEARCH_DB_PATH, {
     users: names,
+    // The same merge createSearchFile does. INDEX_OF_PAGES is only populated
+    // when create-html has run in this process; a build-db-only run has to
+    // fall back to what the previous search.js recorded, or the index would
+    // lose the page numbers every time the database is rebuilt on its own.
+    pages: { ...(existingData.pages || {}), ...INDEX_OF_PAGES },
     names: await getUserNames(),
     channels: searchable
       .filter((channel) => !!channel.id)

@@ -120,6 +120,14 @@ function indexableText(message: SearchDbMessage): string {
 }
 
 export interface SearchDbInput {
+  /**
+   * Channel id -> each page's OLDEST timestamp, newest page first.
+   *
+   * The shape create-html records and search.js has always carried. It is here
+   * so a reader can turn a message into a link without parsing a 110 MB
+   * JavaScript file to answer one question.
+   */
+  pages?: Record<string, Array<string>>;
   /** User id -> display name */
   users: Record<string, string>;
   /** User id -> every name they have gone by, oldest first */
@@ -175,7 +183,7 @@ export function countMessages(db: SearchDatabase): number {
 
 export async function buildSearchDatabase(
   dbPath: string,
-  { users, names, channels, loadMessages, onChannel }: SearchDbInput,
+  { users, names, channels, loadMessages, onChannel, pages }: SearchDbInput,
 ): Promise<void> {
   // Start fresh rather than update in place: the archive is rebuilt wholesale,
   // and a fresh file cannot inherit rows for messages that have since gone.
@@ -278,7 +286,35 @@ export async function buildSearchDatabase(
     )`);
     db.exec("CREATE INDEX reaction_users_user_id ON reaction_users (user_id)");
 
+    // Which rendered page holds a message.
+    //
+    // A search result that cannot be opened in context is half an answer, and
+    // the page number has only ever existed in search.js - which is 110 MB of
+    // JavaScript, and no reasonable reader parses that to place one message.
+    //
+    // Pages run newest first and each row records that page's OLDEST
+    // timestamp, so the page holding a message is the first whose oldest entry
+    // is at or below it. A timestamp older than every row resolves to nothing
+    // rather than to page 0: the index cannot say, and a caller handed a
+    // confident wrong page would link people to the wrong conversation.
+    db.exec(`CREATE TABLE pages (
+      channel_id TEXT,
+      page       INTEGER,
+      oldest_ts  TEXT,
+      PRIMARY KEY (channel_id, page)
+    )`);
+
     db.exec("BEGIN TRANSACTION");
+
+    const pageStmt = db.prepare(
+      "INSERT OR REPLACE INTO pages (channel_id, page, oldest_ts) VALUES (?, ?, ?)",
+    );
+    for (const [channelId, boundaries] of Object.entries(pages || {})) {
+      (boundaries || []).forEach((oldest, index) => {
+        if (oldest) pageStmt.run([channelId, index, String(oldest)]);
+      });
+    }
+    pageStmt.finalize();
 
     const userStmt = db.prepare(
       "INSERT OR REPLACE INTO users (id, name) VALUES (?, ?)",

@@ -143,6 +143,12 @@ const MESSAGES: Record<string, Array<FixtureMessage>> = {
 
 const USERS = { U1: "alice", U2: "bob" };
 
+// Newest page first, each entry the OLDEST timestamp on that page - the shape
+// create-html records and search.js has always carried.
+const PAGES = {
+  C1: ["1700000500.0001", "1700000200.0001", "1700000000.0001"],
+};
+
 let dir: string;
 let dbPath: string;
 
@@ -154,6 +160,7 @@ beforeAll(async () => {
     users: USERS,
     channels: CHANNELS,
     loadMessages: async (channelId) => MESSAGES[channelId] || [],
+    pages: PAGES,
   });
 });
 
@@ -177,6 +184,7 @@ describe("buildSearchDatabase", () => {
       users: USERS,
       channels: CHANNELS,
       loadMessages: async (channelId) => MESSAGES[channelId] || [],
+      pages: PAGES,
     });
 
     const db = openSearchDatabase(dbPath);
@@ -423,6 +431,69 @@ describe("reactions", () => {
       ["C1-1700000000.0001"],
     ) as { n: number };
 
+    expect(Number(row.n)).toBe(0);
+    db.close();
+  });
+});
+
+
+// A search result is only useful if you can go and read it in context. The
+// link needs a page number, and the page index has always lived in search.js
+// - a 110 MB file the bot has no business parsing to answer one question.
+describe("page index", () => {
+  it("stores each page's oldest timestamp", () => {
+    const db = openSearchDatabase(dbPath);
+    const rows = db.all(
+      "SELECT page, oldest_ts FROM pages WHERE channel_id = 'C1' ORDER BY page",
+    ) as unknown as Array<{ page: number; oldest_ts: string }>;
+
+    expect(rows).toEqual([
+      { page: 0, oldest_ts: "1700000500.0001" },
+      { page: 1, oldest_ts: "1700000200.0001" },
+      { page: 2, oldest_ts: "1700000000.0001" },
+    ]);
+    db.close();
+  });
+
+  // Pages run newest first, so page 0 holds the highest timestamps. Finding a
+  // message's page is the first page whose oldest entry is at or below it.
+  it("resolves a timestamp to the page that contains it", () => {
+    const db = openSearchDatabase(dbPath);
+
+    const pageOf = (ts: string) => {
+      const row = db.get(
+        `SELECT page FROM pages
+         WHERE channel_id = 'C1' AND CAST(oldest_ts AS REAL) <= CAST(? AS REAL)
+         ORDER BY page ASC LIMIT 1`,
+        [ts],
+      ) as { page: number } | null;
+      return row ? row.page : null;
+    };
+
+    expect(pageOf("1700000900.0001")).toBe(0);   // newer than page 0's oldest
+    expect(pageOf("1700000500.0001")).toBe(0);   // exactly page 0's oldest
+    expect(pageOf("1700000300.0001")).toBe(1);
+    expect(pageOf("1700000000.0001")).toBe(2);
+    db.close();
+  });
+
+  // Older than anything recorded means the index cannot say, and the caller
+  // has to know that rather than be handed page 0.
+  it("resolves to nothing when the timestamp predates every page", () => {
+    const db = openSearchDatabase(dbPath);
+    const row = db.get(
+      `SELECT page FROM pages
+       WHERE channel_id = 'C1' AND CAST(oldest_ts AS REAL) <= CAST(? AS REAL)
+       ORDER BY page ASC LIMIT 1`,
+      ["1600000000.0001"],
+    );
+    expect(row).toBeNull();
+    db.close();
+  });
+
+  it("keeps channels apart", () => {
+    const db = openSearchDatabase(dbPath);
+    const row = db.get("SELECT COUNT(*) AS n FROM pages WHERE channel_id = 'C2'") as { n: number };
     expect(Number(row.n)).toBe(0);
     db.close();
   });
