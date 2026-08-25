@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.142] - 2026-08-25
+
+### Added
+- **Reaction stats, and custom emoji get their own billing.** The workspace has
+  made 400 emoji of its own, and until now the archive counted a reaction with
+  one exactly like a reaction with `:+1:`.
+
+  The stats page gains a Reactions section: how many there were, how many
+  distinct emoji, what share used the workspace's own, then a ranking of those
+  own emoji drawn **as themselves** - the picture from `html/emojis/` beside the
+  name, so `:backman:` is recognisable before it is read - a ranking of every
+  emoji, and who reacts most. Profile pages gain reactions given alongside
+  reactions received, and the emoji each person reaches for.
+
+  Per emoji the archive now keeps first and last use, usage per year, and who
+  gave it, which is what makes "when did :glitch_crab: die" answerable later.
+
+  **`count` and `users` disagree, and the code says which one to believe.**
+  Slack truncates the `users` array on a heavily-reacted message while keeping
+  `count` honest, so totals come from `count` and givers from `users`, and the
+  giver numbers are floors - the page says so rather than implying precision it
+  does not have. There is a test for a reaction Slack reports as 40 while naming
+  one user.
+
 ## [v26.08.25.141] - 2026-08-25
 
 ### Added

@@ -724,3 +724,23 @@ table.timeline td.timestamp {
 .dd-chart:has(.dd-cell:nth-child(29)) .dd-cell:nth-child(even) .dd-cell-label {
   visibility: hidden;
 }
+
+/* Reaction rows: the emoji itself, then its name, so a custom one is
+   recognisable before it is read. */
+.emoji-bars .viz-bars-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.emoji-mark img {
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+}
+
+.emoji-mark {
+  font-size: 16px;
+  line-height: 1;
+  min-width: 18px;
+}

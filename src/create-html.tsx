@@ -15,6 +15,7 @@ import {
   getMessages,
   getUsers,
   getUserNames,
+  getEmoji,
 } from "./data-load.js";
 import {
   ArchiveMessage,
@@ -47,6 +48,7 @@ import { formerNames, UserNames } from "./user-names.js";
 import {
   ChannelStats,
   createStats,
+  EmojiStats,
   DayHourCube,
   profileEvents,
   ProfileEvent,
@@ -787,6 +789,10 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
             label="Reactions received"
             value={formatCount(person.reactionsReceived)}
           />
+          <Tile
+            label="Reactions given"
+            value={formatCount(person.reactionsGiven)}
+          />
           <Tile label="Active years" value={formatCount(activeYears)} />
         </div>
 
@@ -836,6 +842,32 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
 
         <details className="drill">
           <summary>
+            Emoji they reach for{" "}
+            <span className="count">
+              {Object.keys(person.emojiGiven).length}
+            </span>
+          </summary>
+          <EmojiRows
+            emoji={Object.entries(person.emojiGiven)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 25)
+              .map(([name, count]) => ({
+                ...(stats?.emojiStats[name] || {
+                  name,
+                  custom: false,
+                  first: "",
+                  last: "",
+                  byYear: {},
+                  givers: {},
+                }),
+                name,
+                count,
+              }))}
+          />
+        </details>
+
+        <details className="drill">
+          <summary>
             Every name <span className="count">{names.length}</span>
           </summary>
           <table className="timeline">
@@ -867,6 +899,35 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
   );
 };
 
+/** A reaction, drawn as itself where the archive has the picture. */
+const EmojiRows: React.FunctionComponent<{
+  emoji: Array<EmojiStats>;
+}> = ({ emoji }) => {
+  const max = Math.max(1, ...emoji.map((e) => e.count));
+
+  return (
+    <ul className="viz-bars emoji-bars">
+      {emoji.map((entry) => (
+        <li key={entry.name}>
+          <span className="viz-bars-label">
+            <span className="emoji-mark">
+              <Emoji name={entry.name} />
+            </span>
+            :{entry.name}:
+          </span>
+          <span className="viz-bars-track">
+            <span
+              className="viz-bars-fill"
+              style={{ width: `${Math.max(1, (entry.count / max) * 100)}%` }}
+            />
+          </span>
+          <span className="viz-bars-value">{formatCount(entry.count)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+};
+
 /** The whole workspace, ten years of it. */
 const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
   data,
@@ -890,10 +951,13 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
 
   const years = yearData(data.byYear);
   const months = monthData(data.byMonth);
-  const emoji = Object.entries(data.emoji)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 20)
-    .map(([name, value]) => ({ label: `:${name}:`, value }));
+  const allEmoji = Object.values(data.emojiStats).sort(
+    (a, b) => b.count - a.count,
+  );
+  const customEmoji = allEmoji.filter((entry) => entry.custom);
+  const givers = Object.values(data.byUser)
+    .filter((person) => person.reactionsGiven > 0)
+    .sort((a, b) => b.reactionsGiven - a.reactionsGiven);
 
   return (
     <HtmlPage>
@@ -964,11 +1028,52 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
           />
         </details>
 
-        <details className="drill">
+        <details className="drill" open>
           <summary>
-            Most-used reactions <span className="count">{emoji.length}</span>
+            Reactions{" "}
+            <span className="count">{formatCount(data.reactions)}</span>
           </summary>
-          <Bars data={emoji} />
+
+          <div className="viz-tiles">
+            <Tile label="Reactions" value={formatCount(data.reactions)} />
+            <Tile
+              label="Custom emoji used"
+              value={formatCount(customEmoji.length)}
+              hint={`of ${formatCount(allEmoji.length)} distinct`}
+            />
+            <Tile
+              label="Reactions with our own emoji"
+              value={`${Math.round(
+                (data.customReactions / Math.max(1, data.reactions)) * 100,
+              )}%`}
+              hint={formatCount(data.customReactions)}
+            />
+          </div>
+
+          <div className="viz-figure-caption">
+            Our own emoji
+            <span className="viz-note"> the workspace made these</span>
+          </div>
+          <EmojiRows emoji={customEmoji.slice(0, 30)} />
+
+          <div className="viz-figure-caption">Every reaction</div>
+          <EmojiRows emoji={allEmoji.slice(0, 20)} />
+
+          <div className="viz-figure-caption">
+            Who reacts
+            <span className="viz-note">
+              {" "}
+              Slack truncates the list on a heavily-reacted message, so these
+              are floors
+            </span>
+          </div>
+          <Bars
+            data={givers.slice(0, 20).map((person) => ({
+              label: getName(person.userId, users) || person.userId,
+              value: person.reactionsGiven,
+              href: `user-${person.userId}.html`,
+            }))}
+          />
         </details>
       </div>
     </HtmlPage>
@@ -1041,7 +1146,11 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
 
 async function renderStatsAndProfiles(channels: Array<Channel>) {
   const spinner = ora("Counting ten years of messages...").start();
-  const accumulator = createStats();
+  // Everything in emojis.json is one the workspace made itself; everything else
+  // in a reaction is Slack's.
+  const accumulator = createStats({
+    customEmoji: new Set(Object.keys(await getEmoji())),
+  });
 
   for (const channel of channels) {
     if (!channel.id) continue;

@@ -7,8 +7,10 @@ const FRIDAY = "1589538600.000100";
 /** 2021-01-02T23:05:00Z is a Saturday. */
 const SATURDAY = "1609628700.000200";
 
-function statsOf(...channels: Array<[string, string, Array<any>]>) {
-  const stats = createStats();
+function statsOf(
+  ...channels: Array<[string, string, Array<any>]>
+) {
+  const stats = createStats({ customEmoji: new Set(["glitch_crab", "piggy"]) });
   for (const [id, name, messages] of channels) {
     stats.addChannel({ id, name }, messages);
   }
@@ -202,6 +204,79 @@ describe("the day/hour cube", () => {
     ]);
 
     expect(result.byChannel.C1.byUser).toEqual({ U1: 1, U2: 2 });
+  });
+});
+
+describe("reactions", () => {
+  const reacted = (name: string, users: Array<string>) => ({
+    ts: FRIDAY,
+    user: "U9",
+    reactions: [{ name, users, count: users.length }],
+  });
+
+  it("separates the workspace's own emoji from Slack's", () => {
+    const result = statsOf([
+      "C1",
+      "offtopic",
+      [reacted("glitch_crab", ["U1", "U2"]), reacted("+1", ["U1"])],
+    ]);
+
+    expect(result.emojiStats.glitch_crab.custom).toBe(true);
+    expect(result.emojiStats["+1"].custom).toBe(false);
+    expect(result.customReactions).toBe(2);
+    expect(result.reactions).toBe(3);
+  });
+
+  it("counts who gave a reaction, not only how many there were", () => {
+    const result = statsOf([
+      "C1",
+      "offtopic",
+      [reacted("piggy", ["U1", "U2"]), reacted("piggy", ["U1"])],
+    ]);
+
+    expect(result.emojiStats.piggy.count).toBe(3);
+    expect(result.emojiStats.piggy.givers).toEqual({ U1: 2, U2: 1 });
+    expect(result.byUser.U1.reactionsGiven).toBe(2);
+    expect(result.byUser.U1.emojiGiven).toEqual({ piggy: 2 });
+  });
+
+  // Slack truncates the users array on a heavily-reacted message but keeps
+  // count honest, so the two disagree and the total has to come from count.
+  it("takes the total from count even when the user list is short", () => {
+    const result = statsOf([
+      "C1",
+      "offtopic",
+      [{ ts: FRIDAY, user: "U9", reactions: [{ name: "piggy", users: ["U1"], count: 40 }] }],
+    ]);
+
+    expect(result.emojiStats.piggy.count).toBe(40);
+    expect(result.emojiStats.piggy.givers).toEqual({ U1: 1 });
+  });
+
+  it("remembers when an emoji was first and last used", () => {
+    const result = statsOf([
+      "C1",
+      "offtopic",
+      [reacted("piggy", ["U1"]), { ...reacted("piggy", ["U2"]), ts: SATURDAY }],
+    ]);
+
+    expect(result.emojiStats.piggy.first).toBe(FRIDAY);
+    expect(result.emojiStats.piggy.last).toBe(SATURDAY);
+    expect(Object.keys(result.emojiStats.piggy.byYear).sort()).toEqual([
+      "2020",
+      "2021",
+    ]);
+  });
+
+  it("survives a reaction with no users array at all", () => {
+    const result = statsOf([
+      "C1",
+      "offtopic",
+      [{ ts: FRIDAY, user: "U9", reactions: [{ name: "piggy", count: 2 }] }],
+    ]);
+
+    expect(result.emojiStats.piggy.count).toBe(2);
+    expect(result.emojiStats.piggy.givers).toEqual({});
   });
 });
 

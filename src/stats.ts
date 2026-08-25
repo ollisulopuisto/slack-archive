@@ -20,6 +20,27 @@ export interface ChannelUse {
  */
 export type DayHourCube = Record<string, Record<string, number>>;
 
+/**
+ * One emoji, as used in reactions.
+ *
+ * `count` is Slack's number and is authoritative; `givers` is built from the
+ * `users` array, which Slack truncates on a heavily-reacted message. The two
+ * therefore disagree on popular messages, and they disagree in a known
+ * direction: givers undercounts, count does not.
+ */
+export interface EmojiStats {
+  name: string;
+  /** Times used as a reaction. */
+  count: number;
+  /** Is this one of the workspace's own emoji rather than Slack's? */
+  custom: boolean;
+  first: string;
+  last: string;
+  byYear: Record<string, number>;
+  /** User id -> times they reacted with it, as far as Slack reported. */
+  givers: Record<string, number>;
+}
+
 export interface ChannelStats {
   id: string;
   name: string;
@@ -50,6 +71,9 @@ export interface UserStats {
   /** Channel id -> when they joined, for the channels that recorded it. */
   joined: Record<string, string>;
   byDayHour: DayHourCube;
+  /** Reactions they gave, as far as Slack reported who gave what. */
+  reactionsGiven: number;
+  emojiGiven: Record<string, number>;
 }
 
 export interface WorkspaceStats {
@@ -66,6 +90,9 @@ export interface WorkspaceStats {
   byWeekday: Array<number>;
   /** Emoji name -> times used as a reaction. */
   emoji: Record<string, number>;
+  emojiStats: Record<string, EmojiStats>;
+  /** Reactions using one of the workspace's own emoji. */
+  customReactions: number;
   channelNames: Record<string, string>;
   byUser: Record<string, UserStats>;
   byChannel: Record<string, ChannelStats>;
@@ -103,6 +130,8 @@ function emptyUser(userId: string): UserStats {
     channels: [],
     joined: {},
     byDayHour: {},
+    reactionsGiven: 0,
+    emojiGiven: {},
   };
 }
 
@@ -118,7 +147,12 @@ function addToCube(cube: DayHourCube, day: string, hour: number) {
  * messages do not need to be in memory at once to be counted, and the caller
  * already holds one channel's worth.
  */
-export function createStats() {
+export interface StatsOptions {
+  /** The workspace's own emoji, by name. Everything else is Slack's. */
+  customEmoji?: Set<string>;
+}
+
+export function createStats({ customEmoji }: StatsOptions = {}) {
   const stats: WorkspaceStats = {
     messages: 0,
     replies: 0,
@@ -132,6 +166,8 @@ export function createStats() {
     byHour: new Array(24).fill(0),
     byWeekday: new Array(7).fill(0),
     emoji: {},
+    emojiStats: {},
+    customReactions: 0,
     channelNames: {},
     byUser: {},
     byChannel: {},
@@ -205,8 +241,35 @@ export function createStats() {
       const n = Number(reaction.count) || 0;
       received += n;
       stats.reactions += n;
-      if (reaction.name) {
-        stats.emoji[reaction.name] = (stats.emoji[reaction.name] || 0) + n;
+
+      const name = reaction.name;
+      if (!name) continue;
+
+      stats.emoji[name] = (stats.emoji[name] || 0) + n;
+
+      const emoji = (stats.emojiStats[name] = stats.emojiStats[name] || {
+        name,
+        count: 0,
+        custom: !!customEmoji?.has(name),
+        first: message.ts!,
+        last: message.ts!,
+        byYear: {},
+        givers: {},
+      });
+
+      emoji.count += n;
+      emoji.byYear[year] = (emoji.byYear[year] || 0) + n;
+      if (message.ts! < emoji.first) emoji.first = message.ts!;
+      if (message.ts! > emoji.last) emoji.last = message.ts!;
+      if (emoji.custom) stats.customReactions += n;
+
+      for (const giver of reaction.users || []) {
+        emoji.givers[giver] = (emoji.givers[giver] || 0) + 1;
+
+        const giverStats = (stats.byUser[giver] =
+          stats.byUser[giver] || emptyUser(giver));
+        giverStats.reactionsGiven++;
+        giverStats.emojiGiven[name] = (giverStats.emojiGiven[name] || 0) + 1;
       }
     }
 
