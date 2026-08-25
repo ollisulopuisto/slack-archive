@@ -58,6 +58,17 @@ export type SearchMessage = {
   u?: string; // User
   t?: string; // Timestamp
   c?: string; // Channel
+  /**
+   * Attachment metadata, for search. Without it an image posted with no
+   * caption cannot be found by any term at all: its message text is empty.
+   */
+  files?: Array<{
+    id?: string;
+    name?: string;
+    title?: string;
+    filetype?: string;
+    mimetype?: string;
+  }>;
 };
 
 export interface SlackArchiveChannelData {

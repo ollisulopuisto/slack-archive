@@ -100,6 +100,19 @@ export async function createSearchDatabase(spinner: Ora) {
         m: message.text,
         u: message.user,
         t: message.ts,
+        // Attachment metadata travels with the message so that a caption-less
+        // image is findable by its filename. Only the fields search needs:
+        // Slack's file object is large and the rest does not belong in an
+        // index.
+        files: (message.files || [])
+          .filter((file: any) => file && file.id)
+          .map((file: any) => ({
+            id: file.id,
+            name: file.name,
+            title: file.title,
+            filetype: file.filetype,
+            mimetype: file.mimetype,
+          })),
       }));
 
       // Fall back to existing search data if the raw channel JSON file is
@@ -150,6 +163,22 @@ async function createSearchFile(spinner: Ora) {
         u: message.user,
         t: message.ts,
       };
+
+      // Files belong in this mapping too, not only the one that builds the
+      // database. buildSearchDatabase falls back to search.js's messages when
+      // a channel's own JSON is missing, so without this the fallback would
+      // drop every attachment - silently, and precisely on the machines where
+      // only search.js was copied across.
+      const files = (message.files || [])
+        .filter((file: any) => file && file.id)
+        .map((file: any) => ({
+          id: file.id,
+          name: file.name,
+          title: file.title,
+          filetype: file.filetype,
+          mimetype: file.mimetype,
+        }));
+      if (files.length > 0) searchMessage.files = files;
 
       return searchMessage;
     });

@@ -34,10 +34,66 @@ export interface SearchDbChannel {
   isArchived?: boolean;
 }
 
+export interface SearchDbFile {
+  id?: string;
+  name?: string;
+  title?: string;
+  filetype?: string;
+  mimetype?: string;
+}
+
 export interface SearchDbMessage {
   t?: string;
   u?: string;
   m?: string;
+  files?: Array<SearchDbFile>;
+}
+
+/**
+ * Image types Slack can display and that are worth previewing.
+ *
+ * The type comes from Slack's `mimetype`/`filetype` fields, never from the
+ * filename. The filename cannot be trusted here for two reasons, both present
+ * in the real archive: 19 files have no extension at all, because
+ * download-files.ts takes the extension from the download URL and some URLs
+ * carry none; and a PDF appears twice under one file id, once as `.pdf` and
+ * once as the `.png` that the same code saves from Slack's `thumb_pdf`.
+ */
+const IMAGE_FILETYPES = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+  "gif",
+  "webp",
+  "heic",
+]);
+
+function isImageFile(file: SearchDbFile): boolean {
+  if (file.mimetype && file.mimetype.startsWith("image/")) return true;
+  return IMAGE_FILETYPES.has((file.filetype || "").toLowerCase());
+}
+
+/**
+ * What goes into the full-text index: the message text, plus the names and
+ * titles of anything attached to it.
+ *
+ * The archive holds 40 124 images and a great many were posted with no
+ * caption. Such a message has an empty `message`, so no search term reaches
+ * it - the filename is the only thing anybody could remember about it.
+ *
+ * This text goes into the INDEX only. `messages.message` keeps what was
+ * actually written, because the bot echoes that back, and echoing a filename
+ * as though someone had typed it would be a small lie in every result.
+ */
+function indexableText(message: SearchDbMessage): string {
+  const parts = [message.m || ""];
+
+  for (const file of message.files || []) {
+    if (file.name) parts.push(file.name);
+    if (file.title) parts.push(file.title);
+  }
+
+  return parts.filter((part) => part.length > 0).join(" ");
 }
 
 export interface SearchDbInput {
@@ -124,6 +180,22 @@ export async function buildSearchDatabase(
       "CREATE VIRTUAL TABLE messages_fts USING fts5(id UNINDEXED, message)",
     );
 
+    // Attachments in their own table, tied to the message that carried them.
+    // Channel kind reaches a file through its message, so the one gate that
+    // withholds direct messages withholds their attachments too. A second
+    // rule for files could drift from the first; there isn't one.
+    db.exec(`CREATE TABLE files (
+      id         TEXT PRIMARY KEY,
+      message_id TEXT,
+      channel_id TEXT,
+      name       TEXT,
+      title      TEXT,
+      filetype   TEXT,
+      mimetype   TEXT,
+      is_image   INTEGER
+    )`);
+    db.exec("CREATE INDEX files_message_id ON files (message_id)");
+
     db.exec("BEGIN TRANSACTION");
 
     const userStmt = db.prepare(
@@ -142,6 +214,17 @@ export async function buildSearchDatabase(
     );
     const ftsStmt = db.prepare(
       "INSERT OR REPLACE INTO messages_fts (id, message) VALUES (?, ?)",
+    );
+    // INSERT OR REPLACE because one file id can appear more than once: Slack
+    // reuses it when a file is re-shared into another message. Last write
+    // wins, which is right for the file's own metadata - it is one file - but
+    // note the consequence: `message_id` then names the most recent share
+    // rather than the original. Anything that needs "where did this first
+    // appear" wants a join table, not this column.
+    const fileStmt = db.prepare(
+      `INSERT OR REPLACE INTO files
+       (id, message_id, channel_id, name, title, filetype, mimetype, is_image)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     );
 
     for (const channel of channels) {
@@ -164,13 +247,28 @@ export async function buildSearchDatabase(
         const text = message.m || "";
 
         msgStmt.run([id, channel.id, message.u ?? null, message.t, text]);
-        ftsStmt.run([id, text]);
+        ftsStmt.run([id, indexableText(message)]);
+
+        for (const file of message.files || []) {
+          if (!file.id) continue;
+          fileStmt.run([
+            file.id,
+            id,
+            channel.id,
+            file.name ?? null,
+            file.title ?? null,
+            file.filetype ?? null,
+            file.mimetype ?? null,
+            isImageFile(file) ? 1 : 0,
+          ]);
+        }
       }
     }
 
     channelStmt.finalize();
     msgStmt.finalize();
     ftsStmt.finalize();
+    fileStmt.finalize();
 
     db.exec("COMMIT");
   } finally {
@@ -185,9 +283,19 @@ export function searchDatabase(
 ): Array<SearchDbResult> {
   const { cleanQuery, phrases } = parseSearchQuery(query);
 
+  // Punctuation separates words rather than vanishing from between them.
+  //
+  // This used to strip non-word characters inside each word, which turned
+  // "kissa-katolla" into "kissakatolla" and matched nothing - while FTS5's own
+  // tokenizer had indexed "kissa-katolla.png" as kissa / katolla / png. A
+  // query tokenizer that disagrees with the index tokenizer is the one thing
+  // it must not do, and it failed silently rather than erroring. Filenames are
+  // mostly hyphens, underscores and dots, so this is the common case now.
+  //
+  // Splitting still neutralises FTS5's operators (*, ^, parentheses and so
+  // on) by turning them into separators, which is what the stripping was for.
   const ftsQuery = cleanQuery
-    .split(/\s+/)
-    .map((word) => word.replace(/[^\p{L}\p{N}_]/gu, ""))
+    .split(/[^\p{L}\p{N}_]+/u)
     .filter((word) => word.length > 0)
     .map((word) => `"${word}"*`)
     .join(" AND ");

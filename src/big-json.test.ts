@@ -160,6 +160,24 @@ const SEARCH_DATA = {
       { m: "hei", u: "U1", t: "1.0" },
       { m: 'a } bracket, a "quote" and a \\ backslash', u: "U2", t: "2.0" },
       { m: "ääkköset 🇫🇮", t: "3.0" },
+      // A message with an attachment. search.js is the fallback the database
+      // is built from when a channel's own JSON is missing, so files have to
+      // survive the write and the read - and the reader's fast and chunked
+      // paths have to agree about them.
+      {
+        m: "",
+        u: "U1",
+        t: "4.0",
+        files: [
+          {
+            id: "F_CAT",
+            name: "kissa-katolla.png",
+            title: "Kissa katolla",
+            filetype: "png",
+            mimetype: "image/png",
+          },
+        ],
+      },
     ],
     C2: [],
   },
