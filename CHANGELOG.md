@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.143] - 2026-08-25
+
+### Changed
+- **Bots are out of the search index and off the people pages, by default.**
+  Measured across this archive: 68,160 of 1,085,320 messages come from bots and
+  apps, 6.3%, with Slackbot alone at 61,233. Those are short repetitive
+  autoresponses on common words, so they land in exactly the queries people run
+  - a search for "kissa" returned two identical Slackbot lines in the visible
+  ten.
+
+  This one needs no naming and no flag to configure: `users.json` marks the
+  account and `bot_id` marks the message, so it is derived. `--search-include-bots`
+  puts them back. That is a deliberately different default from
+  `--search-exclude-kinds`, which stays empty: dropping someone's direct
+  messages changes what the archive *is*, while nobody keeps a decade of Slack
+  to preserve Slackbot telling them to palauta kissa.
+
+### Added
+- **`html/bots.html` - what the bots did**, kept apart rather than deleted.
+  Totals, share of everything, messages per year, which bots and where they
+  post. The stats page counts people only and links to it; profile pages are
+  not generated for bots.
+
+### Fixed
+- **A person who once posted through an integration was reclassified as a bot,
+  permanently.** `bot_id` appears on messages a *person* sent via Zapier and
+  friends, and treating that as proof of what the account IS moved real members
+  - and their entire ten years - onto the bots page. It showed up as a bots page
+  whose headline said 281 while its own chart summed to 6,390, and as the
+  profile count dropping from 17 to 7.
+
+  What an account is comes from the workspace (`is_bot`, `is_app_user`), never
+  inferred from one message. `bot_id` still counts at the message level, but
+  only where no account owns the message - some bots post with no user entry at
+  all, and those would otherwise be nobody's.
+
 ## [v26.08.25.142] - 2026-08-25
 
 ### Added

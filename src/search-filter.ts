@@ -53,6 +53,24 @@ export function excludedUserIds(
   return excluded;
 }
 
+/**
+ * Every account the workspace marks as a bot or an app.
+ *
+ * Derived rather than configured: nobody should have to type U08NYQN3469, or
+ * remember which of thirty-two accounts are people.
+ */
+export function botUserIds(users: Users): Set<string> {
+  const bots = new Set<string>();
+
+  for (const [userId, user] of Object.entries(users || {})) {
+    if (user?.is_bot || (user as any)?.is_app_user || userId === "USLACKBOT") {
+      bots.add(userId);
+    }
+  }
+
+  return bots;
+}
+
 /** Is this channel one the index may hold at all? */
 export function isChannelSearchable(
   channel: Channel,

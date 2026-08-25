@@ -47,6 +47,7 @@ slack-archive --bot
 --no-search:                Don't create a search file, saving disk space.
 --search-exclude-kinds      Channel kinds the search index must never hold,
                             e.g. im,mpim (public, private, mpim, im).
+--search-include-bots       Keep bots in the search index. Off by default.
 --search-exclude-users      Users whose messages the index must never hold,
                             by handle, display name or id. e.g. historia,backlog
 --no-file-download:         Don't download files.

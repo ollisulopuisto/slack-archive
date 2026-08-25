@@ -32,6 +32,7 @@ import {
   INDEX_PATH,
   NAMES_PATH,
   STATS_PATH,
+  BOTS_PATH,
   getProfileFilePath,
   getChannelStatsFilePath,
   OUT_DIR,
@@ -45,6 +46,7 @@ import { getSlackArchiveData } from "./archive-data.js";
 import { getEmojiFilePath, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
 import { getName } from "./users.js";
 import { formerNames, UserNames } from "./user-names.js";
+import { botUserIds } from "./search-filter.js";
 import {
   ChannelStats,
   createStats,
@@ -428,6 +430,11 @@ const IndexPage: React.FunctionComponent<IndexPageProps> = (props) => {
             <li>
               <a href="html/names.html" target="iframe">
                 Names over the years
+              </a>
+            </li>
+            <li>
+              <a href="html/bots.html" target="iframe">
+                What the bots did
               </a>
             </li>
           </ul>
@@ -933,8 +940,9 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
   data,
 }) => {
   const people = Object.values(data.byUser)
-    .filter((person) => person.messages > 0)
+    .filter((person) => person.messages > 0 && !person.isBot)
     .sort((a, b) => b.messages - a.messages);
+  const humanMessages = data.messages - data.botMessages;
 
   const channels = Object.entries(data.channelNames)
     .map(([id, name]) => ({
@@ -964,11 +972,16 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
       <div id="stats">
         <h1>Ten years of it</h1>
         <p className="topic">
-          {formatDay(data.first)} - {formatDay(data.last)}
+          {formatDay(data.first)} - {formatDay(data.last)} ·{" "}
+          <a href="bots.html">what the bots did</a>
         </p>
 
         <div className="viz-tiles">
-          <Tile label="Messages" value={formatCount(data.messages)} />
+          <Tile
+            label="Messages"
+            value={formatCount(humanMessages)}
+            hint={`people only · ${formatCount(data.botMessages)} more from bots`}
+          />
           <Tile label="People who posted" value={formatCount(people.length)} />
           <Tile label="Channels" value={formatCount(channels.length)} />
           <Tile label="Files" value={formatCount(data.files)} />
@@ -1086,6 +1099,7 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
 }) => {
   const posters = Object.entries(channel.byUser)
     .map(([userId, messages]) => ({ userId, messages }))
+    .filter(({ userId }) => !stats?.byUser[userId]?.isBot)
     .sort((a, b) => b.messages - a.messages);
 
   const byYear: Record<string, number> = {};
@@ -1144,12 +1158,98 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
   );
 };
 
+/**
+ * What the bots did, kept apart from what people did.
+ *
+ * Not deleted, and not folded into the totals either. Slackbot alone posted
+ * more than most members here, and a "who talks" list it tops is a list about
+ * nothing - but 68 000 messages are still 68 000 messages, and an archive that
+ * silently reports a smaller corpus than it holds is lying about what it has.
+ */
+const BotsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
+  data,
+}) => {
+  const bots = Object.values(data.byUser)
+    .filter((account) => account.isBot && account.messages > 0)
+    .sort((a, b) => b.messages - a.messages);
+
+  const byYear: Record<string, number> = {};
+  for (const bot of bots) {
+    for (const [year, n] of Object.entries(bot.byYear)) {
+      byYear[year] = (byYear[year] || 0) + n;
+    }
+  }
+
+  const years = yearData(byYear);
+  const share = Math.round(
+    (data.botMessages / Math.max(1, data.messages)) * 100,
+  );
+
+  return (
+    <HtmlPage>
+      <div id="stats">
+        <h1>What the bots did</h1>
+        <p className="topic">
+          Kept off the other pages so a leaderboard of people is a leaderboard
+          of people · <a href="stats.html">back to the archive</a>
+        </p>
+
+        <div className="viz-tiles">
+          <Tile label="Messages" value={formatCount(data.botMessages)} />
+          <Tile label="Share of everything" value={`${share}%`} />
+          <Tile label="Bots and apps" value={formatCount(bots.length)} />
+        </div>
+
+        <Figure title="Bot messages per year" data={years}>
+          <Columns data={years} />
+        </Figure>
+
+        <details className="drill" open>
+          <summary>
+            Who beeps <span className="count">{bots.length}</span>
+          </summary>
+          <Bars
+            data={bots.map((bot) => ({
+              label: getName(bot.userId, users) || bot.userId,
+              value: bot.messages,
+            }))}
+          />
+        </details>
+
+        <details className="drill">
+          <summary>Where they beep</summary>
+          <table className="timeline">
+            <tbody>
+              {bots.slice(0, 20).map((bot) => (
+                <tr key={bot.userId}>
+                  <td className="sender">
+                    {getName(bot.userId, users) || bot.userId}
+                  </td>
+                  <td>
+                    {bot.channels
+                      .slice(0, 6)
+                      .map(
+                        (channel) => `#${channel.name} (${channel.messages})`,
+                      )
+                      .join(", ")}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      </div>
+    </HtmlPage>
+  );
+};
+
 async function renderStatsAndProfiles(channels: Array<Channel>) {
   const spinner = ora("Counting ten years of messages...").start();
   // Everything in emojis.json is one the workspace made itself; everything else
   // in a reaction is Slack's.
   const accumulator = createStats({
     customEmoji: new Set(Object.keys(await getEmoji())),
+    bots: botUserIds(users),
   });
 
   for (const channel of channels) {
@@ -1163,6 +1263,7 @@ async function renderStatsAndProfiles(channels: Array<Channel>) {
   base = "";
 
   await renderAndWrite(<StatsPage data={stats} />, STATS_PATH);
+  await renderAndWrite(<BotsPage data={stats} />, BOTS_PATH);
 
   for (const channel of Object.values(stats.byChannel)) {
     if (channel.messages === 0) continue;
@@ -1174,7 +1275,9 @@ async function renderStatsAndProfiles(channels: Array<Channel>) {
 
   let written = 0;
   for (const person of Object.values(stats.byUser)) {
-    if (person.messages === 0) continue;
+    // Bots are on their own page; a profile page for Slackbot is a page about
+    // a canned string.
+    if (person.messages === 0 || person.isBot) continue;
     await renderAndWrite(
       <ProfilePage userId={person.userId} person={person} />,
       getProfileFilePath(person.userId),

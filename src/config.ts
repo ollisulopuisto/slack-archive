@@ -79,6 +79,17 @@ export const SEARCH_EXCLUDE_KINDS = new Set(
     .filter((kind) => kind.length > 0),
 );
 
+/**
+ * Keep bots in the search index. Off by default.
+ *
+ * Slackbot alone is 5.6% of this archive, in short repetitive autoresponses on
+ * common words - which puts them in exactly the queries people run. Nobody
+ * archives a decade of Slack to preserve Slackbot telling them to palauta
+ * kissa. Unlike the DM exclusion this needs no naming and no configuration:
+ * users.json marks the account and bot_id marks the message.
+ */
+export const SEARCH_INCLUDE_BOTS = findCliParameter("--search-include-bots");
+
 /** Users whose messages the search index must never hold, by handle or id. */
 export const SEARCH_EXCLUDE_USERS = (
   getCliParameter("--search-exclude-users") || ""
@@ -109,6 +120,7 @@ export const INDEX_PATH = path.join(OUT_DIR, "index.html");
 export const SEARCH_PATH = path.join(OUT_DIR, "search.html");
 export const NAMES_PATH = path.join(HTML_DIR, "names.html");
 export const STATS_PATH = path.join(HTML_DIR, "stats.html");
+export const BOTS_PATH = path.join(HTML_DIR, "bots.html");
 
 export function getChannelStatsFilePath(channelId: string) {
   return path.join(HTML_DIR, `channel-${channelId}.html`);

@@ -74,6 +74,8 @@ export interface UserStats {
   /** Reactions they gave, as far as Slack reported who gave what. */
   reactionsGiven: number;
   emojiGiven: Record<string, number>;
+  /** A bot or app rather than a person. */
+  isBot: boolean;
 }
 
 export interface WorkspaceStats {
@@ -93,6 +95,15 @@ export interface WorkspaceStats {
   emojiStats: Record<string, EmojiStats>;
   /** Reactions using one of the workspace's own emoji. */
   customReactions: number;
+  /**
+   * Messages posted by bots and apps.
+   *
+   * Counted, not removed. Slackbot is 5.6% of this archive on its own, and an
+   * archive that quietly reports a smaller corpus than it holds is lying about
+   * what it has; a leaderboard of people that includes Slackbot is just
+   * useless. So the total stays honest and the rankings separate the two.
+   */
+  botMessages: number;
   channelNames: Record<string, string>;
   byUser: Record<string, UserStats>;
   byChannel: Record<string, ChannelStats>;
@@ -132,6 +143,7 @@ function emptyUser(userId: string): UserStats {
     byDayHour: {},
     reactionsGiven: 0,
     emojiGiven: {},
+    isBot: false,
   };
 }
 
@@ -150,9 +162,11 @@ function addToCube(cube: DayHourCube, day: string, hour: number) {
 export interface StatsOptions {
   /** The workspace's own emoji, by name. Everything else is Slack's. */
   customEmoji?: Set<string>;
+  /** Users the workspace marks as bots or app users. */
+  bots?: Set<string>;
 }
 
-export function createStats({ customEmoji }: StatsOptions = {}) {
+export function createStats({ customEmoji, bots }: StatsOptions = {}) {
   const stats: WorkspaceStats = {
     messages: 0,
     replies: 0,
@@ -168,6 +182,7 @@ export function createStats({ customEmoji }: StatsOptions = {}) {
     emoji: {},
     emojiStats: {},
     customReactions: 0,
+    botMessages: 0,
     channelNames: {},
     byUser: {},
     byChannel: {},
@@ -196,6 +211,19 @@ export function createStats({ customEmoji }: StatsOptions = {}) {
       }
       return;
     }
+
+    // Whether an ACCOUNT is a bot is the workspace's word, never inferred from
+    // a message. bot_id also appears on messages a person posted through an
+    // integration, and treating that as proof reclassified real members as
+    // bots on the strength of one Zapier post - taking their whole decade off
+    // the people pages with it.
+    //
+    // bot_id still counts at the MESSAGE level, but only where no account owns
+    // the message: some bots post with no user entry at all, and those would
+    // otherwise be counted as nobody's.
+    const botAccount = !!user && !!bots?.has(user);
+    if (person && botAccount) person.isBot = true;
+    if (botAccount || (!user && !!message.bot_id)) stats.botMessages++;
 
     stats.messages++;
     if (isReply) stats.replies++;

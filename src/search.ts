@@ -10,6 +10,7 @@ import {
   NO_SEARCH,
   SEARCH_EXCLUDE_KINDS,
   SEARCH_EXCLUDE_USERS,
+  SEARCH_INCLUDE_BOTS,
   SEARCH_DATA_PATH,
   SEARCH_DB_PATH,
   SEARCH_PATH,
@@ -25,6 +26,7 @@ import {
 } from "./data-load.js";
 import { buildSearchDatabase } from "./search-db.js";
 import {
+  botUserIds,
   excludedUserIds,
   isChannelSearchable,
   isMessageSearchable,
@@ -88,7 +90,10 @@ export async function createSearchDatabase(spinner: Ora) {
   }
 
   // Withheld before anything is written, not filtered when something is read.
-  const hiddenUsers = excludedUserIds(SEARCH_EXCLUDE_USERS, users);
+  const hiddenUsers = new Set([
+    ...excludedUserIds(SEARCH_EXCLUDE_USERS, users),
+    ...(SEARCH_INCLUDE_BOTS ? [] : botUserIds(users)),
+  ]);
   const searchable = channels.filter((channel) =>
     isChannelSearchable(channel, SEARCH_EXCLUDE_KINDS),
   );
@@ -180,7 +185,10 @@ async function createSearchFile(spinner: Ora) {
     result.users[user] = users[user].name || users[user].real_name || "Unknown";
   }
 
-  const hiddenUsers = excludedUserIds(SEARCH_EXCLUDE_USERS, users);
+  const hiddenUsers = new Set([
+    ...excludedUserIds(SEARCH_EXCLUDE_USERS, users),
+    ...(SEARCH_INCLUDE_BOTS ? [] : botUserIds(users)),
+  ]);
 
   // Channels & Messages
   for (const [i, channel] of channels.entries()) {

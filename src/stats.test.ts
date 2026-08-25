@@ -7,9 +7,7 @@ const FRIDAY = "1589538600.000100";
 /** 2021-01-02T23:05:00Z is a Saturday. */
 const SATURDAY = "1609628700.000200";
 
-function statsOf(
-  ...channels: Array<[string, string, Array<any>]>
-) {
+function statsOf(...channels: Array<[string, string, Array<any>]>) {
   const stats = createStats({ customEmoji: new Set(["glitch_crab", "piggy"]) });
   for (const [id, name, messages] of channels) {
     stats.addChannel({ id, name }, messages);
@@ -207,6 +205,49 @@ describe("the day/hour cube", () => {
   });
 });
 
+describe("bots", () => {
+  // A person who once posted through an integration is not a bot. Inferring it
+  // from bot_id moved real members, and their whole ten years, onto the bots
+  // page - which showed up as a bots page whose total said 281 and whose own
+  // chart summed to 6 390.
+  it("does not turn a person into a bot because one message went through an app", () => {
+    const result = statsOf([
+      "C1",
+      "offtopic",
+      [
+        { ts: FRIDAY, user: "U1", bot_id: "B1", text: "posted via zapier" },
+        { ts: FRIDAY, user: "U1", text: "moi" },
+      ],
+    ]);
+
+    expect(result.byUser.U1.isBot).toBe(false);
+    expect(result.botMessages).toBe(0);
+    expect(result.messages).toBe(2);
+  });
+
+  it("counts a bot message that belongs to no account at all", () => {
+    const result = statsOf([
+      "C1",
+      "offtopic",
+      [{ ts: FRIDAY, bot_id: "B1", text: "beep" }],
+    ]);
+
+    expect(result.botMessages).toBe(1);
+  });
+
+  // The workspace's own word is the only thing that reclassifies an account.
+  it("takes the workspace's word for who is a bot", () => {
+    const stats = createStats({ bots: new Set(["U1"]) });
+    stats.addChannel({ id: "C1", name: "offtopic" }, [
+      { ts: FRIDAY, user: "U1", text: "no bot_id on this one" },
+    ]);
+
+    const result = stats.result();
+    expect(result.byUser.U1.isBot).toBe(true);
+    expect(result.botMessages).toBe(1);
+  });
+});
+
 describe("reactions", () => {
   const reacted = (name: string, users: Array<string>) => ({
     ts: FRIDAY,
@@ -246,7 +287,13 @@ describe("reactions", () => {
     const result = statsOf([
       "C1",
       "offtopic",
-      [{ ts: FRIDAY, user: "U9", reactions: [{ name: "piggy", users: ["U1"], count: 40 }] }],
+      [
+        {
+          ts: FRIDAY,
+          user: "U9",
+          reactions: [{ name: "piggy", users: ["U1"], count: 40 }],
+        },
+      ],
     ]);
 
     expect(result.emojiStats.piggy.count).toBe(40);
