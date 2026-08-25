@@ -54,10 +54,27 @@ export interface SearchDbMessage {
  *
  * The type comes from Slack's `mimetype`/`filetype` fields, never from the
  * filename. The filename cannot be trusted here for two reasons, both present
- * in the real archive: 19 files have no extension at all, because
+ * in the real archive: some files have no extension at all, because
  * download-files.ts takes the extension from the download URL and some URLs
  * carry none; and a PDF appears twice under one file id, once as `.pdf` and
  * once as the `.png` that the same code saves from Slack's `thumb_pdf`.
+ *
+ * Counted across all 74 channels and 1 084 375 messages:
+ *
+ *     attachments        42 422   (41 228 unique ids)
+ *     image by mimetype  40 588
+ *     image by filetype       0
+ *     neither field         676
+ *
+ * So the fallback below currently never fires - every real image is caught by
+ * mimetype. It stays because Slack's payload shape is not ours to depend on,
+ * but if it ever starts matching something, that is news rather than routine.
+ *
+ * The 676 with neither field are not files. They are `hidden_by_limit` (624,
+ * withheld by the free-plan retention limit), `tombstone` (51, deleted) and
+ * one `file_not_found`. None of them carries a name either, so none is
+ * findable by name and none has anything to preview: is_image = 0 is the
+ * right answer for every one, not a gap where a picture fell through.
  */
 const IMAGE_FILETYPES = new Set([
   "jpg",
