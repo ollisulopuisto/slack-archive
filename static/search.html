@@ -174,7 +174,7 @@
         </ul>
       );
 
-      const Message = ({ m, u, t, c }) => {
+      const Message = ({ m, u, t, c, p }) => {
         // Let's find the page
         const { pages } = window.search_data;
         // Returns the index of the first timestamp that's
@@ -183,7 +183,16 @@
         let href;
 
         if (channelPages) {
-          const index = channelPages.findIndex((pageTs) => pageTs < t);
+          // The PAGE comes from the parent on a thread reply, because the page
+          // index holds top-level timestamps only - a reply's own timestamp
+          // lands on whatever page range contains it, which is the parent's
+          // page until a thread runs on past the messages below it.
+          //
+          // The ANCHOR stays the reply's own timestamp: replies are rendered
+          // inside the parent's block, each with its own id, so that id is on
+          // the page either way.
+          const pageTsForLookup = p || t;
+          const index = channelPages.findIndex((pageTs) => pageTs < pageTsForLookup);
           const page = `${c}-${index}`;
           href = `index.html?c=${encodeURIComponent(page)}&ts=${t}`;
         }

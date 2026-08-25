@@ -109,16 +109,38 @@ export interface SearchMessageOptions {
  */
 export function toSearchMessages(
   messages: Array<ArchiveMessage>,
-  { hiddenUsers, includeBots }: SearchMessageOptions,
+  options: SearchMessageOptions,
 ): Array<SearchMessage> {
-  return messages
-    .filter((message) => includeBots || !message.bot_id)
+  // Replies are messages. They were never indexed - getMessages returns
+  // top-level messages with their replies nested inside them, and every
+  // builder mapped only the outer array - so 35 024 messages in this archive,
+  // about 3% of it and disproportionately the answers rather than the
+  // questions, could not be found by search and never could.
+  const flat: Array<ArchiveMessage> = [];
+
+  for (const message of messages) {
+    flat.push(message);
+
+    for (const reply of message.replies || []) {
+      // Slack repeats the parent as the first element of a thread in some
+      // payloads; the archiver strips that, but a reply that IS its parent
+      // would otherwise be indexed twice.
+      if (reply.ts === message.ts) continue;
+
+      flat.push({ ...reply, parentTs: message.ts } as ArchiveMessage);
+    }
+  }
+
+  return flat
+    .filter((message) => options.includeBots || !message.bot_id)
     .map((message) => {
       const searchMessage: SearchMessage = {
         m: message.text,
         u: message.user,
         t: message.ts,
       };
+
+      if (message.parentTs) searchMessage.p = message.parentTs as string;
 
       const files = (message.files || [])
         .filter((file: any) => file && file.id)
@@ -134,5 +156,5 @@ export function toSearchMessages(
 
       return searchMessage;
     })
-    .filter((message) => isMessageSearchable(message, hiddenUsers));
+    .filter((message) => isMessageSearchable(message, options.hiddenUsers));
 }

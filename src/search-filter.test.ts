@@ -187,6 +187,87 @@ describe("toSearchMessages", () => {
     ]);
   });
 
+  // 35 024 messages in the real archive live inside threads, and no index
+  // builder has ever seen them: getMessages nests replies inside their parent
+  // and every mapping walked only the outer array.
+  it("indexes thread replies, which nothing used to", () => {
+    const indexed = toSearchMessages(
+      [
+        {
+          ts: "100.0",
+          user: "U1",
+          text: "kysymys",
+          replies: [
+            { ts: "101.0", user: "U2", text: "vastaus" },
+            { ts: "102.0", user: "U3", text: "toinen vastaus" },
+          ],
+        },
+      ],
+      opts(),
+    );
+
+    expect(indexed.map((message) => message.m)).toEqual([
+      "kysymys",
+      "vastaus",
+      "toinen vastaus",
+    ]);
+  });
+
+  it("carries the parent timestamp so a reply can be linked to its page", () => {
+    const [, reply] = toSearchMessages(
+      [{ ts: "100.0", user: "U1", replies: [{ ts: "101.0", user: "U2" }] }],
+      opts(),
+    );
+
+    expect(reply.t).toBe("101.0");
+    expect(reply.p).toBe("100.0");
+  });
+
+  it("leaves the parent reference off a top-level message", () => {
+    const [message] = toSearchMessages([{ ts: "100.0", user: "U1" }], opts());
+    expect(message.p).toBeUndefined();
+  });
+
+  // Slack repeats the parent as the first element of a thread in some payloads.
+  it("does not index the parent twice when it appears among its own replies", () => {
+    const indexed = toSearchMessages(
+      [
+        {
+          ts: "100.0",
+          user: "U1",
+          text: "kysymys",
+          replies: [
+            { ts: "100.0", user: "U1", text: "kysymys" },
+            { ts: "101.0", user: "U2", text: "vastaus" },
+          ],
+        },
+      ],
+      opts(),
+    );
+
+    expect(indexed).toHaveLength(2);
+  });
+
+  it("applies the exclusions to replies as well as to parents", () => {
+    const indexed = toSearchMessages(
+      [
+        {
+          ts: "100.0",
+          user: "U1",
+          text: "kysymys",
+          replies: [
+            { ts: "101.0", user: "BOT", bot_id: "B1", text: "beep" },
+            { ts: "102.0", user: "U9", text: "hidden" },
+            { ts: "103.0", user: "U2", text: "vastaus" },
+          ],
+        },
+      ],
+      opts({ hiddenUsers: new Set(["U9"]) }),
+    );
+
+    expect(indexed.map((message) => message.m)).toEqual(["kysymys", "vastaus"]);
+  });
+
   it("leaves files off a message that has none", () => {
     const [message] = toSearchMessages(
       [{ ts: "1.0", user: "U1", text: "moi" }],

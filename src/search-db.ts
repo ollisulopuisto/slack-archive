@@ -56,6 +56,8 @@ export interface SearchDbMessage {
   t?: string;
   u?: string;
   m?: string;
+  /** Parent timestamp, on thread replies. See SearchMessage.p. */
+  p?: string;
   files?: Array<SearchDbFile>;
   reactions?: Array<SearchDbReaction>;
 }
@@ -131,6 +133,8 @@ export interface SearchDbInput {
 export interface SearchDbResult {
   /** Timestamp */
   t: string;
+  /** Parent timestamp on a thread reply, so a caller can link it. */
+  p: string | null;
   /** User id */
   u: string;
   /** Message text */
@@ -143,6 +147,7 @@ export interface SearchDbResult {
 
 const SEARCH_SQL = `SELECT
   m.timestamp AS t,
+  m.parent_timestamp AS p,
   m.user_id AS u,
   m.message AS m,
   m.channel_id AS c,
@@ -210,6 +215,10 @@ export async function buildSearchDatabase(
       channel_id TEXT,
       user_id TEXT,
       timestamp TEXT,
+      -- Set on thread replies: the message this one answers. A reply's own
+      -- timestamp cannot find its page, because the page index is built from
+      -- top-level timestamps only.
+      parent_timestamp TEXT,
       message TEXT
     )`);
     db.exec(
@@ -300,7 +309,9 @@ export async function buildSearchDatabase(
       "INSERT OR REPLACE INTO channels (id, name, kind, is_archived) VALUES (?, ?, ?, ?)",
     );
     const msgStmt = db.prepare(
-      "INSERT OR REPLACE INTO messages (id, channel_id, user_id, timestamp, message) VALUES (?, ?, ?, ?, ?)",
+      `INSERT OR REPLACE INTO messages
+       (id, channel_id, user_id, timestamp, parent_timestamp, message)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     );
     const ftsStmt = db.prepare(
       "INSERT OR REPLACE INTO messages_fts (id, message) VALUES (?, ?)",
@@ -346,7 +357,14 @@ export async function buildSearchDatabase(
         const id = `${channel.id}-${message.t}`;
         const text = message.m || "";
 
-        msgStmt.run([id, channel.id, message.u ?? null, message.t, text]);
+        msgStmt.run([
+          id,
+          channel.id,
+          message.u ?? null,
+          message.t,
+          message.p ?? null,
+          text,
+        ]);
         ftsStmt.run([id, indexableText(message)]);
 
         for (const reaction of message.reactions || []) {

@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.148] - 2026-08-25
+
+### Fixed
+- **Thread replies are in the search index. They never were.** `getMessages`
+  returns top-level messages with their replies nested inside them, and every
+  index builder mapped only the outer array - so **35,024 messages in this
+  archive, about 3% of it, could not be found by search and never could.**
+  Disproportionately the answers rather than the questions.
+
+  Found by reconciling two counts that should have matched: the archiver
+  counted 1,128,017 messages, the rebuilt index held 1,023,386, and the
+  exclusions accounted for all but 33,543 of the difference. The residual was
+  the replies.
+
+  A reply carries `p`, its parent's timestamp, because indexing it is easy and
+  *linking* it is not: the page index is built from top-level timestamps only,
+  so a reply's own timestamp resolves to whichever page range contains it -
+  the parent's page usually, and the wrong one whenever a thread ran on past
+  the messages below it. The page now comes from the parent and the anchor
+  stays the reply's own id, which is rendered inside the parent's block either
+  way. The database keeps it as `parent_timestamp` and returns it, so the
+  Slack bot can link a reply too.
+
+  Exclusions apply to replies exactly as to parents - a bot's answer in a
+  thread is still a bot's answer - and a parent repeated among its own replies,
+  which some Slack payloads do, is indexed once.
+
 ## [v26.08.25.147] - 2026-08-25
 
 ### Fixed

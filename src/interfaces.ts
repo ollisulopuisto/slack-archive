@@ -62,6 +62,17 @@ export type SearchMessage = {
   t?: string; // Timestamp
   c?: string; // Channel
   /**
+   * The timestamp of the message this one replies to, on thread replies only.
+   *
+   * It is what makes a reply linkable. The page index is built from top-level
+   * timestamps, so a reply's own timestamp resolves to whichever page range
+   * happens to contain it - the parent's page usually, and the wrong one
+   * whenever a thread ran on past the messages below it. The page is found by
+   * the parent; the anchor stays the reply's own id, which is rendered inside
+   * the parent's block.
+   */
+  p?: string;
+  /**
    * Attachment metadata, for search. Without it an image posted with no
    * caption cannot be found by any term at all: its message text is empty.
    */
