@@ -132,23 +132,39 @@ function add(
 }
 
 /**
- * The names a person is no longer using, oldest first.
+ * What somebody was called at a given moment.
  *
- * Their current name is excluded: the archive already shows that one, and
- * "also known as bentsohana" next to bentsohana is noise.
+ * Better than listing every name they have ever had, and much smaller: a
+ * ten-year-old message signed with today's display name wants one answer -
+ * who was this, then - not a catalogue of thirty-seven. Listing them all put
+ * 1 338 bytes on every message and made 62% of a rendered page a tooltip.
+ *
+ * The windows are sighting windows, not tenures: `first` and `last` are when
+ * the archive SAW a name in use. A message between two sightings of the same
+ * name is inside that window; a message before any sighting gets the earliest
+ * name, since a name seen in 2016 was more likely in use just before then than
+ * one first seen in 2024.
  */
-export function formerNames(
+export function nameAt(
   history: UserNames,
   userId: string | undefined,
-  currentName: string | undefined,
-): Array<string> {
-  if (!userId) return [];
+  iso: string,
+): string | null {
+  if (!userId) return null;
 
-  const current = (currentName || "").trim().toLowerCase();
+  const names = history[userId] || [];
+  if (names.length === 0) return null;
 
-  return (history[userId] || [])
-    .map((name) => name.nick)
-    .filter((nick) => nick.trim().toLowerCase() !== current);
+  const covering = names.find((name) => iso >= name.first && iso <= name.last);
+  if (covering) return covering.nick;
+
+  // Otherwise the most recent name whose window had already begun.
+  const earlier = names.filter((name) => name.first <= iso);
+  if (earlier.length > 0) {
+    return earlier[earlier.length - 1].nick;
+  }
+
+  return names[0].nick;
 }
 
 /**

@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.149] - 2026-08-25
+
+### Changed
+- **A message now says what its author was called when they wrote it**, instead
+  of listing every name they have ever had.
+
+  `.138` put `Also known as: <every name>` on each message. For somebody with
+  37 names that is 1,338 bytes per message, repeated on every one they ever
+  wrote: **62% of a rendered page was tooltip**, and the whole archive came to
+  969 MB against 588 MB for the same pages without it.
+
+  It was also the wrong answer. On a 2016 message the useful thing is not a
+  catalogue - it is `Then known as katthufvud`. The name history carries dated
+  windows, so the archive can simply say which name was in use at that moment,
+  falling back to the most recent name already begun when a message falls
+  between two sightings. The full list still lives on the profile page, one
+  click away.
+
+      one page      1,219,099 B  ->  498,942 B
+      its tooltips    758,939 B  ->   38,782 B
+      whole tree          969 MB ->      588 MB
+
 ## [v26.08.25.148] - 2026-08-25
 
 ### Fixed

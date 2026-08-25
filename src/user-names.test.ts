@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  nameAt,
   mineNames,
   recordNames,
   slackTimestampToIso,
@@ -337,5 +338,55 @@ describe("recordNames", () => {
     expect(before.U1).toHaveLength(1);
     expect(before.U1[0].last).toBe("2016-10-06T00:00:00.000Z");
     expect(before.U1[0].sources).toEqual(["mention"]);
+  });
+});
+
+describe("nameAt", () => {
+  const history = {
+    U1: [
+      {
+        nick: "dst",
+        first: "2016-10-06T00:00:00.000Z",
+        last: "2016-11-22T00:00:00.000Z",
+        sources: ["mention"],
+      },
+      {
+        nick: "katthufvud",
+        first: "2016-11-24T00:00:00.000Z",
+        last: "2018-06-19T00:00:00.000Z",
+        sources: ["mention"],
+      },
+      {
+        nick: "beerhana",
+        first: "2023-04-19T00:00:00.000Z",
+        last: "2025-08-07T00:00:00.000Z",
+        sources: ["html"],
+      },
+    ],
+  };
+
+  it("answers with the name in use at that moment", () => {
+    expect(nameAt(history, "U1", "2017-05-01T00:00:00.000Z")).toBe(
+      "katthufvud",
+    );
+    expect(nameAt(history, "U1", "2016-10-10T00:00:00.000Z")).toBe("dst");
+    expect(nameAt(history, "U1", "2024-01-01T00:00:00.000Z")).toBe("beerhana");
+  });
+
+  // Between two windows the archive simply did not see them. The last name it
+  // did see is a better answer than the next one it would see years later.
+  it("uses the most recent name already begun when nothing covers the moment", () => {
+    expect(nameAt(history, "U1", "2020-01-01T00:00:00.000Z")).toBe(
+      "katthufvud",
+    );
+  });
+
+  it("uses the earliest name for a message older than any sighting", () => {
+    expect(nameAt(history, "U1", "2016-01-01T00:00:00.000Z")).toBe("dst");
+  });
+
+  it("has no answer for somebody with no history", () => {
+    expect(nameAt(history, "U9", "2020-01-01T00:00:00.000Z")).toBeNull();
+    expect(nameAt(history, undefined, "2020-01-01T00:00:00.000Z")).toBeNull();
   });
 });

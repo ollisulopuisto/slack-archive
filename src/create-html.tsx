@@ -49,7 +49,7 @@ import { write } from "./data-write.js";
 import { getSlackArchiveData } from "./archive-data.js";
 import { getEmojiFilePath, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
 import { getName } from "./users.js";
-import { formerNames, UserNames } from "./user-names.js";
+import { nameAt, slackTimestampToIso, UserNames } from "./user-names.js";
 import { botUserIds, isChannelSearchable } from "./search-filter.js";
 import { UserAvatars } from "./user-avatars.js";
 import {
@@ -248,10 +248,19 @@ interface MessageProps {
 const Message: React.FunctionComponent<MessageProps> = (props) => {
   const { message } = props;
   const username = getName(message.user, users);
-  // People here rename themselves constantly, so a ten-year-old message signed
-  // with today's name is unreadable. The archive knows the old ones; the title
-  // is where they fit without changing what the message looks like.
-  const alsoKnownAs = formerNames(userNames, message.user, username);
+
+  // What they were called WHEN THEY WROTE IT, not every name they have ever
+  // had. People here rename themselves constantly, so a ten-year-old message
+  // signed with today's name is unreadable - but the answer to that is one
+  // name, not a catalogue. Listing all of them put up to 1 338 bytes on every
+  // message and made 62% of a rendered page tooltips; the full list lives on
+  // the profile page, one click away.
+  const iso = slackTimestampToIso(message.ts);
+  const thenKnownAs = iso ? nameAt(userNames, message.user, iso) : null;
+  const wasCalled =
+    thenKnownAs && thenKnownAs.toLowerCase() !== (username || "").toLowerCase()
+      ? thenKnownAs
+      : null;
   const slackCallbacks = {
     user: ({ id }: { id: string }) => `@${getName(id, users)}`,
   };
@@ -264,11 +273,7 @@ const Message: React.FunctionComponent<MessageProps> = (props) => {
       <div className="">
         <span
           className="sender"
-          title={
-            alsoKnownAs.length > 0
-              ? `Also known as: ${alsoKnownAs.join(", ")}`
-              : undefined
-          }
+          title={wasCalled ? `Then known as ${wasCalled}` : undefined}
         >
           {username}
         </span>
