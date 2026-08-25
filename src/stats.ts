@@ -8,6 +8,29 @@ export interface ChannelUse {
   messages: number;
 }
 
+/**
+ * Messages per day, and within a day per hour, stored sparsely.
+ *
+ * This is the only bucket the drill-down actually keeps: a year, a month and a
+ * day are all sums of it. Deriving the upper levels rather than counting them
+ * separately means the four levels of the drill-down cannot disagree with each
+ * other, which is the failure that makes a chart like this untrustworthy.
+ *
+ *     { "2020-05-15": { "14": 3, "15": 7 } }
+ */
+export type DayHourCube = Record<string, Record<string, number>>;
+
+export interface ChannelStats {
+  id: string;
+  name: string;
+  messages: number;
+  first: string;
+  last: string;
+  byDayHour: DayHourCube;
+  /** User id -> messages they posted here. */
+  byUser: Record<string, number>;
+}
+
 export interface UserStats {
   userId: string;
   messages: number;
@@ -26,6 +49,7 @@ export interface UserStats {
   channels: Array<ChannelUse>;
   /** Channel id -> when they joined, for the channels that recorded it. */
   joined: Record<string, string>;
+  byDayHour: DayHourCube;
 }
 
 export interface WorkspaceStats {
@@ -44,6 +68,8 @@ export interface WorkspaceStats {
   emoji: Record<string, number>;
   channelNames: Record<string, string>;
   byUser: Record<string, UserStats>;
+  byChannel: Record<string, ChannelStats>;
+  byDayHour: DayHourCube;
 }
 
 /**
@@ -76,7 +102,13 @@ function emptyUser(userId: string): UserStats {
     byWeekday: new Array(7).fill(0),
     channels: [],
     joined: {},
+    byDayHour: {},
   };
+}
+
+function addToCube(cube: DayHourCube, day: string, hour: number) {
+  const hours = (cube[day] = cube[day] || {});
+  hours[hour] = (hours[hour] || 0) + 1;
 }
 
 /**
@@ -102,6 +134,8 @@ export function createStats() {
     emoji: {},
     channelNames: {},
     byUser: {},
+    byChannel: {},
+    byDayHour: {},
   };
 
   const perUserChannel = new Map<string, Map<string, number>>();
@@ -142,6 +176,27 @@ export function createStats() {
     stats.byWeekday[weekday]++;
     stats.files += message.files?.length || 0;
 
+    const day = `${year}-${String(when.getMonth() + 1).padStart(2, "0")}-${String(
+      when.getDate(),
+    ).padStart(2, "0")}`;
+    const hour = when.getHours();
+    addToCube(stats.byDayHour, day, hour);
+
+    const channelStats = channel.id ? stats.byChannel[channel.id] : null;
+    if (channelStats) {
+      channelStats.messages++;
+      addToCube(channelStats.byDayHour, day, hour);
+      if (user) {
+        channelStats.byUser[user] = (channelStats.byUser[user] || 0) + 1;
+      }
+      if (!channelStats.first || message.ts! < channelStats.first) {
+        channelStats.first = message.ts!;
+      }
+      if (!channelStats.last || message.ts! > channelStats.last) {
+        channelStats.last = message.ts!;
+      }
+    }
+
     if (!stats.first || message.ts! < stats.first) stats.first = message.ts!;
     if (!stats.last || message.ts! > stats.last) stats.last = message.ts!;
 
@@ -165,6 +220,7 @@ export function createStats() {
     person.byYear[year] = (person.byYear[year] || 0) + 1;
     person.byHour[when.getHours()]++;
     person.byWeekday[weekday]++;
+    addToCube(person.byDayHour, day, hour);
 
     if (!person.first || message.ts! < person.first) person.first = message.ts!;
     if (!person.last || message.ts! > person.last) person.last = message.ts!;
@@ -185,6 +241,15 @@ export function createStats() {
       stats.channels++;
       if (channel.id) {
         stats.channelNames[channel.id] = channel.name || channel.id;
+        stats.byChannel[channel.id] = stats.byChannel[channel.id] || {
+          id: channel.id,
+          name: channel.name || channel.id,
+          messages: 0,
+          first: "",
+          last: "",
+          byDayHour: {},
+          byUser: {},
+        };
       }
 
       const walk = (message: ArchiveMessage, isReply: boolean) => {

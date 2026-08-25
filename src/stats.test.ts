@@ -136,6 +136,75 @@ describe("createStats", () => {
   });
 });
 
+describe("the day/hour cube", () => {
+  // The drill-down is year -> month -> day -> hour, and every level of that is
+  // a sum of the same buckets. Storing only the leaves means the four levels
+  // can never disagree with each other.
+  it("records one bucket per day and hour, sparsely", () => {
+    const result = statsOf([
+      "C1",
+      "offtopic",
+      [
+        { ts: FRIDAY, user: "U1" },
+        { ts: FRIDAY, user: "U1" },
+        { ts: SATURDAY, user: "U2" },
+      ],
+    ]);
+
+    const days = Object.keys(result.byDayHour).sort();
+    expect(days).toHaveLength(2);
+    expect(
+      Object.values(result.byDayHour[days[0]]).reduce((a, b) => a + b, 0),
+    ).toBe(2);
+    // Sparse: an hour with nothing in it is absent, not a zero.
+    expect(Object.keys(result.byDayHour[days[1]])).toHaveLength(1);
+  });
+
+  it("keeps a cube per person and per channel as well", () => {
+    const result = statsOf(
+      ["C1", "offtopic", [{ ts: FRIDAY, user: "U1" }]],
+      ["C2", "yleinen", [{ ts: SATURDAY, user: "U1" }]],
+    );
+
+    expect(Object.keys(result.byUser.U1.byDayHour)).toHaveLength(2);
+    expect(Object.keys(result.byChannel.C1.byDayHour)).toHaveLength(1);
+    expect(result.byChannel.C2.name).toBe("yleinen");
+    expect(result.byChannel.C1.messages).toBe(1);
+  });
+
+  it("agrees with the totals it is drawn beside", () => {
+    const result = statsOf([
+      "C1",
+      "offtopic",
+      [
+        { ts: FRIDAY, user: "U1" },
+        { ts: SATURDAY, user: "U2" },
+        { ts: SATURDAY, user: "U2" },
+      ],
+    ]);
+
+    const fromCube = Object.values(result.byDayHour)
+      .flatMap((hours) => Object.values(hours))
+      .reduce((a, b) => a + b, 0);
+
+    expect(fromCube).toBe(result.messages);
+  });
+
+  it("counts who posted in a channel", () => {
+    const result = statsOf([
+      "C1",
+      "offtopic",
+      [
+        { ts: FRIDAY, user: "U1" },
+        { ts: FRIDAY, user: "U2" },
+        { ts: SATURDAY, user: "U2" },
+      ],
+    ]);
+
+    expect(result.byChannel.C1.byUser).toEqual({ U1: 1, U2: 2 });
+  });
+});
+
 describe("profileEvents", () => {
   it("turns the archive into one dated story per person", () => {
     const stats = createStats();

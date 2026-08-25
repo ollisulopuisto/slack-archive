@@ -32,6 +32,7 @@ import {
   NAMES_PATH,
   STATS_PATH,
   getProfileFilePath,
+  getChannelStatsFilePath,
   OUT_DIR,
   MESSAGES_JS_PATH,
   FORCE_HTML_GENERATION,
@@ -44,7 +45,9 @@ import { getEmojiFilePath, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
 import { getName } from "./users.js";
 import { formerNames, UserNames } from "./user-names.js";
 import {
+  ChannelStats,
   createStats,
+  DayHourCube,
   profileEvents,
   ProfileEvent,
   UserStats,
@@ -494,6 +497,9 @@ const Header: React.FunctionComponent<HeaderProps> = (props) => {
     <div className="header">
       <h1>{channel.name || channel.id}</h1>
       {created}
+      <span className="created">
+        <a href={`channel-${channel.id}.html`}>Ten years of this channel</a>
+      </span>
       <p className="topic">{channel.topic?.value}</p>
       <Pagination
         channelId={channel.id!}
@@ -641,6 +647,35 @@ function formatDay(ts: string): string {
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+/**
+ * The clickable year -> month -> day -> hour chart.
+ *
+ * Only the leaves travel: one number per day and hour, sparsely. Every level
+ * above is summed in the browser, so the four levels cannot disagree - and a
+ * decade of hourly buckets would be 87 600 numbers if it shipped dense.
+ *
+ * Server-rendered charts sit above this one, so a reader with no JavaScript
+ * still gets the year and hour-of-day pictures and every number in a table.
+ */
+const Drilldown: React.FunctionComponent<{
+  id: string;
+  cube: DayHourCube;
+}> = ({ id, cube }) => (
+  <div className="viz-figure">
+    <div className="viz-figure-caption">
+      <strong>Drill down</strong>
+      <span className="viz-note"> click a year, then a month, then a day</span>
+    </div>
+    <div className="drilldown" data-drilldown={`${id}-data`} />
+    <script
+      type="application/json"
+      id={`${id}-data`}
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(cube) }}
+    />
+    <script src={`${base}drilldown.js`} defer />
+  </div>
+);
+
 function yearData(byYear: Record<string, number>): Array<Datum> {
   const years = Object.keys(byYear).sort();
   if (years.length === 0) return [];
@@ -758,6 +793,8 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
         <Figure title="Messages per year" data={years}>
           <Columns data={years} />
         </Figure>
+
+        <Drilldown id={`dd-${userId}`} cube={person.byDayHour} />
 
         <Figure
           title="When they post"
@@ -887,6 +924,8 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
           <Columns data={years} />
         </Figure>
 
+        <Drilldown id="dd-workspace" cube={data.byDayHour} />
+
         <Figure
           title="Hour of day"
           note="when this workspace is awake"
@@ -920,7 +959,7 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
             data={channels.slice(0, 25).map((channel) => ({
               label: `#${channel.name}`,
               value: channel.messages,
-              href: `${channel.id}-0.html`,
+              href: `channel-${channel.id}.html`,
             }))}
           />
         </details>
@@ -930,6 +969,70 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
             Most-used reactions <span className="count">{emoji.length}</span>
           </summary>
           <Bars data={emoji} />
+        </details>
+      </div>
+    </HtmlPage>
+  );
+};
+
+/** The same three questions asked of one channel. */
+const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
+  channel,
+}) => {
+  const posters = Object.entries(channel.byUser)
+    .map(([userId, messages]) => ({ userId, messages }))
+    .sort((a, b) => b.messages - a.messages);
+
+  const byYear: Record<string, number> = {};
+  const byHour = new Array(24).fill(0);
+  for (const [day, hours] of Object.entries(channel.byDayHour)) {
+    for (const [hour, n] of Object.entries(hours)) {
+      byYear[day.slice(0, 4)] = (byYear[day.slice(0, 4)] || 0) + n;
+      byHour[Number(hour)] += n;
+    }
+  }
+
+  const years = yearData(byYear);
+
+  return (
+    <HtmlPage>
+      <div id="stats">
+        <h1>#{channel.name}</h1>
+        <p className="topic">
+          {formatDay(channel.first)} - {formatDay(channel.last)} ·{" "}
+          <a href={`${channel.id}-0.html`}>read the messages</a>
+        </p>
+
+        <div className="viz-tiles">
+          <Tile label="Messages" value={formatCount(channel.messages)} />
+          <Tile label="People" value={formatCount(posters.length)} />
+          <Tile
+            label="Active years"
+            value={formatCount(Object.keys(byYear).length)}
+          />
+        </div>
+
+        <Figure title="Messages per year" data={years}>
+          <Columns data={years} />
+        </Figure>
+
+        <Drilldown id={`dd-${channel.id}`} cube={channel.byDayHour} />
+
+        <Figure title="Hour of day" data={hourData(byHour)}>
+          <Columns data={hourData(byHour)} labelEvery={2} />
+        </Figure>
+
+        <details className="drill" open>
+          <summary>
+            Who talks here <span className="count">{posters.length}</span>
+          </summary>
+          <Bars
+            data={posters.slice(0, 25).map((poster) => ({
+              label: getName(poster.userId, users) || poster.userId,
+              value: poster.messages,
+              href: `user-${poster.userId}.html`,
+            }))}
+          />
         </details>
       </div>
     </HtmlPage>
@@ -952,6 +1055,14 @@ async function renderStatsAndProfiles(channels: Array<Channel>) {
 
   await renderAndWrite(<StatsPage data={stats} />, STATS_PATH);
 
+  for (const channel of Object.values(stats.byChannel)) {
+    if (channel.messages === 0) continue;
+    await renderAndWrite(
+      <ChannelPage channel={channel} />,
+      getChannelStatsFilePath(channel.id),
+    );
+  }
+
   let written = 0;
   for (const person of Object.values(stats.byUser)) {
     if (person.messages === 0) continue;
@@ -963,7 +1074,9 @@ async function renderStatsAndProfiles(channels: Array<Channel>) {
   }
 
   spinner.succeed(
-    `Counted ${formatCount(stats.messages)} messages: stats page and ${written} profiles.`,
+    `Counted ${formatCount(stats.messages)} messages: stats, ${
+      Object.values(stats.byChannel).filter((c) => c.messages > 0).length
+    } channels and ${written} profiles.`,
   );
 }
 

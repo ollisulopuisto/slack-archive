@@ -495,7 +495,8 @@ audio, video {
   margin: 0 0 26px;
 }
 
-.viz-figure figcaption {
+.viz-figure figcaption,
+.viz-figure-caption {
   font-weight: 700;
   margin-bottom: 8px;
 }
@@ -628,4 +629,98 @@ table.timeline td.timestamp {
   color: var(--viz-ink-muted);
   white-space: nowrap;
   width: 1%;
+}
+
+/* Drill-down: year -> month -> day -> hour. Bars are buttons, so they focus
+   and respond to the keyboard; the disabled ones are the empty buckets, which
+   are shown rather than skipped so a gap looks like a gap. */
+.dd-crumbs {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.dd-back {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--viz-series);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.dd-sep,
+.dd-total {
+  color: var(--viz-ink-muted);
+}
+
+.dd-here {
+  font-weight: 700;
+}
+
+.dd-total {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.dd-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 150px;
+  border-bottom: 1px solid var(--viz-axis);
+  padding-bottom: 2px;
+}
+
+.dd-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  position: relative;
+}
+
+.dd-cell:disabled {
+  cursor: default;
+}
+
+.dd-bar {
+  display: block;
+  background: var(--viz-series);
+  border-radius: 4px 4px 0 0;
+  min-height: 1px;
+}
+
+.dd-cell:hover:not(:disabled) .dd-bar,
+.dd-cell:focus-visible .dd-bar {
+  background: var(--viz-ink);
+}
+
+.dd-cell-label {
+  font-size: 10px;
+  color: var(--viz-ink-muted);
+  text-align: center;
+  overflow: hidden;
+  white-space: nowrap;
+  padding-top: 3px;
+}
+
+/* A month of days or a day of hours fits; ten years of months does not, so the
+   labels thin out rather than overlapping. */
+.dd-chart:has(.dd-cell:nth-child(20)) .dd-cell-label {
+  font-size: 9px;
+}
+
+.dd-chart:has(.dd-cell:nth-child(29)) .dd-cell:nth-child(even) .dd-cell-label {
+  visibility: hidden;
 }

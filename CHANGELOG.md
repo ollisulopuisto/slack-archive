@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.140] - 2026-08-25
+
+### Added
+- **Drill down through time: year -> month -> day -> hour.** Click a year and it
+  opens into twelve months, click a month for its days, click a day for its
+  twenty-four hours, with a breadcrumb back out. On all three things the archive
+  can be asked about: the whole workspace (`stats.html`), each channel
+  (`channel-<id>.html`, new, linked from every channel header and from the
+  rankings) and each person (`user-<id>.html`).
+
+  Only the leaves are stored - one number per day and hour, sparsely - and every
+  level above is summed in the browser. Counting each level separately would let
+  them disagree, and a drill-down whose levels do not add up is worse than none;
+  there is a test that the cube totals the same as the message count drawn beside
+  it. It is also what keeps the payload small: a decade of hourly buckets is
+  87,600 numbers if it ships dense, and a few hundred kilobytes if it ships as
+  the days that actually had messages.
+
+  The bars are `<button>`s, not SVG rects. A rect cannot take focus, and this is
+  a control rather than a picture - so it works from the keyboard and reads as
+  what it is. Empty buckets are drawn and disabled rather than skipped, so a
+  quiet month looks quiet instead of vanishing.
+
+  The script is plain, non-module JavaScript for a specific reason: these pages
+  are opened straight off a disk over `file://`, where a module script is
+  blocked by CORS and would silently do nothing. The server-rendered charts stay
+  above it, so a reader with no JavaScript still gets years, hour-of-day and
+  every number in a table.
+
 ## [v26.08.25.139] - 2026-08-25
 
 ### Added

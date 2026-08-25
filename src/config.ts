@@ -88,6 +88,10 @@ export const SEARCH_PATH = path.join(OUT_DIR, "search.html");
 export const NAMES_PATH = path.join(HTML_DIR, "names.html");
 export const STATS_PATH = path.join(HTML_DIR, "stats.html");
 
+export function getChannelStatsFilePath(channelId: string) {
+  return path.join(HTML_DIR, `channel-${channelId}.html`);
+}
+
 export function getProfileFilePath(userId: string) {
   return path.join(HTML_DIR, `user-${userId}.html`);
 }
