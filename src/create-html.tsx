@@ -35,6 +35,7 @@ import {
   STATS_PATH,
   BOTS_PATH,
   FILES_BASE_URL,
+  HTML_EXCLUDE_KINDS,
   getAvatarHistoryFilePath,
   getProfileFilePath,
   getChannelStatsFilePath,
@@ -49,7 +50,7 @@ import { getSlackArchiveData } from "./archive-data.js";
 import { getEmojiFilePath, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
 import { getName } from "./users.js";
 import { formerNames, UserNames } from "./user-names.js";
-import { botUserIds } from "./search-filter.js";
+import { botUserIds, isChannelSearchable } from "./search-filter.js";
 import { UserAvatars } from "./user-avatars.js";
 import {
   ChannelStats,
@@ -86,6 +87,19 @@ const MESSAGE_CHUNK = 1000;
 let users: Users = {};
 let userNames: UserNames = {};
 let stats: WorkspaceStats | null = null;
+
+/**
+ * The channels this archive may render.
+ *
+ * One predicate, applied everywhere channels are enumerated: the pages, the
+ * index, the stats and the counting behind them. isChannelSearchable asks
+ * exactly the same question of a different list, so it is the same function.
+ */
+function publishable(channels: Array<Channel>): Array<Channel> {
+  return channels.filter((channel) =>
+    isChannelSearchable(channel, HTML_EXCLUDE_KINDS),
+  );
+}
 let userAvatars: UserAvatars = {};
 let slackArchiveData: SlackArchiveData = { channels: {} };
 let me: User | null;
@@ -1340,7 +1354,7 @@ async function renderStatsAndProfiles(channels: Array<Channel>) {
 
 async function renderIndexPage() {
   base = "html/";
-  const channels = await getChannels();
+  const channels = publishable(await getChannels());
   const page = <IndexPage channels={channels} />;
 
   return renderAndWrite(page, INDEX_PATH);
@@ -1468,7 +1482,17 @@ async function createHtmlForChannel({
   );
 }
 
-export async function createHtmlForChannels(channels: Array<Channel> = []) {
+export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
+  const channels = publishable(allChannels);
+
+  if (channels.length < allChannels.length) {
+    console.log(
+      `\n Not rendering ${allChannels.length - channels.length} channels (${[
+        ...HTML_EXCLUDE_KINDS,
+      ].join(", ")})`,
+    );
+  }
+
   console.log(`\n Creating HTML files for ${channels.length} channels...`);
 
   users = await getUsers();
@@ -1489,7 +1513,7 @@ export async function createHtmlForChannels(channels: Array<Channel> = []) {
   }
 
   await renderNamesPage();
-  await renderStatsAndProfiles(await getChannels());
+  await renderStatsAndProfiles(publishable(await getChannels()));
   await renderIndexPage();
 
   // Copy in fonts & css

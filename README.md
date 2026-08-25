@@ -56,6 +56,9 @@ slack-archive --bot
                             whose pages and media live in different places.
 --no-slack-connect:         Don't connect to Slack, just generate HTML from local data.
 --force-html-generation:    Force regeneration of HTML files. Useful after slack-archive upgrades.
+--html-exclude-kinds        Channel kinds to leave out of the HTML entirely,
+                            e.g. im,mpim,private. Filters the pages and the
+                            statistics behind them, not just the pages.
 ```
 
 ## Getting a token

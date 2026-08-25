@@ -111,6 +111,26 @@ export const SEARCH_EXCLUDE_KINDS = new Set(
  */
 export const SEARCH_INCLUDE_BOTS = findCliParameter("--search-include-bots");
 
+/**
+ * Channel kinds to leave out of the generated HTML entirely, e.g. `im,mpim`.
+ *
+ * Not rendering beats gating. A page that was never written cannot leak through
+ * a wrong proxy rule, a forgotten auth block or a shared cookie - and the
+ * archive was built with one person's user token, so their DMs are their
+ * conversations with named other people. They can publish their own half of
+ * those; not the other half.
+ *
+ * This filters the pages AND the counting. Excluding only the pages would leave
+ * every profile's channel list naming the DM channels and every total including
+ * them, which says who talks to whom privately and how much.
+ */
+export const HTML_EXCLUDE_KINDS = new Set(
+  (getCliParameter("--html-exclude-kinds") || "")
+    .split(",")
+    .map((kind) => kind.trim().toLowerCase())
+    .filter((kind) => kind.length > 0),
+);
+
 /** Users whose messages the search index must never hold, by handle or id. */
 export const SEARCH_EXCLUDE_USERS = (
   getCliParameter("--search-exclude-users") || ""

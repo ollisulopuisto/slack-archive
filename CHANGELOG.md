@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.146] - 2026-08-25
+
+### Added
+- **`--html-exclude-kinds`** leaves whole channel kinds out of the generated
+  archive - `im,mpim,private` for one meant to be published.
+
+  It filters the counting as well as the pages, which is the point. Excluding
+  only the pages leaves every profile's channel list naming the DM channels and
+  every total including them: who talks to whom privately, and how much,
+  reconstructable from a site that appears to have no DMs in it. Verified on the
+  real channel list: 48 channels not rendered, no DM or group-DM pages, and
+  neither private channel named anywhere in the output.
+
+  Not rendering rather than gating, for an archive that is about to be served:
+  a page that was never written cannot leak through a wrong proxy rule, a
+  forgotten auth block or a shared cookie. And this archive was built with one
+  person's user token, so its DMs are their conversations with named other
+  people - they can publish their own half of those, not the other half.
+
 ## [v26.08.25.145] - 2026-08-25
 
 ### Fixed
