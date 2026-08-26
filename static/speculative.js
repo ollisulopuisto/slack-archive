@@ -116,8 +116,16 @@
       var low = Number(target.dataset.low);
       var high = Number(target.dataset.high);
 
-      return isFinite(low) && isFinite(high) && high > low
-        ? { element: value, low: low, high: high, like: target.dataset.speculative }
+      var centre = toNumber(target.dataset.speculative);
+
+      return isFinite(low) && isFinite(high) && high > low && centre !== null
+        ? {
+            element: value,
+            centre: centre,
+            low: low,
+            high: high,
+            like: target.dataset.speculative,
+          }
         : null;
     })
     .filter(Boolean);
@@ -131,6 +139,25 @@
     return low + (high - low) * t;
   }
 
+  /**
+   * The same idea, but only the last few digits move.
+   *
+   * Swinging the leading digits makes the number change WIDTH, which reflows
+   * the tile it lives in - and it also reads as a claim about how uncertain
+   * the estimate is, which the interval in the tooltip already states properly.
+   * The shimmer is there to say "this will not sit still", not to draw the
+   * confidence interval; so it is capped, and never wider than the real
+   * interval it sits inside.
+   */
+  function shimmer(centre, low, high) {
+    var room = Math.min(centre - low, high - centre);
+    var amplitude = Math.max(0, Math.min(room, 500));
+
+    if (amplitude === 0) return centre;
+
+    return draw(centre - amplitude, centre + amplitude);
+  }
+
   function points(text) {
     return (text || "").split(" ").map(function (pair) {
       var xy = pair.split(",");
@@ -142,7 +169,10 @@
     if (!toggle.checked || !motion) return;
 
     wobblers.forEach(function (w) {
-      w.element.textContent = format(Math.round(draw(w.low, w.high)), w.like);
+      w.element.textContent = format(
+        Math.round(shimmer(w.centre, w.low, w.high)),
+        w.like,
+      );
     });
 
     lines.forEach(function (line) {

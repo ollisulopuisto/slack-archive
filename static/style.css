@@ -1684,3 +1684,23 @@ body.speculating .viz-estimate-cap {
     height 900ms ease-in-out,
     points 900ms ease-in-out;
 }
+
+/* A number that is being redrawn must not resize its own box. The tile is
+   fixed width and the speculative figure is longer than the count it replaces,
+   so without this it wraps to two lines and the layout jumps every second. */
+.viz-tile-value {
+  white-space: nowrap;
+}
+
+body.speculating .viz-tile[data-speculative] .viz-tile-value {
+  font-size: clamp(1.1rem, 4.2cqw, 1.6rem);
+}
+
+.viz-tile {
+  container-type: inline-size;
+  overflow: hidden;
+}
+
+.viz-bars-value[data-speculative] {
+  white-space: nowrap;
+}

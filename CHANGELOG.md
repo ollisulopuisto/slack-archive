@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.27.188] - 2026-08-27
+
+### Fixed
+- **The wobbling numbers stayed inside their boxes.** A speculative figure is
+  longer than the count it replaces, and redrawing it across the full interval
+  changed its width - so "1 233 250" wrapped to two lines and the layout jumped
+  once a second. Only the last few digits move now, capped at the real interval
+  so it can never overstate it, and the tile refuses to reflow. The shimmer is
+  there to say the number will not sit still; the interval it came from is
+  stated in the tooltip, which is the honest place for it.
+
 ## [v26.08.26.187] - 2026-08-26
 
 ### Changed
