@@ -330,3 +330,52 @@ describe("the page index cannot name a channel the file excludes", () => {
     expect(pages.C_PRIVATE).toBeUndefined();
   });
 });
+
+describe("a reply that was also sent to the channel", () => {
+  it("appears once, not once per place Slack put it", () => {
+    // Slack returns "also send to channel" replies twice: as a top-level
+    // message and inside the parent's replies. Flattening both put 7 598
+    // duplicate ids into one channel's search data, and MiniSearch throws on
+    // the first one it sees - which is every search on the website, dead.
+    const messages = [
+      {
+        ts: "100.1",
+        user: "U1",
+        text: "parent",
+        replies: [
+          { ts: "100.2", user: "U2", text: "reply" },
+          { ts: "100.3", user: "U2", text: "another" },
+        ],
+      },
+      { ts: "100.2", user: "U2", text: "reply" },
+    ];
+
+    const result = toSearchMessages(messages as never, {
+      hiddenUsers: new Set(),
+      includeBots: false,
+    });
+
+    expect(result.map((message) => message.t)).toEqual([
+      "100.1",
+      "100.2",
+      "100.3",
+    ]);
+  });
+
+  it("keeps the copy that knows it is a reply", () => {
+    const result = toSearchMessages(
+      [
+        {
+          ts: "100.1",
+          user: "U1",
+          text: "parent",
+          replies: [{ ts: "100.2", user: "U2", text: "reply" }],
+        },
+        { ts: "100.2", user: "U2", text: "reply" },
+      ] as never,
+      { hiddenUsers: new Set(), includeBots: false },
+    );
+
+    expect(result.find((message) => message.t === "100.2")?.p).toBe("100.1");
+  });
+});

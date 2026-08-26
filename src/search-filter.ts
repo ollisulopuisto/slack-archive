@@ -118,18 +118,39 @@ export function toSearchMessages(
   // questions, could not be found by search and never could.
   const flat: Array<ArchiveMessage> = [];
 
-  for (const message of messages) {
-    flat.push(message);
+  // A reply sent with "also send to channel" comes back BOTH as a top-level
+  // message and inside its parent's replies, so flattening produced two rows
+  // with one timestamp - 7 598 of them in the busiest channel alone. MiniSearch
+  // throws on the first duplicate id it is given, which meant every search on
+  // the website died before showing a single result.
+  const seen = new Set<string>();
+  const push = (message: ArchiveMessage) => {
+    const ts = message.ts || "";
 
+    if (seen.has(ts)) return;
+
+    seen.add(ts);
+    flat.push(message);
+  };
+
+  for (const message of messages) {
+    // Replies first: that copy knows which thread it belongs to, and the
+    // top-level copy of the same message does not.
     for (const reply of message.replies || []) {
       // Slack repeats the parent as the first element of a thread in some
       // payloads; the archiver strips that, but a reply that IS its parent
       // would otherwise be indexed twice.
       if (reply.ts === message.ts) continue;
 
-      flat.push({ ...reply, parentTs: message.ts } as ArchiveMessage);
+      push({ ...reply, parentTs: message.ts } as ArchiveMessage);
     }
+
+    push(message);
   }
+
+  // Back into the order they were given in: oldest first within a thread, and
+  // a parent before its replies.
+  flat.sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
 
   return flat
     .filter((message) => options.includeBots || !message.bot_id)

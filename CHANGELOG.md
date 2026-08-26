@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.162] - 2026-08-26
+
+### Fixed
+- **Search on the website was dead, and had been since replies were indexed.**
+  A reply sent with "also send to channel" comes back from Slack twice - as a
+  top-level message and inside its parent's `replies` - so flattening threads
+  produced two rows with one timestamp, 7 598 of them in the busiest channel
+  alone. MiniSearch throws on the first duplicate id it is handed, which killed
+  the search page before it could show a single result. The flattener now keeps
+  one row per timestamp, preferring the copy that knows which thread it belongs
+  to.
+
 ## [v26.08.26.161] - 2026-08-26
 
 ### Changed
