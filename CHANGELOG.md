@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.165] - 2026-08-26
+
+### Added
+- **Slack permalinks in the messages now open the archive.** People quote each
+  other constantly and a quote is a permalink; Slack keeps about ninety days,
+  so by the time anybody follows one it usually leads to a message Slack threw
+  away, in a workspace not every reader can open. 3 135 of them now point at
+  this archive instead, at the message itself. Only this workspace's links,
+  only channels this site publishes, only files the archive really has -
+  everything else is left as somebody wrote it.
+- **Every message is a link you can paste into Slack.** The timestamp opens the
+  archive at that message with the sidebar and the conversation around it,
+  rather than moving a frame nobody can share.
+- **`html/pages.js`** - which timestamps start which page, a few hundred of
+  them, so a permalink finds its message even as a channel grows and is
+  re-chunked. `search.js` knew this and is 124 MB.
+- **Google Docs link to the document.** 25 attachments here are Drive links
+  that Slack lists as files: nothing was ever downloadable, and the page linked
+  a file that cannot exist. It now links the document.
+
+### Fixed
+- **A render pass wiped the archive's own identity.** `--no-slack-connect` has
+  no auth to report, and writing that absence deleted the workspace URL from
+  `slack-archive.json` - which is exactly what tells the renderer that a link
+  to morttisenmaansiirto.slack.com is a link to this archive. The write is now
+  guarded like every other, and the auth field is kept when a run has nothing
+  newer to say.
+- **Document previews were only fetched for PDFs**, while the pages show a
+  preview for every non-image attachment, so a `.docx` with a preview linked a
+  `.png` nobody had downloaded. Slack makes those previews for Office files
+  too; all of them are fetched now.
+
+## [v26.08.26.164] - 2026-08-26
+
+### Fixed
+- **The pages asked for attachments by a name nothing had saved them under.**
+  The downloader names a file after the extension in Slack's URL; the pages
+  built `${id}.${filetype}` instead. For most files those agree. For 988 of
+  them they do not - a `.jpeg` saved and a `.jpg` linked, a `.png` saved and a
+  `.jpg` linked, an `.md` saved and a `.markdown` linked, a file with no
+  extension linked as `.docs` - and every one was a broken image on the site,
+  indistinguishable from a file that was never downloaded. Both now use one
+  function.
+- **551 links to `F0123ABC.undefined`.** Slack's free plan hides everything
+  past the storage limit and returns the id with no URL, no name and no type;
+  the archive has 1 104 of them. There is nothing to download and nothing to
+  link, so the page now says the file is one Slack no longer has, instead of
+  linking a filename built out of the word "undefined".
+
 ## [v26.08.26.163] - 2026-08-26
 
 ### Added

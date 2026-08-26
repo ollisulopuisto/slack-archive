@@ -33,6 +33,7 @@ import {
   getHTMLFilePath,
   INDEX_PATH,
   NAMES_PATH,
+  PAGES_INDEX_PATH,
   STATS_PATH,
   BOTS_PATH,
   FILES_BASE_URL,
@@ -45,10 +46,20 @@ import {
   FORCE_HTML_GENERATION,
 } from "./config.js";
 import { slackTimestampToJavaScriptTimestamp } from "./timestamp.js";
-import { recordPage } from "./search.js";
+import { getPageIndex, recordPage } from "./search.js";
 import { write } from "./data-write.js";
 import { getSlackArchiveData } from "./archive-data.js";
 import { getEmojiRef, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
+import {
+  archivedFileName,
+  archivedThumbName,
+  externalFileUrl,
+} from "./archived-files.js";
+import {
+  ArchiveLinkContext,
+  archiveLinkContext,
+  rewriteSlackLinks,
+} from "./slack-links.js";
 import { getName } from "./users.js";
 import {
   nameAt,
@@ -114,6 +125,12 @@ let userAvatars: UserAvatars = {};
 let userStatuses: UserStatuses = {};
 /** Accounts the workspace marks as bots: they have no profile page to link to. */
 let botIds: Set<string> = new Set();
+/** The channels this render publishes - nothing else may be linked to. */
+let publishedChannels: Set<string> = new Set();
+/** Where a Slack link in a message should point instead. */
+let linkContext: ArchiveLinkContext = archiveLinkContext({});
+/** File id -> "<channelId>/<name on disk>", for the links that name a file. */
+const fileIndex: Record<string, string> = {};
 /** When this render happened - stamped on every page. */
 let renderedAt = new Date().toISOString();
 /** Stretches of days this archive holds nothing for. Said out loud on every
@@ -149,9 +166,37 @@ const Files: React.FunctionComponent<FilesProps> = (props) => {
   const fileElements = files.map((file: any) => {
     const { thumb_1024, thumb_720, thumb_480, thumb_pdf } = file;
     const thumb = thumb_1024 || thumb_720 || thumb_480 || thumb_pdf;
+    const name = archivedFileName(file);
+
+    if (!name) {
+      // A Google Doc shared into Slack is listed as a file and never was one.
+      // The document is what somebody wanted, so link that.
+      const elsewhere = externalFileUrl(file);
+
+      if (elsewhere) {
+        return (
+          <a key={file.id} href={elsewhere} target="_blank" rel="noreferrer">
+            {file.name || file.title || elsewhere}
+          </a>
+        );
+      }
+
+      // Nothing was downloaded and nothing can be: Slack hid it behind the
+      // free plan's storage limit and kept only the id. Saying so is the whole
+      // of what the archive knows; linking `F123.undefined` said it 551 times
+      // in a way that looks like a broken archive rather than a deleted file.
+      return (
+        <span key={file.id} className="file-gone">
+          {file.name || "A file"} - Slack no longer has this one
+        </span>
+      );
+    }
+
     // Relative when the attachments sit beside the HTML; absolute when they
-    // live somewhere the pages do not, e.g. a storage box behind a proxy.
-    let src = `${FILES_BASE_URL}files/${channelId}/${file.id}.${file.filetype}`;
+    // live somewhere the pages do not, e.g. a storage box behind a proxy. The
+    // NAME comes from the same rule the downloader used, not from `filetype`,
+    // which disagrees with it for 988 files here.
+    let src = `${FILES_BASE_URL}files/${channelId}/${name}`;
     let href = src;
 
     if (file.mimetype?.startsWith("image")) {
@@ -172,7 +217,7 @@ const Files: React.FunctionComponent<FilesProps> = (props) => {
 
     if (!file.mimetype?.startsWith("image") && thumb) {
       href = file.url_private || href;
-      src = src.replace(`.${file.filetype}`, ".png");
+      src = `${FILES_BASE_URL}files/${channelId}/${archivedThumbName(file)}`;
 
       return (
         <a key={file.id} href={href} target="_blank">
@@ -276,7 +321,7 @@ interface MessageProps {
   children?: React.ReactNode;
 }
 const Message: React.FunctionComponent<MessageProps> = (props) => {
-  const { message } = props;
+  const { message, channelId } = props;
   const username = getName(message.user, users);
 
   // What they were called WHEN THEY WROTE IT, not every name they have ever
@@ -332,9 +377,14 @@ const Message: React.FunctionComponent<MessageProps> = (props) => {
         ) : (
           sender
         )}
+        {/* A link somebody can paste into Slack: it opens the archive at
+            this message, with the sidebar and the conversation around it.
+            target=_top because the channel pages are read inside a frame, and
+            a link that only moves the frame is not a link anybody can share. */}
         <a
           className="timestamp"
-          href={`#${message.ts}`}
+          href={`../index.html?c=${channelId}&ts=${message.ts}`}
+          target="_top"
           title="Link to this message"
         >
           <span className="c-timestamp__label">{formatTimestamp(message)}</span>
@@ -343,10 +393,13 @@ const Message: React.FunctionComponent<MessageProps> = (props) => {
         <div
           className="text"
           dangerouslySetInnerHTML={{
-            __html: slackMarkdown.toHTML(message.text || "", {
-              escapeHTML: false,
-              slackCallbacks,
-            }),
+            __html: rewriteSlackLinks(
+              slackMarkdown.toHTML(message.text || "", {
+                escapeHTML: false,
+                slackCallbacks,
+              }),
+              linkContext,
+            ),
           }}
         />
         {props.children}
@@ -551,6 +604,7 @@ const IndexPage: React.FunctionComponent<IndexPageProps> = (props) => {
         <div id="messages">
           <iframe name="iframe" src={`html/${channels[0].id!}-0.html`} />
         </div>
+        <script src="html/pages.js" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -559,8 +613,29 @@ const IndexPage: React.FunctionComponent<IndexPageProps> = (props) => {
             const tsValue = urlSearchParams.get("ts");
             
             if (channelValue) {
-              const iframe = document.getElementsByName('iframe')[0]
-              iframe.src = "html/" + decodeURIComponent(channelValue) + '.html' + '#' + (tsValue || '');
+              var channel = decodeURIComponent(channelValue);
+              var pages = window.ARCHIVE_PAGES || {};
+
+              // A permalink names the channel and the moment, not the page
+              // number - a page number is an accident of how the archive was
+              // chunked, and it changes as the channel grows. Resolve it here,
+              // where the index is.
+              if (!/-\d+$/.test(channel)) {
+                var boundaries = pages[channel];
+                var page = 0;
+
+                if (boundaries && tsValue) {
+                  page = boundaries.findIndex(function (start) {
+                    return start < tsValue;
+                  });
+                  if (page < 0) page = boundaries.length - 1;
+                }
+
+                channel = channel + '-' + Math.max(0, page);
+              }
+
+              var iframe = document.getElementsByName('iframe')[0];
+              iframe.src = "html/" + channel + '.html' + '#' + (tsValue || '');
             }
             `,
           }}
@@ -757,6 +832,29 @@ const NamesPage: React.FunctionComponent = () => {
   );
 };
 
+/**
+ * Which of a channel's pages a timestamp is on.
+ *
+ * Every permalink into this archive - the ones in the messages, the ones
+ * people paste into Slack - names a channel and a moment, and something has to
+ * turn that into one of the channel's numbered pages. It is a few hundred
+ * timestamps; search.js knows the same thing but is 124 MB.
+ */
+async function writePageIndex() {
+  const index = getPageIndex();
+  const published: Record<string, Array<string>> = {};
+
+  for (const channelId of Object.keys(index)) {
+    if (publishedChannels.has(channelId))
+      published[channelId] = index[channelId];
+  }
+
+  await write(
+    PAGES_INDEX_PATH,
+    `window.ARCHIVE_PAGES = ${JSON.stringify(published)};\n`,
+  );
+}
+
 async function renderNamesPage() {
   base = "";
   return renderAndWrite(<NamesPage />, NAMES_PATH);
@@ -807,6 +905,25 @@ const Generated: React.FunctionComponent = () => (
     <script src={`${base}relative-time.js`} defer />
   </div>
 );
+
+/**
+ * Every attachment this archive holds, by Slack's file id.
+ *
+ * A message that links a file by its Slack URL can then be pointed at the copy
+ * on this site instead - which is the only copy, for anything Slack has since
+ * hidden behind the storage limit.
+ */
+function indexFiles(channelId: string, messages: Array<ArchiveMessage>) {
+  for (const message of messages) {
+    for (const file of (message.files || []) as Array<any>) {
+      const name = archivedFileName(file);
+
+      if (file?.id && name) fileIndex[file.id] = `${channelId}/${name}`;
+    }
+
+    indexFiles(channelId, (message.replies || []) as Array<ArchiveMessage>);
+  }
+}
 
 /** "1.2.2022" from an ISO day. */
 function formatIsoDay(iso: string): string {
@@ -1601,7 +1718,10 @@ async function renderStatsAndProfiles(channels: Array<Channel>) {
     if (!channel.id) continue;
     spinner.text = `Counting ${channel.name || channel.id}`;
     spinner.render();
-    accumulator.addChannel(channel, await getMessages(channel.id, true));
+
+    const messages = await getMessages(channel.id, true);
+    accumulator.addChannel(channel, messages);
+    indexFiles(channel.id, messages);
   }
 
   stats = accumulator.result();
@@ -1786,6 +1906,9 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
   console.log(`\n Creating HTML files for ${channels.length} channels...`);
 
   renderedAt = new Date().toISOString();
+  publishedChannels = new Set(
+    channels.map((channel) => channel.id!).filter(Boolean),
+  );
   users = await getUsers();
   userNames = await getUserNames();
   userAvatars = await getUserAvatars();
@@ -1797,8 +1920,17 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
     : null;
 
   // Before the channel pages, not after: every message links to its author's
-  // profile page, and this is what decides which of those pages exist.
+  // profile page, and this is what decides which of those pages exist. It also
+  // reads every message, which is where the file index comes from.
   await renderStatsAndProfiles(publishable(await getChannels()));
+
+  linkContext = archiveLinkContext({
+    teamUrl: slackArchiveData.auth?.url,
+    teamId: slackArchiveData.auth?.team_id,
+    files: fileIndex,
+    filesBaseUrl: FILES_BASE_URL,
+    channels: publishedChannels,
+  });
   await renderNamesPage();
 
   for (const [i, channel] of channels.entries()) {
@@ -1810,6 +1942,7 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
     await createHtmlForChannel({ channel, i, total: channels.length });
   }
 
+  await writePageIndex();
   await renderIndexPage();
 
   // Copy in fonts & css

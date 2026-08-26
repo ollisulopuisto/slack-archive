@@ -2,9 +2,14 @@ import fetch from "node-fetch";
 import fs from "fs-extra";
 import esMain from "es-main";
 import ora, { Ora } from "ora";
-import path from "path";
 
 import { File } from "./interfaces.js";
+import {
+  ArchivedFile,
+  archivedFileName,
+  archivedThumbName,
+  fileDownloadUrl,
+} from "./archived-files.js";
 import {
   getChannelUploadFilePath,
   config,
@@ -81,26 +86,31 @@ async function downloadFile(
   total: number,
   spinner: Ora,
 ) {
-  const { url_private, id, is_external, mimetype } = file;
-  const { thumb_1024, thumb_720, thumb_480, thumb_pdf } = file as any;
+  const { thumb_pdf } = file as any;
 
-  const fileUrl = is_external
-    ? thumb_1024 || thumb_720 || thumb_480 || thumb_pdf
-    : url_private;
+  const fileUrl = fileDownloadUrl(file as ArchivedFile);
+  const name = archivedFileName(file as ArchivedFile);
 
-  if (!fileUrl) return;
+  if (!fileUrl || !name) return;
 
   spinner.text = `Downloading ${i}/${total}: ${fileUrl}`;
 
-  const extension = path.extname(fileUrl);
-  const filePath = getChannelUploadFilePath(channelId, `${id}${extension}`);
+  const filePath = getChannelUploadFilePath(channelId, name);
 
   await downloadURL(fileUrl, filePath);
 
-  if (mimetype === "application/pdf" && thumb_pdf) {
+  // Any file Slack made a PDF preview for, not only PDFs themselves: the
+  // pages show that preview for every non-image attachment, so a .docx whose
+  // thumbnail was never fetched is a broken image on the site.
+  if (thumb_pdf) {
     spinner.text = `Downloading ${i}/${total}: ${thumb_pdf}`;
-    const thumbFile = filePath.replace(extension, ".png");
-    await downloadURL(thumb_pdf, thumbFile);
+    await downloadURL(
+      thumb_pdf,
+      getChannelUploadFilePath(
+        channelId,
+        archivedThumbName(file as ArchivedFile)!,
+      ),
+    );
   }
 }
 

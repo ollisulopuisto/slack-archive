@@ -24,7 +24,12 @@ export async function setSlackArchiveData(
   const oldData = await getSlackArchiveData();
   const dataToWrite = {
     channels: { ...oldData.channels, ...newData.channels },
-    auth: newData.auth,
+    // Keep what we knew if this run never asked. A run with
+    // --no-slack-connect has no auth to report, and writing that absence threw
+    // away the workspace URL - which is the thing that tells the renderer a
+    // link to morttisenmaansiirto.slack.com is a link to this very archive,
+    // and is worth rewriting into one that still works.
+    auth: newData.auth || oldData.auth,
   };
 
   return write(

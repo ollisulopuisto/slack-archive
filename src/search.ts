@@ -54,6 +54,12 @@ import { writeSearchData } from "./data-write.js";
 // In our example above, the message with timestamp 6 is older than 5 but younger than 8.
 const INDEX_OF_PAGES: SearchPageIndex = {};
 
+/** Which timestamps start which page, for everything that has to find a
+ * message: the search results, and now the archive's own permalinks. */
+export function getPageIndex(): SearchPageIndex {
+  return INDEX_OF_PAGES;
+}
+
 export function recordPage(channelId?: string, timestamp?: string) {
   if (!channelId || !timestamp) {
     console.warn(

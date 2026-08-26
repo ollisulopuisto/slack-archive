@@ -160,6 +160,8 @@ export const EMOJIS_DIR = path.join(HTML_DIR, "emojis");
 export const INDEX_PATH = path.join(OUT_DIR, "index.html");
 export const SEARCH_PATH = path.join(OUT_DIR, "search.html");
 export const NAMES_PATH = path.join(HTML_DIR, "names.html");
+/** Which timestamps start which page, so a permalink can find its message. */
+export const PAGES_INDEX_PATH = path.join(HTML_DIR, "pages.js");
 export const STATS_PATH = path.join(HTML_DIR, "stats.html");
 export const BOTS_PATH = path.join(HTML_DIR, "bots.html");
 

@@ -854,3 +854,13 @@ a.timestamp:focus-visible {
 #index .generated {
   color: rgba(255, 255, 255, 0.55);
 }
+
+/* A file Slack itself no longer has. Better than a link that cannot work. */
+.file-gone {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border: 1px dashed var(--text-muted, #616061);
+  border-radius: 4px;
+  color: var(--text-muted, #616061);
+  font-size: 0.85rem;
+}

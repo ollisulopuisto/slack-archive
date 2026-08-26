@@ -394,7 +394,7 @@ export async function main() {
   await recordUserNames();
 
   // Save data
-  await setSlackArchiveData(slackArchiveData);
+  await saveData(() => setSlackArchiveData(slackArchiveData));
 
   // Create HTML, but only for channels with new messages
   // - or channels that we didn't make HTML for yet
