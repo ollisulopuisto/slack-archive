@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { monthsToPages, groupByYear } from "./calendar-nav.js";
+import { monthsToPages, groupByYear, fillMonths } from "./calendar-nav.js";
 
 // Newest first, as the archive stores them: page 0 holds the newest messages.
 const messages = [
@@ -68,5 +68,45 @@ describe("groupByYear()", () => {
         ],
       },
     ]);
+  });
+});
+
+describe("fillMonths()", () => {
+  it("keeps the months with no messages, so a gap is visible rather than implied", () => {
+    // A chip that is simply absent is ambiguous: was the channel quiet, or was
+    // the archiver not running? Drawn and disabled, the month is at least a
+    // question the page has answered.
+    const filled = fillMonths([
+      { month: "2022-01", page: 5 },
+      { month: "2022-04", page: 2 },
+    ]);
+
+    expect(filled).toEqual([
+      { month: "2022-01", page: 5 },
+      { month: "2022-02" },
+      { month: "2022-03" },
+      { month: "2022-04", page: 2 },
+    ]);
+  });
+
+  it("spans years without inventing months outside the channel's life", () => {
+    const filled = fillMonths([
+      { month: "2021-11", page: 3 },
+      { month: "2022-02", page: 1 },
+    ]);
+
+    expect(filled.map((m) => m.month)).toEqual([
+      "2021-11",
+      "2021-12",
+      "2022-01",
+      "2022-02",
+    ]);
+  });
+
+  it("has nothing to fill for one month, or none", () => {
+    expect(fillMonths([{ month: "2022-01", page: 0 }])).toEqual([
+      { month: "2022-01", page: 0 },
+    ]);
+    expect(fillMonths([])).toEqual([]);
   });
 });

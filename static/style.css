@@ -1493,3 +1493,30 @@ table.timeline,
     font-size: 12px;
   }
 }
+
+/* A month with nothing in it, drawn rather than omitted. Hovering says which
+   kind of nothing: a quiet channel, or a stretch the archive never got. */
+.calendar-months .empty {
+  padding: 2px 6px;
+  color: var(--ink-muted);
+  opacity: 0.45;
+  cursor: help;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+/* What was probably said while nobody was archiving. Dotted, because it is an
+   estimate; banded, because the band is how much the surrounding years
+   disagree; and in no total anywhere on the page. */
+.viz-estimate {
+  fill: none;
+  stroke: var(--viz-series);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+  opacity: 0.75;
+}
+
+.viz-estimate-band {
+  fill: var(--viz-series);
+  opacity: 0.12;
+}

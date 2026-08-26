@@ -16,6 +16,8 @@ import React from "react";
 export interface Datum {
   label: string;
   value: number;
+  /** What was probably here, for a stretch the archive is missing. */
+  estimate?: { estimate: number; low: number; high: number };
   /** Overrides the hover text, which is otherwise "label: value". */
   title?: string;
   href?: string;
@@ -151,10 +153,25 @@ export const Area: React.FunctionComponent<ColumnsProps> = ({
   data,
   labelEvery = 12,
 }) => {
-  const max = niceMax(data.map((d) => d.value));
+  // The estimate is drawn against the same scale as the archive, so a dotted
+  // line at eight thousand looks like eight thousand.
+  const max = niceMax(
+    data.flatMap((d) => [d.value, d.estimate?.high ?? 0]),
+  );
   const step = PLOT_WIDTH / Math.max(1, data.length - 1);
   const y = (value: number) => PLOT_HEIGHT - (value / max) * (PLOT_HEIGHT - 4);
   const points = data.map((d, i) => `${i * step},${y(d.value)}`);
+
+  // Runs of consecutive estimated points, so a gap is one dotted stretch
+  // rather than a dot per month. Each run reaches back to the last real point
+  // and forward to the next, or the line would float unattached.
+  const runs: Array<Array<number>> = [];
+  for (const [i, datum] of data.entries()) {
+    if (!datum.estimate) continue;
+    const last = runs[runs.length - 1];
+    if (last && last[last.length - 1] === i - 1) last.push(i);
+    else runs.push([i]);
+  }
 
   return (
     <svg
@@ -175,6 +192,37 @@ export const Area: React.FunctionComponent<ColumnsProps> = ({
         points={`0,${PLOT_HEIGHT} ${points.join(" ")} ${PLOT_WIDTH},${PLOT_HEIGHT}`}
       />
       <polyline className="viz-line" points={points.join(" ")} />
+
+      {/* What was probably said while nobody was archiving: the band is a 95%
+          interval on the daily rate either side of the gap, and none of it is
+          in any total on the page. */}
+      {runs.map((run) => {
+        const from = Math.max(0, run[0] - 1);
+        const to = Math.min(data.length - 1, run[run.length - 1] + 1);
+        const band: Array<string> = [];
+        const line: Array<string> = [];
+
+        for (let i = from; i <= to; i++) {
+          const datum = data[i];
+          const value = datum.estimate ? datum.estimate.estimate : datum.value;
+          const high = datum.estimate ? datum.estimate.high : datum.value;
+          line.push(`${i * step},${y(value)}`);
+          band.push(`${i * step},${y(high)}`);
+        }
+
+        for (let i = to; i >= from; i--) {
+          const datum = data[i];
+          const low = datum.estimate ? datum.estimate.low : datum.value;
+          band.push(`${i * step},${y(low)}`);
+        }
+
+        return (
+          <g key={`estimate-${run[0]}`}>
+            <polygon className="viz-estimate-band" points={band.join(" ")} />
+            <polyline className="viz-estimate" points={line.join(" ")} />
+          </g>
+        );
+      })}
       {data.map((datum, i) =>
         i % labelEvery === 0 ? (
           <text

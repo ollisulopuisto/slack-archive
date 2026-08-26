@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.176] - 2026-08-26
+
+### Added
+- **The charts draw what was probably there.** Across the five gaps the message
+  chart fell to zero, which reads as a workspace that went quiet for eight
+  months - it did not; nobody was archiving. A dotted line now shows the
+  estimate and a band shows how uncertain it is, and **none of it is added to
+  any total**: an estimate in a total stops being an estimate and becomes a
+  claim.
+
+  The model is seasonal, because a flat rate is wrong in the way the eye
+  notices: a month is estimated as its own season - its size relative to its
+  year, averaged over every year that has it - times the level interpolated
+  between the deseasonalised months either side of the gap. July is reliably
+  small here, so a missing July is estimated small. The band is how much the
+  years disagree about that month, which is the honest source of uncertainty
+  rather than a made-up percentage. Years with fewer than six months of data
+  say nothing about seasons and are left out of it.
+- **Empty months are drawn struck through** in the channel calendar instead of
+  being left out, because an absent chip cannot say whether the channel was
+  quiet or the archiver was not running. Hovering says which.
+
 ## [v26.08.26.175] - 2026-08-26
 
 ### Added

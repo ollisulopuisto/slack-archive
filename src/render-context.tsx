@@ -7,6 +7,7 @@ import { UserStatuses } from "./user-status.js";
 import { WorkspaceStats } from "./stats.js";
 import { ArchiveLinkContext, archiveLinkContext } from "./slack-links.js";
 import { Gap } from "./gaps.js";
+import { MonthEstimate } from "./estimate.js";
 import { indexMeta, PageMeta } from "./page-meta.js";
 
 /**
@@ -43,6 +44,8 @@ export interface RenderContext {
   linkContext: ArchiveLinkContext;
   /** Stretches of days this archive holds nothing for. */
   gaps: Array<Gap>;
+  /** Month -> what was probably said in it, for the months inside a gap. */
+  estimates: Record<string, MonthEstimate>;
   stats: WorkspaceStats | null;
   /** What the whole archive is called. */
   teamMeta: PageMeta;
@@ -67,6 +70,7 @@ export function emptyRenderContext(): RenderContext {
     channels: [],
     linkContext: archiveLinkContext({}),
     gaps: [],
+    estimates: {},
     stats: null,
     teamMeta: indexMeta(undefined),
     renderedAt: "",

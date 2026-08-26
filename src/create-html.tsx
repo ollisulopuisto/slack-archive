@@ -63,7 +63,7 @@ import { reportTimings, timed } from "./timings.js";
 import { defaultWorkerCount, renderPagesInWorkers } from "./render-workers.js";
 import { ChannelPlan, planChannel, shareOutPages } from "./render-plan.js";
 import { pickStartChannel } from "./start-channel.js";
-import { groupByYear, MonthPage } from "./calendar-nav.js";
+import { fillMonths, groupByYear, MonthPage } from "./calendar-nav.js";
 import {
   emptyRenderContext,
   RenderContext,
@@ -98,6 +98,7 @@ import {
 import { botUserIds, isChannelSearchable } from "./search-filter.js";
 import { profilePageIds } from "./profiles.js";
 import { dailyTotals, findGaps, Gap, gapBetween } from "./gaps.js";
+import { estimateMissingByMonth, MonthEstimate } from "./estimate.js";
 import { UserAvatars } from "./user-avatars.js";
 import { UserStatuses } from "./user-status.js";
 import {
@@ -915,6 +916,7 @@ interface PaginationProps {
   channelId: string;
 }
 const Pagination: React.FunctionComponent<PaginationProps> = (props) => {
+  const { gaps } = useRender();
   const { index, channelId, chunksInfo, months } = props;
   const length = chunksInfo.length;
 
@@ -923,7 +925,7 @@ const Pagination: React.FunctionComponent<PaginationProps> = (props) => {
   }
 
   const here = chunksInfo[index];
-  const years = groupByYear(months);
+  const years = groupByYear(fillMonths(months));
 
   return (
     <div className="pagination">
@@ -959,16 +961,32 @@ const Pagination: React.FunctionComponent<PaginationProps> = (props) => {
               <div className="calendar-year" key={year.year}>
                 <span className="calendar-label">{year.year}</span>
                 <span className="calendar-months">
-                  {year.months.map((month) => (
-                    <a
-                      key={month.month}
-                      href={`${channelId}-${month.page}.html`}
-                      className={month.page === index ? "current" : undefined}
-                      title={month.month}
-                    >
-                      {month.label}
-                    </a>
-                  ))}
+                  {year.months.map((month) =>
+                    month.page === undefined ? (
+                      // Drawn, not omitted: an absent chip cannot say whether
+                      // the channel was quiet or the archiver was not running.
+                      <span
+                        key={month.month}
+                        className="empty"
+                        title={
+                          inAGap(gaps, month.month)
+                            ? `${month.month} - not archived`
+                            : `${month.month} - nothing was posted here`
+                        }
+                      >
+                        {month.label}
+                      </span>
+                    ) : (
+                      <a
+                        key={month.month}
+                        href={`${channelId}-${month.page}.html`}
+                        className={month.page === index ? "current" : undefined}
+                        title={month.month}
+                      >
+                        {month.label}
+                      </a>
+                    ),
+                  )}
                 </span>
               </div>
             ))}
@@ -1158,6 +1176,13 @@ function indexFiles(channelId: string, messages: Array<ArchiveMessage>) {
   }
 }
 
+/** Whether a month falls inside a stretch the archive is missing. */
+function inAGap(gaps: Array<Gap>, month: string): boolean {
+  return gaps.some(
+    (gap) => gap.from.slice(0, 7) <= month && month <= gap.to.slice(0, 7),
+  );
+}
+
 /** "1.2.2022" from an ISO day. */
 function formatIsoDay(iso: string): string {
   const [year, month, day] = iso.split("-");
@@ -1294,7 +1319,10 @@ function weekdayData(byWeekday: Array<number>): Array<Datum> {
   return byWeekday.map((value, i) => ({ label: WEEKDAYS[i], value }));
 }
 
-function monthData(byMonth: Record<string, number>): Array<Datum> {
+function monthData(
+  byMonth: Record<string, number>,
+  estimates: Record<string, MonthEstimate> = {},
+): Array<Datum> {
   const months = Object.keys(byMonth).sort();
   if (months.length === 0) return [];
 
@@ -1308,7 +1336,11 @@ function monthData(byMonth: Record<string, number>): Array<Datum> {
 
   while (year < lastYear || (year === lastYear && month <= lastMonth)) {
     const key = `${year}-${String(month).padStart(2, "0")}`;
-    all.push({ label: key, value: byMonth[key] || 0 });
+    all.push({
+      label: key,
+      value: byMonth[key] || 0,
+      estimate: estimates[key],
+    });
     month++;
     if (month > 12) {
       month = 1;
@@ -1612,7 +1644,7 @@ const EmojiRows: React.FunctionComponent<{
 const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
   data,
 }) => {
-  const { users, teamMeta, profileIds } = useRender();
+  const { users, teamMeta, profileIds, estimates } = useRender();
   const people = Object.values(data.byUser)
     .filter((person) => person.messages > 0 && !person.isBot)
     .sort((a, b) => b.messages - a.messages);
@@ -1632,7 +1664,7 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
     .sort((a, b) => b.messages - a.messages);
 
   const years = yearData(data.byYear);
-  const months = monthData(data.byMonth);
+  const months = monthData(data.byMonth, estimates);
   const allEmoji = Object.values(data.emojiStats).sort(
     (a, b) => b.count - a.count,
   );
@@ -1987,6 +2019,7 @@ const BotsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
 async function countEverything(channels: Array<Channel>): Promise<{
   stats: WorkspaceStats;
   gaps: Array<Gap>;
+  estimates: Record<string, MonthEstimate>;
   profileIds: Set<string>;
   plans: Array<ChannelPlan>;
 }> {
@@ -2024,10 +2057,16 @@ async function countEverything(channels: Array<Channel>): Promise<{
     } channels.`,
   );
 
+  const daily = dailyTotals(stats.byDayHour);
+  const gaps = findGaps(daily);
+
   return {
     stats,
     // Every page that shows a number says which days are absent from it.
-    gaps: findGaps(dailyTotals(stats.byDayHour)),
+    gaps,
+    // And every chart of time draws what was probably there, without adding a
+    // message of it to any total.
+    estimates: estimateMissingByMonth(stats.byMonth, gaps),
     profileIds: profilePageIds(stats.byUser),
     plans,
   };

@@ -15,7 +15,8 @@ import { ArchiveMessage } from "./interfaces.js";
 export interface MonthPage {
   /** "2017-03" */
   month: string;
-  page: number;
+  /** Absent when the channel has no messages in that month at all. */
+  page?: number;
 }
 
 export interface YearMonths {
@@ -60,6 +61,43 @@ export function monthsToPages(
   return [...pages.entries()]
     .map(([month, page]) => ({ month, page }))
     .sort((a, b) => a.month.localeCompare(b.month));
+}
+
+/**
+ * Every month between the first and the last, including the empty ones.
+ *
+ * A month that is simply missing from the calendar is ambiguous - a quiet
+ * channel and an unarchived stretch look identical. Drawn and disabled, it is
+ * at least a question the page has answered, and where the gap notice already
+ * says the archive was not running, the two line up.
+ */
+export function fillMonths(months: Array<MonthPage>): Array<MonthPage> {
+  if (months.length < 2) return months;
+
+  const known = new Map(months.map((entry) => [entry.month, entry]));
+  const sorted = [...known.keys()].sort();
+  const filled: Array<MonthPage> = [];
+
+  const [firstYear, firstMonth] = sorted[0].split("-").map(Number);
+  const [lastYear, lastMonth] = sorted[sorted.length - 1]
+    .split("-")
+    .map(Number);
+
+  for (let year = firstYear, month = firstMonth; ;) {
+    const key = `${year}-${String(month).padStart(2, "0")}`;
+
+    filled.push(known.get(key) || { month: key });
+
+    if (year === lastYear && month === lastMonth) break;
+
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+  }
+
+  return filled;
 }
 
 export function groupByYear(months: Array<MonthPage>): Array<YearMonths> {
