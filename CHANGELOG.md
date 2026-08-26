@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.27.191] - 2026-08-27
+
+### Added
+- **The nightly NAS job lives here now** (`scripts/nas-archive.sh`), for the
+  reason `publish.sh` does: a copy that exists only on one machine cannot be
+  reviewed or tested, and this one had already grown a step that logged OK for
+  work it had not done. It archives, sweeps the backup copies, ships the search
+  index, publishes the site - with `--timezone Europe/Helsinki`, and with
+  `/etc/passwd` mounted, without which ssh inside the container cannot resolve
+  its own uid and refuses to start - and then prunes old images. A failed
+  publish does not fail the run: the messages are on disk either way.
+- **`scripts/prune-images.sh` keeps the disk flat.** A pinned CalVer tag means
+  every upgrade leaves the last image behind, about a gigabyte a day against a
+  volume at 98%. It keeps the newest three, never removes the pinned tag
+  whatever its age, and leaves untagged layers to `docker image prune
+  --filter dangling=true` instead of handing `<none>:<none>` to `rmi`. It is a
+  separate script because it deletes things, and so is worth a test.
+
 ## [v26.08.27.190] - 2026-08-27
 
 ### Changed

@@ -258,6 +258,23 @@ and must never write to it. `--known-hosts` exists because a container running
 as a uid with no passwd entry has no home for ssh to keep host keys in, and the
 alternative - turning host checking off - is not an alternative.
 
+`scripts/nas-archive.sh` is the whole nightly job for the machine that holds
+the archive: archive the workspace, sweep the backup copies the archiver leaves
+behind, ship the search index to the host that serves it, publish the public
+half of the site, then remove the images the last few upgrades left on disk. It
+is here for the same reason `publish.sh` is - a copy that lives only on one
+machine cannot be reviewed or tested, and this one had already grown a step
+that logged OK for work it had not done. Install it by copying it to the NAS;
+the paths at the top are that NAS's.
+
+A failed publish does not fail the run. The messages are on disk either way,
+and a non-zero exit would tell the scheduler the archive broke when it did not.
+
+`scripts/prune-images.sh <pinned-image> [keep]` is the last step on its own,
+because it deletes things and so is worth testing: newest `keep` survive, the
+pinned tag survives whatever its age, and untagged layers are left to
+`docker image prune --filter dangling=true` rather than named to `rmi`.
+
 For the search index the same idea has its own flags, because an index is read
 by things other than a browser: `--search-exclude-kinds`,
 `--search-exclude-users`, and bots which are excluded by default
