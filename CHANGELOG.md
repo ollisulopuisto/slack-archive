@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.27.194] - 2026-08-27
+
+### Changed
+- **node 24, not 22.** Same argument as the move off 18, carried one major
+  further: 22 is in maintenance with about eight months left, and this project
+  is the cheap one to move because nothing here has a native addon. The version
+  guard added below is what makes it a one-line change rather than a gamble.
+
 ## [v26.08.27.193] - 2026-08-27
 
 ### Fixed

@@ -6,7 +6,7 @@
 # compile happens inside the image from a known checkout, and the image is
 # tagged with that commit.
 
-FROM node:22-bookworm-slim AS builder
+FROM node:24-bookworm-slim AS builder
 # No build toolchain: nothing here compiles any more. The search database used
 # to be `sqlite3`, a node-gyp addon with no musl prebuilt, which is why this
 # stage carried python3/make/g++. It is now node-sqlite3-wasm - a .wasm file,
@@ -48,12 +48,18 @@ RUN npm run compile
 # does not diagnose it, but it removes a variable that was only ever there for
 # a saving we do not need.
 #
-# node 22 rather than 18: 18 went end-of-life in April 2025 and stopped getting
+# node 24 rather than 18: 18 went end-of-life in April 2025 and stopped getting
 # security updates, and the tests ran on a major this image did not ship - the
 # smoke test exists specifically to catch an ESM/CJS load failure that tsc and
 # vitest both pass, so running it on a different runtime than production is the
 # one gap it cannot cover. .node-version moves with this.
-FROM node:22-bookworm-slim AS runtime
+#
+# 24 rather than 22, which was the first landing: 22 is in maintenance and has
+# about eight months left, and this is the cheap project to move because it has
+# no native addons. The one that is not cheap is paikallislehti, which pins
+# better-sqlite3, sqlite3, sharp and @resvg/resvg-js - an ABI bump there is a
+# dependency change wearing a base change's clothes.
+FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
 
 # node_modules is copied rather than reinstalled, which also keeps the runtime
