@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.25.153] - 2026-08-26
+
+### Added
+- **The index knows which page holds a message.** `pages(channel_id, page,
+  oldest_ts)`, written from the same boundaries `create-html` records while
+  paginating.
+
+  A search result that cannot be opened in context is half an answer, and the
+  page number has only ever lived in `search.js` - 110 MB of JavaScript, which
+  no reasonable reader parses to place one message. Anything reading the SQLite
+  index can now turn a hit into a link.
+
+  Pages run newest first and each row records that page's OLDEST timestamp, so
+  the page holding a message is the first whose oldest entry is at or below it.
+  A timestamp older than every row resolves to nothing rather than to page 0:
+  the index cannot say, and a caller handed a confident wrong page would link
+  somebody to the wrong conversation.
+
 ## [v26.08.25.152] - 2026-08-25
 
 ### Fixed
