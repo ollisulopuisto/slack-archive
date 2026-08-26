@@ -65,6 +65,8 @@ slack-archive --bot
 --render-workers <n>        Render the channel pages on n cores. 0 (the
                             default) picks one per core, less one, up to eight;
                             1 renders in this process the way it always did.
+--start-channel <name>      What the front page offers to open, by name or id.
+                            Unset, it offers the busiest channel.
 ```
 
 Rendering is the slow half of a run, and almost all of it is one loop: on a

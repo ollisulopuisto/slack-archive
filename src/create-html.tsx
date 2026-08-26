@@ -44,6 +44,7 @@ import {
   FILES_BASE_URL,
   HTML_EXCLUDE_KINDS,
   RENDER_WORKERS,
+  START_CHANNEL,
   getAvatarHistoryFilePath,
   getProfileFilePath,
   getChannelStatsFilePath,
@@ -61,6 +62,7 @@ import { withoutBroadcastCopies } from "./broadcasts.js";
 import { reportTimings, timed } from "./timings.js";
 import { defaultWorkerCount, renderPagesInWorkers } from "./render-workers.js";
 import { ChannelPlan, planChannel, shareOutPages } from "./render-plan.js";
+import { pickStartChannel } from "./start-channel.js";
 import {
   emptyRenderContext,
   RenderContext,
@@ -707,7 +709,13 @@ const Sidebar: React.FunctionComponent = () => {
  */
 const IndexPage: React.FunctionComponent = () => {
   const { stats, teamMeta, base, channels, gaps } = useRender();
-  const first = channels[0];
+  const messages: Record<string, number> = {};
+
+  for (const [id, channel] of Object.entries(stats?.byChannel || {})) {
+    messages[id] = channel.messages;
+  }
+
+  const first = pickStartChannel(channels, messages, START_CHANNEL);
 
   return (
     <HtmlPage meta={teamMeta}>
@@ -747,7 +755,9 @@ const IndexPage: React.FunctionComponent = () => {
         ) : null}
         <p className="front-links">
           {first ? (
-            <a href={`${base}${first.id}-0.html`}>Start reading</a>
+            <a href={`${base}${first.id}-0.html`}>
+              Start reading{first.name ? ` #${first.name}` : ""}
+            </a>
           ) : null}{" "}
           · <a href={`${base}stats.html`}>Ten years in numbers</a> ·{" "}
           <a href={`${base}names.html`}>Names over the years</a>

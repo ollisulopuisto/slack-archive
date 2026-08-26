@@ -156,6 +156,15 @@ export const KEEP_BACKUPS = getNumberCliParameter("--keep-backups", 2);
  * 3m11s run, and every page is independent of every other.
  */
 export const RENDER_WORKERS = getNumberCliParameter("--render-workers", 0);
+
+/**
+ * The channel the front page offers to open, by name or id.
+ *
+ * Every workspace has one room that is the workspace, and no default can know
+ * its name. Unset, the front page offers the busiest channel, which is a
+ * better guess than whichever one sorts first.
+ */
+export const START_CHANNEL = getCliParameter("--start-channel") || "";
 export const BASE_DIR = process.cwd();
 export const OUT_DIR = path.join(BASE_DIR, "slack-archive");
 export const TOKEN_FILE = path.join(OUT_DIR, ".token");

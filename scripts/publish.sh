@@ -20,6 +20,8 @@
 #   --archive PATH        the slack-archive directory (holding data/ and html/)
 #   --site DEST           rsync destination for the web root
 #   --exclude-kinds LIST  channel kinds never rendered (default: im,mpim,private)
+#   --start-channel NAME  what the front page offers to open (default: the
+#                         busiest one)
 #   --work PATH           scratch directory (default: $TMPDIR/archive-publish)
 #   --node CMD            how to run node (default: node)
 #   --ssh-key PATH        identity for rsync and the web-root check
@@ -35,6 +37,7 @@ set -euo pipefail
 ARCHIVE=""
 SITE=""
 EXCLUDE_KINDS="im,mpim,private"
+START_CHANNEL=""
 WORK="${TMPDIR:-/tmp}/archive-publish"
 NODE="node"
 SSH_KEY=""
@@ -47,6 +50,7 @@ while [ $# -gt 0 ]; do
     --archive) ARCHIVE="$2"; shift 2 ;;
     --site) SITE="$2"; shift 2 ;;
     --exclude-kinds) EXCLUDE_KINDS="$2"; shift 2 ;;
+    --start-channel) START_CHANNEL="$2"; shift 2 ;;
     --work) WORK="$2"; shift 2 ;;
     --node) NODE="$2"; shift 2 ;;
     --repo) REPO="$2"; shift 2 ;;
@@ -141,7 +145,8 @@ else
 fi
 cd "$WORK" && $NODE --max-old-space-size=12288 "$REPO/bin/slack-archive.js" \
   --no-slack-connect --no-backup --force-html-generation \
-  --html-exclude-kinds "$EXCLUDE_KINDS" 2>&1 | grep -E "Not rendering|Search|Rendered in|Finished in|All done" || true
+  --html-exclude-kinds "$EXCLUDE_KINDS" \
+  ${START_CHANNEL:+--start-channel "$START_CHANNEL"} 2>&1 | grep -E "Not rendering|Search|Rendered in|Finished in|All done" || true
 
 # search.html and data/search.js are written by the render above, from the same
 # --html-exclude-kinds the pages used. Shipping the NAS's copy instead is how a

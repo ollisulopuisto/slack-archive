@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.174] - 2026-08-26
+
+### Added
+- **`--start-channel`** - which channel the front page offers to open. Every
+  workspace has one room that is the workspace; no default can know its name,
+  so it is a setting. Unset, the front page offers the busiest published
+  channel, which is a better guess than whichever one happens to sort first,
+  and a name that matches nothing published falls back rather than linking to a
+  page this site did not write. `scripts/publish.sh` passes it through.
+
 ## [v26.08.26.173] - 2026-08-26
 
 ### Changed
