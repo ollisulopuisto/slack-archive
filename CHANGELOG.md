@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.180] - 2026-08-26
+
+### Added
+- **"What we could have had" changes every number that can be estimated**, on
+  the stats page, on every channel page and on every profile: the tiles, the
+  per-person totals, the per-channel totals, the reaction counts. A page where
+  the headline includes the missing days but the bars beneath it do not is
+  worse than either page alone, because the parts stop adding up and nothing
+  says why.
+- **And it says so loudly.** The speculative numbers count up to themselves,
+  change to a serif italic, glow, and the bars go hatched - because these are
+  not the same kind of number as the ones the page shows by default and should
+  not be mistakable for them in a screenshot. Reduced-motion is honoured: the
+  numbers still change, they just stop moving.
+
+### Changed
+- **`--search-exclude-users` carries the warning it needs.** Excluding a bot
+  from the index is what stops an archive filling with copies of itself when
+  something can post archived content back into the workspace: the re-post is
+  archived but never indexed, so it cannot be found and posted again. Indexing
+  it "to be thorough" opens that loop, and the symptom shows up in a different
+  system from the change. Found by koodi-2b while building image sharing.
+
 ## [v26.08.26.179] - 2026-08-26
 
 ### Changed

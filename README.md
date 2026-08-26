@@ -255,7 +255,15 @@ alternative - turning host checking off - is not an alternative.
 For the search index the same idea has its own flags, because an index is read
 by things other than a browser: `--search-exclude-kinds`,
 `--search-exclude-users`, and bots which are excluded by default
-(`--search-include-bots` puts them back). Excluding at build time rather than
+(`--search-include-bots` puts them back).
+
+`--search-exclude-users` can be load-bearing in a way that is not obvious from
+the flag: if something can post archived content back into the workspace - a
+bot that shares an old image, say - then excluding it from the index is what
+stops the archive filling with copies of itself. The re-post is archived, but
+it never becomes a search result, so it cannot be found and re-posted again.
+Indexing that bot "to be thorough" opens the loop, and the symptom appears
+somewhere else entirely. Excluding at build time rather than
 at query time means the index cannot answer, rather than merely choosing not
 to.
 

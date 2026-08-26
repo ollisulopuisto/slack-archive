@@ -64,3 +64,22 @@ export function estimatesByYear(
 
   return years;
 }
+
+/**
+ * One person's (or channel's) share of what is missing.
+ *
+ * Their share of the archive, applied to the estimate. It assumes the people
+ * who were talking before a gap were the people talking during it, which is a
+ * weaker assumption than the seasonal one behind the total - so it is offered
+ * on the same toggle and never on its own, and the totals it produces are
+ * labelled as estimates like everything else here.
+ */
+export function shareOfMissing(
+  theirs: number,
+  everyone: number,
+  missing: number,
+): number {
+  if (everyone <= 0 || missing <= 0) return 0;
+
+  return Math.round(missing * (theirs / everyone));
+}

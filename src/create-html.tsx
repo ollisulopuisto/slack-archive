@@ -99,7 +99,11 @@ import { botUserIds, isChannelSearchable } from "./search-filter.js";
 import { profilePageIds } from "./profiles.js";
 import { dailyTotals, findGaps, Gap, gapBetween } from "./gaps.js";
 import { estimateMissingByMonth, MonthEstimate } from "./estimate.js";
-import { estimatesByYear, speculativeTotals } from "./speculative.js";
+import {
+  estimatesByYear,
+  shareOfMissing,
+  speculativeTotals,
+} from "./speculative.js";
 import { UserAvatars } from "./user-avatars.js";
 import { UserStatuses } from "./user-status.js";
 import {
@@ -1386,8 +1390,37 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
   userId,
   person,
 }) => {
-  const { users, userNames, userAvatars, userStatuses, stats, profileIds } =
-    useRender();
+  const {
+    users,
+    userNames,
+    userAvatars,
+    userStatuses,
+    stats,
+    profileIds,
+    estimates,
+    base,
+  } = useRender();
+
+  // One rate for the whole page: what this archive is missing, as a share of
+  // what it has. Assuming somebody was as busy in the missing months as in the
+  // ones either side is a weaker claim than the seasonal estimate behind the
+  // totals - so it rides the same toggle and is never shown on its own.
+  const missingMessages = Object.values(estimates).reduce(
+    (total, month) => total + month.estimate,
+    0,
+  );
+  const archived = stats?.messages || 0;
+  const rate = archived > 0 ? missingMessages / archived : 0;
+  const inflate = (value: number) =>
+    rate > 0 ? formatCount(Math.round(value * (1 + rate))) : undefined;
+  /** The same thing as a chart estimate, for the bars. */
+  const inflateBy = (value: number) => {
+    const estimate = Math.round(value * rate);
+
+    return estimate > 0
+      ? { estimate, low: estimate, high: estimate }
+      : undefined;
+  };
   const names = userNames[userId] || [];
   const current = getName(userId, users);
   const events = stats
@@ -1438,18 +1471,34 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
 
         <GapNotice />
 
+        {missingMessages > 0 ? <SpeculateToggle base={base} /> : null}
+
         <div className="viz-tiles">
-          <Tile label="Messages" value={formatCount(person.messages)} />
+          <Tile
+            label="Messages"
+            value={formatCount(person.messages)}
+            speculative={inflate(person.messages)}
+            speculativeHint="if the missing days were like the rest"
+          />
           <Tile label="Names" value={formatCount(names.length)} />
           <Tile label="Channels" value={formatCount(person.channels.length)} />
-          <Tile label="Files" value={formatCount(person.files)} />
+          <Tile
+            label="Files"
+            value={formatCount(person.files)}
+            speculative={inflate(person.files)}
+            speculativeHint="if the missing days were like the rest"
+          />
           <Tile
             label="Reactions received"
             value={formatCount(person.reactionsReceived)}
+            speculative={inflate(person.reactionsReceived)}
+            speculativeHint="if the missing days were like the rest"
           />
           <Tile
             label="Reactions given"
             value={formatCount(person.reactionsGiven)}
+            speculative={inflate(person.reactionsGiven)}
+            speculativeHint="if the missing days were like the rest"
           />
           <Tile label="Active years" value={formatCount(activeYears)} />
         </div>
@@ -1518,6 +1567,7 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
               label: `#${channel.name}`,
               value: channel.messages,
               href: `${channel.id}-0.html`,
+              estimate: inflateBy(channel.messages),
             }))}
           />
         </details>
@@ -1678,6 +1728,25 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
     { messages: data.messages, reactions: data.reactions },
     estimates,
   );
+
+  /** Somebody's share of the missing days, as an estimate a bar can carry. */
+  const missingFor = (
+    theirs: number,
+    everyone: number,
+    of: "messages" | "reactions" = "messages",
+  ) => {
+    const estimate = shareOfMissing(
+      theirs,
+      everyone,
+      of === "messages"
+        ? speculative.missingMessages
+        : speculative.missingReactions,
+    );
+
+    return estimate > 0
+      ? { estimate, low: estimate, high: estimate }
+      : undefined;
+  };
   const allEmoji = Object.values(data.emojiStats).sort(
     (a, b) => b.count - a.count,
   );
@@ -1765,6 +1834,7 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
               label: getName(person.userId, users) || person.userId,
               value: person.messages,
               href: profileHref(person.userId, profileIds),
+              estimate: missingFor(person.messages, humanMessages),
             }))}
           />
         </details>
@@ -1778,6 +1848,7 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
               label: `#${channel.name}`,
               value: channel.messages,
               href: `channel-${channel.id}.html`,
+              estimate: missingFor(channel.messages, humanMessages),
             }))}
           />
         </details>
@@ -1789,7 +1860,12 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
           </summary>
 
           <div className="viz-tiles">
-            <Tile label="Reactions" value={formatCount(data.reactions)} />
+            <Tile
+              label="Reactions"
+              value={formatCount(data.reactions)}
+              speculative={formatCount(speculative.reactions)}
+              speculativeHint={`${formatCount(speculative.missingReactions)} estimated`}
+            />
             <Tile
               label="Custom emoji used"
               value={formatCount(customEmoji.length)}
@@ -1826,6 +1902,11 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
               label: getName(person.userId, users) || person.userId,
               value: person.reactionsGiven,
               href: profileHref(person.userId, profileIds),
+              estimate: missingFor(
+                person.reactionsGiven,
+                data.reactions,
+                "reactions",
+              ),
             }))}
           />
         </details>
@@ -1868,6 +1949,19 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
     channelEstimates,
   );
 
+  /** Somebody's share of what this channel is missing. */
+  const missingHere = (theirs: number) => {
+    const estimate = shareOfMissing(
+      theirs,
+      channel.messages,
+      speculative.missingMessages,
+    );
+
+    return estimate > 0
+      ? { estimate, low: estimate, high: estimate }
+      : undefined;
+  };
+
   return (
     <HtmlPage meta={channelStatsMeta(channel.name, channel.messages)}>
       <div id="stats">
@@ -1887,6 +1981,12 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
             speculativeHint={`${formatCount(speculative.missingMessages)} estimated`}
           />
           <Tile label="People who posted" value={formatCount(posters.length)} />
+          <Tile
+            label="Reactions"
+            value={formatCount(channel.reactions || 0)}
+            speculative={formatCount(speculative.reactions)}
+            speculativeHint={`${formatCount(speculative.missingReactions)} estimated`}
+          />
           {channel.members.length > 0 ? (
             <Tile
               label="Members"
@@ -1941,7 +2041,18 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
                     )}
                   </span>
                   <span />
-                  <span className="viz-bars-value">
+                  <span
+                    className="viz-bars-value"
+                    data-speculative={
+                      missingHere(channel.byUser[userId] || 0)
+                        ? formatCount(
+                            (channel.byUser[userId] || 0) +
+                              (missingHere(channel.byUser[userId] || 0)
+                                ?.estimate || 0),
+                          )
+                        : undefined
+                    }
+                  >
                     {formatCount(channel.byUser[userId] || 0)}
                   </span>
                 </li>
@@ -1959,6 +2070,7 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
               label: getName(poster.userId, users) || poster.userId,
               value: poster.messages,
               href: profileHref(poster.userId, profileIds),
+              estimate: missingHere(poster.messages),
             }))}
           />
         </details>

@@ -131,7 +131,28 @@ export const HTML_EXCLUDE_KINDS = new Set(
     .filter((kind) => kind.length > 0),
 );
 
-/** Users whose messages the search index must never hold, by handle or id. */
+/**
+ * Users whose messages the search index must never hold, by handle or id.
+ *
+ * DO NOT REMOVE A BOT FROM THIS LIST WITHOUT READING THIS.
+ *
+ * It looks like tidying - "why is the bot excluded, index everything" - and in
+ * this archive it closes a loop that currently does not exist. The Slack bot
+ * can share an archived image back into a channel; the next run archives that
+ * channel, so the image is in the archive twice. It cannot be found and shared
+ * a third time only because the bot's own messages are never indexed, so the
+ * re-post never becomes a search result.
+ *
+ * Index them and the cycle gets its second iteration: searches start returning
+ * the bot's copies of their own results, attributed to the bot and dated to
+ * whenever it re-posted them, and the archive fills with echoes wearing the
+ * wrong name and date. It would not fail loudly - it would slowly get worse,
+ * and the change that caused it would be in a different repository from the
+ * symptom.
+ *
+ * Bots that post ORIGINAL content are a different case and are indexed on
+ * purpose; the exclusion is for the ones that repeat what is already here.
+ */
 export const SEARCH_EXCLUDE_USERS = (
   getCliParameter("--search-exclude-users") || ""
 )

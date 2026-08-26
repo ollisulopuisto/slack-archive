@@ -180,7 +180,16 @@ export const Bars: React.FunctionComponent<{ data: Array<Datum> }> = ({
               style={{ width: `${Math.max(1, (datum.value / max) * 100)}%` }}
             />
           </span>
-          <span className="viz-bars-value">{formatCount(datum.value)}</span>
+          <span
+            className="viz-bars-value"
+            data-speculative={
+              datum.estimate
+                ? formatCount(datum.value + datum.estimate.estimate)
+                : undefined
+            }
+          >
+            {formatCount(datum.value)}
+          </span>
         </li>
       ))}
     </ul>
@@ -380,10 +389,10 @@ export const SpeculateToggle: React.FunctionComponent<{ base: string }> = ({
   <div className="speculate">
     <label htmlFor="speculate">
       <input type="checkbox" id="speculate" />
-      Count what is missing too
+      <span className="speculate-label">What we could have had</span>
     </label>
     <span className="speculate-note">
-      estimated from the months either side; never included above
+      every number on this page, with the missing days estimated back in
     </span>
     <script src={`${base}speculative.js`} defer />
   </div>

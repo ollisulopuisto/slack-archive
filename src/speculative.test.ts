@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { speculativeTotals, estimatesByYear } from "./speculative.js";
+import {
+  speculativeTotals,
+  estimatesByYear,
+  shareOfMissing,
+} from "./speculative.js";
 
 const estimates = {
   "2022-02": { estimate: 100, low: 80, high: 120, missingDays: 28 },
@@ -43,5 +47,16 @@ describe("speculativeTotals()", () => {
     expect(
       speculativeTotals({ messages: 0, reactions: 0 }, estimates).reactions,
     ).toBe(0);
+  });
+});
+
+describe("shareOfMissing()", () => {
+  it("gives somebody the share of the gap they had of the archive", () => {
+    expect(shareOfMissing(250, 1000, 400)).toBe(100);
+  });
+
+  it("has nothing to share out when nothing is missing or nobody talked", () => {
+    expect(shareOfMissing(250, 1000, 0)).toBe(0);
+    expect(shareOfMissing(0, 0, 400)).toBe(0);
   });
 });
