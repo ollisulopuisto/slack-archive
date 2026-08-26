@@ -80,6 +80,12 @@ export type SearchMessage = {
    * the parent's block.
    */
   p?: string;
+  /** Reactions on the message, carried into the index. */
+  reactions?: Array<{
+    name?: string;
+    count?: number;
+    users?: Array<string>;
+  }>;
   /**
    * Attachment metadata, for search. Without it an image posted with no
    * caption cannot be found by any term at all: its message text is empty.

@@ -268,6 +268,34 @@ describe("toSearchMessages", () => {
     expect(indexed.map((message) => message.m)).toEqual(["kysymys", "vastaus"]);
   });
 
+  // Lost in .145 and unnoticed until an index came back with an empty
+  // reactions table beside an archive holding 144 840 of them.
+  it("carries reactions, which the unified mapping once dropped", () => {
+    const [message] = toSearchMessages(
+      [
+        {
+          ts: "1.0",
+          user: "U1",
+          text: "moi",
+          reactions: [
+            { name: "backman", count: 3, users: ["U1", "U2", "U3"] },
+            { name: null, count: 1 },
+          ],
+        },
+      ],
+      opts(),
+    );
+
+    expect(message.reactions).toEqual([
+      { name: "backman", count: 3, users: ["U1", "U2", "U3"] },
+    ]);
+  });
+
+  it("leaves reactions off a message that has none", () => {
+    const [message] = toSearchMessages([{ ts: "1.0", user: "U1" }], opts());
+    expect(message.reactions).toBeUndefined();
+  });
+
   it("leaves files off a message that has none", () => {
     const [message] = toSearchMessages(
       [{ ts: "1.0", user: "U1", text: "moi" }],

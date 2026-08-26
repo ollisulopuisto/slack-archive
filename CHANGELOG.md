@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.158] - 2026-08-26
+
+### Fixed
+- **`search.js` carried private-channel message text to the website.** One
+  flag, `--search-exclude-kinds`, fed two consumers that need different
+  answers. `search.db` is read by a bot that gates per user and may hold
+  private channels; `search.js` is downloaded whole by every visitor's browser
+  and can gate nothing. Dropping `private` from that flag - correct for the bot
+  - put `salahommat` and `metavursti`, names and messages, into a file served
+  to every logged-in member, including people who were never in them.
+
+  The browser file now excludes everything **either** consumer excludes: the
+  site's kinds plus the index's. A channel kept out of either is kept out of it.
+
+  The HTML side was never affected - `--html-exclude-kinds` did its job and no
+  private channel page was ever rendered. Found by koodi-2b on the served copy,
+  which is the only place the two flags' divergence was visible.
+
+- **Reactions are back in the index.** They were dropped in .145 when the two
+  builders were unified into one mapping: `files` was carried across and
+  `reactions` was not, so every index built since had an empty reactions table
+  beside an archive holding 144,840 of them.
+
 ## [v26.08.26.157] - 2026-08-26
 
 ### Fixed

@@ -154,6 +154,20 @@ export function toSearchMessages(
 
       if (files.length > 0) searchMessage.files = files;
 
+      // Reactions travel with the message. Lost in .145 when the two builders
+      // were unified: `files` was carried across from the inline mapping and
+      // this was not, so every index built since has had an empty reactions
+      // table while the archive itself held 144 840 of them.
+      const reactions = (message.reactions || [])
+        .filter((reaction: any) => reaction && reaction.name)
+        .map((reaction: any) => ({
+          name: reaction.name,
+          count: reaction.count,
+          users: reaction.users,
+        }));
+
+      if (reactions.length > 0) searchMessage.reactions = reactions;
+
       return searchMessage;
     })
     .filter((message) => isMessageSearchable(message, options.hiddenUsers));

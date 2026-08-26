@@ -8,6 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import {
   NO_SEARCH,
+  HTML_EXCLUDE_KINDS,
   SEARCH_EXCLUDE_KINDS,
   SEARCH_EXCLUDE_USERS,
   SEARCH_INCLUDE_BOTS,
@@ -153,6 +154,18 @@ export async function createSearchDatabase(spinner: Ora) {
   });
 }
 
+/**
+ * What the browser-side search file may contain.
+ *
+ * Everything the site excludes, plus everything the index excludes. A channel
+ * kept out of either is kept out of this file: it is downloaded in full by
+ * anyone who opens the search page, so it can enforce nothing itself.
+ */
+const SEARCH_FILE_EXCLUDE_KINDS = new Set([
+  ...HTML_EXCLUDE_KINDS,
+  ...SEARCH_EXCLUDE_KINDS,
+]);
+
 async function createSearchFile(spinner: Ora) {
   const existingData = await getSearchFile();
   const users = await getUsers();
@@ -192,8 +205,16 @@ async function createSearchFile(spinner: Ora) {
   ]);
 
   // Channels & Messages
+  //
+  // This file is part of the published SITE, so it takes the site's
+  // exclusions - not the index's. The two consumers are different: search.db
+  // is read by a bot that gates per user and may hold private channels;
+  // search.js is downloaded whole by every visitor's browser and can gate
+  // nothing. One flag feeding both put private-channel message text into a
+  // file served to every logged-in member, including people who were never in
+  // those channels.
   for (const [i, channel] of channels.entries()) {
-    if (!isChannelSearchable(channel, SEARCH_EXCLUDE_KINDS)) {
+    if (!isChannelSearchable(channel, SEARCH_FILE_EXCLUDE_KINDS)) {
       continue;
     }
 
