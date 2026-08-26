@@ -23,6 +23,8 @@
 #   --work PATH           scratch directory (default: $TMPDIR/archive-publish)
 #   --node CMD            how to run node (default: node)
 #   --ssh-key PATH        identity for rsync and the web-root check
+#   --known-hosts PATH    host keys to trust (a container has no home to
+#                         keep them in, and an unverified host is not a host)
 #   --repo PATH           this repository (default: the parent of this script)
 #   --dry-run             render and check, upload nothing
 #
@@ -36,6 +38,7 @@ EXCLUDE_KINDS="im,mpim,private"
 WORK="${TMPDIR:-/tmp}/archive-publish"
 NODE="node"
 SSH_KEY=""
+KNOWN_HOSTS=""
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DRY_RUN=0
 
@@ -48,6 +51,7 @@ while [ $# -gt 0 ]; do
     --node) NODE="$2"; shift 2 ;;
     --repo) REPO="$2"; shift 2 ;;
     --ssh-key) SSH_KEY="$2"; shift 2 ;;
+    --known-hosts) KNOWN_HOSTS="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
@@ -228,6 +232,10 @@ say "6/7  publishing"
 # box and are proxied at that path.
 RSH="ssh -o BatchMode=yes"
 [ -n "$SSH_KEY" ] && RSH="$RSH -i $SSH_KEY"
+# Run as a uid with no passwd entry - which is how this runs in a container -
+# and ssh has no home to look in. Point it at the file rather than letting it
+# fall back to trusting whatever answers.
+[ -n "$KNOWN_HOSTS" ] && RSH="$RSH -o UserKnownHostsFile=$KNOWN_HOSTS -o StrictHostKeyChecking=yes"
 
 rsync -rlt --delete --no-owner --no-group -e "$RSH" \
   --exclude='data/*' --exclude='html/files' \
