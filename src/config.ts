@@ -161,6 +161,25 @@ export const SEARCH_EXCLUDE_USERS = (
   .filter((name) => name.length > 0);
 
 /**
+ * Users whose attached files are never downloaded, by handle or id.
+ *
+ * For anything that posts back what the archive already holds. A bot that
+ * shares an archived image into a channel creates a real message with a real
+ * file; downloading it stores a second copy of a picture already in the
+ * archive, under a new id, permanently, for every share.
+ *
+ * Separate from `--search-exclude-users` on purpose. They overlap for
+ * reposting bots, and they answer different questions: somebody kept out of
+ * the index because they asked to be should still have their pictures kept.
+ */
+export const EXCLUDE_USER_FILES = (
+  getCliParameter("--exclude-user-files") || ""
+)
+  .split(",")
+  .map((name) => name.trim())
+  .filter((name) => name.length > 0);
+
+/**
  * How many `data_backup_<timestamp>` directories to keep, newest first.
  *
  * Each run copies the whole data directory before touching it, so on a nightly

@@ -32,6 +32,8 @@ export interface RenderContext {
   userNames: UserNames;
   userAvatars: UserAvatars;
   userStatuses: UserStatuses;
+  /** Users whose attached files this archive deliberately did not fetch. */
+  skippedFileOwners: Set<string>;
   /** Accounts the workspace marks as bots. */
   botIds: Set<string>;
   /** Everyone a profile page was actually written for. */
@@ -65,6 +67,7 @@ export function emptyRenderContext(): RenderContext {
     userAvatars: {},
     userStatuses: {},
     botIds: new Set(),
+    skippedFileOwners: new Set(),
     profileIds: new Set(),
     publishedChannels: new Set(),
     channels: [],
@@ -79,9 +82,8 @@ export function emptyRenderContext(): RenderContext {
   };
 }
 
-export const RenderContextProvider = React.createContext<RenderContext>(
-  emptyRenderContext(),
-);
+export const RenderContextProvider =
+  React.createContext<RenderContext>(emptyRenderContext());
 
 /** What this page knows. Every component that needs the archive asks here. */
 export function useRender(): RenderContext {

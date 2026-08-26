@@ -43,6 +43,7 @@ import {
   BOTS_PATH,
   FILES_BASE_URL,
   HTML_EXCLUDE_KINDS,
+  EXCLUDE_USER_FILES,
   RENDER_WORKERS,
   START_CHANNEL,
   getAvatarHistoryFilePath,
@@ -63,6 +64,7 @@ import { reportTimings, timed } from "./timings.js";
 import { defaultWorkerCount, renderPagesInWorkers } from "./render-workers.js";
 import { ChannelPlan, planChannel, shareOutPages } from "./render-plan.js";
 import { pickStartChannel } from "./start-channel.js";
+import { skipsFiles } from "./file-owners.js";
 import { fillMonths, groupByYear, MonthPage } from "./calendar-nav.js";
 import {
   emptyRenderContext,
@@ -172,8 +174,24 @@ interface FilesProps {
 const Files: React.FunctionComponent<FilesProps> = (props) => {
   const { message, channelId } = props;
   const { files } = message;
+  const { skippedFileOwners } = useRender();
 
   if (!files || files.length === 0) return null;
+
+  // A file this archive deliberately did not fetch - a bot re-posting a
+  // picture the archive already holds. Linking it would be a broken image;
+  // saying nothing would be a message that looks like it had no attachment.
+  if (message.user && skippedFileOwners.has(message.user)) {
+    return (
+      <div className="files">
+        {files.map((file: any) => (
+          <span key={file.id} className="file-gone">
+            {file.name || "A file"} - not archived, it is already here
+          </span>
+        ))}
+      </div>
+    );
+  }
 
   const fileElements = files.map((file: any) => {
     const { thumb_1024, thumb_720, thumb_480, thumb_pdf } = file;
@@ -1728,6 +1746,15 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
     { messages: data.messages, reactions: data.reactions },
     estimates,
   );
+  // The interval the seasonal model produced, kept so the page can show the
+  // estimate as a range rather than as a number that happens to move.
+  const speculativeRange = Object.values(estimates).reduce(
+    (range, month) => ({
+      low: range.low + month.low,
+      high: range.high + month.high,
+    }),
+    { low: 0, high: 0 },
+  );
 
   /** Somebody's share of the missing days, as an estimate a bar can carry. */
   const missingFor = (
@@ -1782,6 +1809,8 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
               humanMessages + speculative.missingMessages,
             )}
             speculativeHint={`${formatCount(speculative.missingMessages)} estimated for the missing days`}
+            low={humanMessages + speculativeRange.low}
+            high={humanMessages + speculativeRange.high}
           />
           <Tile label="People who posted" value={formatCount(people.length)} />
           <Tile label="Channels" value={formatCount(channels.length)} />
@@ -2349,6 +2378,7 @@ async function buildRenderContext(
     userAvatars: await getUserAvatars(),
     userStatuses: await getUserStatuses(),
     botIds: botUserIds(users),
+    skippedFileOwners: skipsFiles(EXCLUDE_USER_FILES, users),
     publishedChannels,
     channels,
     slackArchiveData,

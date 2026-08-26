@@ -121,6 +121,10 @@ export const Columns: React.FunctionComponent<ColumnsProps> = ({
                   y={PLOT_HEIGHT - estimated}
                   width={barWidth}
                   height={Math.max(1, estimated - height)}
+                  data-base={PLOT_HEIGHT}
+                  data-floor={height}
+                  data-low={scale(datum.value + datum.estimate.low)}
+                  data-high={scale(datum.value + datum.estimate.high)}
                 />
                 <line
                   className="viz-estimate-whisker"
@@ -186,6 +190,12 @@ export const Bars: React.FunctionComponent<{ data: Array<Datum> }> = ({
               datum.estimate
                 ? formatCount(datum.value + datum.estimate.estimate)
                 : undefined
+            }
+            data-low={
+              datum.estimate ? datum.value + datum.estimate.low : undefined
+            }
+            data-high={
+              datum.estimate ? datum.value + datum.estimate.high : undefined
             }
           >
             {formatCount(datum.value)}
@@ -266,10 +276,31 @@ export const Area: React.FunctionComponent<ColumnsProps> = ({
           .slice(run[0], run[run.length - 1] + 1)
           .reduce((total, d) => total + (d.estimate?.estimate ?? 0), 0);
 
+        const lows: Array<string> = [];
+        const highs: Array<string> = [];
+
+        for (let i = from; i <= to; i++) {
+          const datum = data[i];
+          lows.push(
+            `${i * step},${y(datum.estimate ? datum.estimate.low : datum.value)}`,
+          );
+          highs.push(
+            `${i * step},${y(datum.estimate ? datum.estimate.high : datum.value)}`,
+          );
+        }
+
         return (
           <g key={`estimate-${run[0]}`}>
             <polygon className="viz-estimate-band" points={band.join(" ")} />
-            <polyline className="viz-estimate" points={line.join(" ")} />
+            {/* The two extremes travel with the line so the page can redraw it
+                somewhere between them: an estimate that will not sit still is
+                telling the truth about itself. */}
+            <polyline
+              className="viz-estimate"
+              points={line.join(" ")}
+              data-low={lows.join(" ")}
+              data-high={highs.join(" ")}
+            />
             <title>
               {`${data[run[0]].label} to ${data[run[run.length - 1]].label}: nothing archived · perhaps ${formatCount(missing)} messages`}
             </title>
@@ -365,11 +396,16 @@ export const Tile: React.FunctionComponent<{
   /** What this number might be if the missing months were counted. */
   speculative?: string;
   speculativeHint?: string;
-}> = ({ label, value, hint, speculative, speculativeHint }) => (
+  /** The range that estimate came from, where one was computed. */
+  low?: number;
+  high?: number;
+}> = ({ label, value, hint, speculative, speculativeHint, low, high }) => (
   <div
     className="viz-tile"
     data-speculative={speculative}
     data-speculative-hint={speculativeHint}
+    data-low={low}
+    data-high={high}
   >
     <div className="viz-tile-value">{value}</div>
     <div className="viz-tile-label">{label}</div>

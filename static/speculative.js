@@ -95,6 +95,104 @@
     });
   }
 
+  // ------------------------------------------------------------------
+  // Instability, on purpose.
+  //
+  // A static number with an error bar gets read as "the answer, plus a
+  // decoration". A number that will not sit still gets read as what it is: a
+  // draw from a range, and we do not know which draw is right. Every second or
+  // so, everything speculative is redrawn somewhere else inside its own
+  // interval - the digits shuffle, the dotted line moves, the hollow caps
+  // breathe.
+  //
+  // Only things whose range was actually computed take part. A number invented
+  // by scaling somebody's share has no measured spread, and inventing a wobble
+  // for it would be inventing a claim.
+  // ------------------------------------------------------------------
+
+  var wobblers = targets
+    .map(function (target) {
+      var value = target.querySelector(".viz-tile-value") || target;
+      var low = Number(target.dataset.low);
+      var high = Number(target.dataset.high);
+
+      return isFinite(low) && isFinite(high) && high > low
+        ? { element: value, low: low, high: high, like: target.dataset.speculative }
+        : null;
+    })
+    .filter(Boolean);
+
+  var lines = [].slice.call(document.querySelectorAll(".viz-estimate[data-low]"));
+  var caps = [].slice.call(document.querySelectorAll(".viz-estimate-cap[data-low]"));
+
+  /** A draw that favours the middle: three uniforms averaged, clamped. */
+  function draw(low, high) {
+    var t = (Math.random() + Math.random() + Math.random()) / 3;
+    return low + (high - low) * t;
+  }
+
+  function points(text) {
+    return (text || "").split(" ").map(function (pair) {
+      var xy = pair.split(",");
+      return [Number(xy[0]), Number(xy[1])];
+    });
+  }
+
+  function shuffle() {
+    if (!toggle.checked || !motion) return;
+
+    wobblers.forEach(function (w) {
+      w.element.textContent = format(Math.round(draw(w.low, w.high)), w.like);
+    });
+
+    lines.forEach(function (line) {
+      var low = points(line.dataset.low);
+      var high = points(line.dataset.high);
+      // One draw for the whole run, wobbled per point: a month's estimate is
+      // not independent of the month beside it, and a line drawn from
+      // independent draws looks like noise rather than like uncertainty.
+      var shared = draw(0, 1);
+
+      line.setAttribute(
+        "points",
+        low
+          .map(function (p, i) {
+            var t = Math.min(1, Math.max(0, shared + (Math.random() - 0.5) * 0.25));
+            return p[0] + "," + (p[1] + (high[i][1] - p[1]) * t);
+          })
+          .join(" "),
+      );
+    });
+
+    caps.forEach(function (cap) {
+      var base = Number(cap.dataset.base);
+      var floor = Number(cap.dataset.floor);
+      var top = draw(Number(cap.dataset.low), Number(cap.dataset.high));
+
+      cap.setAttribute("y", String(base - top));
+      cap.setAttribute("height", String(Math.max(1, top - floor)));
+    });
+  }
+
+  var ticking = null;
+
+  function startShuffling() {
+    if (ticking || !motion) return;
+    ticking = setInterval(shuffle, 1100);
+    shuffle();
+  }
+
+  function stopShuffling() {
+    if (!ticking) return;
+    clearInterval(ticking);
+    ticking = null;
+  }
+
+  toggle.addEventListener("change", function () {
+    if (toggle.checked) startShuffling();
+    else stopShuffling();
+  });
+
   toggle.checked = false;
   toggle.addEventListener("change", apply);
   apply();

@@ -1666,3 +1666,21 @@ body.speculating .viz-tiles {
     animation: none;
   }
 }
+
+/* A number that is being redrawn from its own interval should not jump the
+   layout around while it does it. */
+body.speculating [data-speculative] .viz-tile-value,
+body.speculating .viz-bars-value[data-speculative] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The dotted line and the hollow caps move between draws rather than snapping,
+   so a redraw reads as uncertainty rather than as a glitch. */
+body.speculating .viz-estimate,
+body.speculating .viz-estimate-cap {
+  transition:
+    d 900ms ease-in-out,
+    y 900ms ease-in-out,
+    height 900ms ease-in-out,
+    points 900ms ease-in-out;
+}

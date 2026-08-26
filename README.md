@@ -257,6 +257,16 @@ by things other than a browser: `--search-exclude-kinds`,
 `--search-exclude-users`, and bots which are excluded by default
 (`--search-include-bots` puts them back).
 
+`--exclude-user-files` is the other half of the same idea, one layer down. If
+something can post archived content back into the workspace, the re-post is a
+real message with a real file, and the next run downloads it - so every share
+permanently stores a second copy of a picture the archive already holds. Not
+fetching it beats deleting it later: a sweep needs write access to a file store
+that ought to be read-only, it has to keep working forever, and a sweep that
+silently stops looks exactly like one with nothing to do. Messages from those
+users still appear; their attachments say they were not archived because the
+archive already has them.
+
 `--search-exclude-users` can be load-bearing in a way that is not obvious from
 the flag: if something can post archived content back into the workspace - a
 bot that shares an old image, say - then excluding it from the index is what

@@ -4,6 +4,8 @@ import esMain from "es-main";
 import ora, { Ora } from "ora";
 
 import { File } from "./interfaces.js";
+import { EXCLUDE_USER_FILES } from "./config.js";
+import { skipsFiles } from "./file-owners.js";
 import {
   ArchivedFile,
   archivedFileName,
@@ -15,7 +17,7 @@ import {
   config,
   NO_FILE_DOWNLOAD,
 } from "./config.js";
-import { getChannels, getMessages } from "./data-load.js";
+import { getChannels, getMessages, getUsers } from "./data-load.js";
 import { downloadAvatars } from "./users.js";
 
 export interface DownloadUrlOptions {
@@ -119,6 +121,8 @@ export async function downloadFilesForChannel(channelId: string, spinner: Ora) {
     return;
   }
 
+  // Whose files this archive does not fetch: see EXCLUDE_USER_FILES.
+  const skip = skipsFiles(EXCLUDE_USER_FILES, await getUsers());
   const messages = await getMessages(channelId);
   const channels = await getChannels();
   const channel = channels.find(({ id }) => id === channelId);
@@ -143,7 +147,7 @@ export async function downloadFilesForChannel(channelId: string, spinner: Ora) {
       continue;
     }
 
-    if (fileMessage.files) {
+    if (fileMessage.files && !skip.has(fileMessage.user || "")) {
       for (const file of fileMessage.files) {
         spinner.text = getSpinnerText(i);
         spinner.render();
@@ -153,7 +157,7 @@ export async function downloadFilesForChannel(channelId: string, spinner: Ora) {
 
     if (fileMessage.replies) {
       for (const [ri, reply] of fileMessage.replies.entries()) {
-        if (reply.files) {
+        if (reply.files && !skip.has(reply.user || "")) {
           for (const file of reply.files) {
             spinner.text = getSpinnerText(i, ri);
             spinner.render();

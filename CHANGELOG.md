@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.181] - 2026-08-26
+
+### Added
+- **`--exclude-user-files`**: whose attachments are never downloaded. A bot
+  that shares an archived image back into a channel makes a real message with a
+  real file, so every share would permanently store a second copy of a picture
+  the archive already has. Not fetching it beats sweeping it up later - a sweep
+  needs write access to a store that ought to be read-only, has to keep working
+  forever, and one that silently stops looks exactly like one with nothing to
+  do. The renderer knows about the rule, so those messages say their attachment
+  was not archived rather than showing a broken image.
+- **The estimates refuse to sit still.** With the toggle on, every speculative
+  number is redrawn once a second from inside its own interval - digits
+  shuffle, the dotted line moves within its band, the hollow caps breathe. A
+  static number with an error bar reads as "the answer, plus a decoration"; a
+  number that will not settle reads as what it is. The draw favours the middle,
+  one draw per gap is jittered per point so a run reads as uncertainty rather
+  than noise, and only numbers whose range was actually computed take part -
+  inventing a wobble for a number with no measured spread would be inventing a
+  claim. Reduced-motion gets the estimate without the movement.
+
 ## [v26.08.26.180] - 2026-08-26
 
 ### Added
