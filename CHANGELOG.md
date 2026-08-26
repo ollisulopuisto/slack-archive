@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.187] - 2026-08-26
+
+### Changed
+- **The image is Debian now, not Alpine - glibc rather than musl.** The size
+  argument does not survive contact with this project: the pages are 900 MB and
+  the attachments 41 GB, so thirty megabytes of base image is not worth
+  optimising for. What musl costs is real - prebuilt native binaries are built
+  for glibc, which is why this archive already uses a WebAssembly SQLite rather
+  than a native one - and it differs at runtime too, in its allocator and its
+  far smaller default thread stack, which is the kind of difference that
+  segfaults instead of erroring. There is an unexplained segfault on the NAS on
+  the musl image; this does not diagnose it, but it removes a variable that
+  existed only for a saving nobody needed.
+
 ## [v26.08.26.186] - 2026-08-26
 
 ### Fixed

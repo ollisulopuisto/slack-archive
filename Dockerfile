@@ -6,7 +6,7 @@
 # compile happens inside the image from a known checkout, and the image is
 # tagged with that commit.
 
-FROM node:18-alpine AS builder
+FROM node:18-slim AS builder
 # No build toolchain: nothing here compiles any more. The search database used
 # to be `sqlite3`, a node-gyp addon with no musl prebuilt, which is why this
 # stage carried python3/make/g++. It is now node-sqlite3-wasm - a .wasm file,
@@ -21,7 +21,22 @@ WORKDIR /app
 COPY . .
 RUN npm ci
 
-FROM node:18-alpine AS runtime
+# Debian rather than Alpine, i.e. glibc rather than musl.
+#
+# The size argument for Alpine is not an argument here: this image renders an
+# archive whose pages are 900 MB and whose attachments are 41 GB, so thirty
+# megabytes of base image is not a number worth optimising. What musl costs is
+# real: prebuilt native binaries are built for glibc, so anything with a native
+# addon compiles from source or does not work - this project already uses a
+# WebAssembly SQLite instead of a native one for exactly that reason - and musl
+# differs at runtime too, in its allocator and its much smaller default thread
+# stack, which is the kind of difference that produces a segfault rather than
+# an error message.
+#
+# We have an unexplained segfault on this image on arm64. Changing the base
+# does not diagnose it, but it removes a variable that was only ever there for
+# a saving we do not need.
+FROM node:18-slim AS runtime
 WORKDIR /app
 
 # node_modules is copied rather than reinstalled, which also keeps the runtime
@@ -36,8 +51,10 @@ COPY scripts ./scripts
 # What publishing needs, and nothing else: the archive renders here, so the
 # thing that puts it on a web host runs here too rather than on whichever
 # machine happens to have a shell. bash because the script is bash; rsync and
-# ssh because that is the transport. About 5 MB on alpine.
-RUN apk add --no-cache bash openssh-client rsync
+# ssh because that is the transport. bash is already in the base here.
+RUN apt-get update \
+  && apt-get install --no-install-recommends -y openssh-client rsync \
+  && rm -rf /var/lib/apt/lists/*
 
 # Drop devDependencies now that the compile is done. `prune` does not run
 # lifecycle scripts, so `prepare` stays quiet.
