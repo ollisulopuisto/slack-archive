@@ -35,6 +35,20 @@ async function getFile<T>(filePath: string, returnIfEmpty: T): Promise<T> {
 
 export const messagesCache: Record<string, Array<ArchiveMessage>> = {};
 
+/**
+ * Forget the parsed messages.
+ *
+ * The counting pass reads every message in the archive - 1.5 GB of JSON here -
+ * and the render workers then read what they need for themselves. Keeping the
+ * parent's copy while eight workers allocate their own is how a machine with
+ * 32 GB runs out of it.
+ */
+export function clearMessagesCache() {
+  for (const channelId of Object.keys(messagesCache)) {
+    delete messagesCache[channelId];
+  }
+}
+
 export async function getMessages(
   channelId: string,
   cachedOk: boolean = false,

@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.171] - 2026-08-26
+
+### Added
+- **The render uses more than one core, and says where its time goes.** Every
+  run now prints its split - `Rendered in 1m01s: reading and counting 10s,
+  channel pages 51s` - which is how this was sized in the first place: the
+  channel pages were 2m32s of a 3m11s run and everything else was seconds.
+  They are now rendered by a pool of workers, one bucket of channels each,
+  balanced by message count rather than by channel count because one channel
+  here holds 65% of the archive. 3m11s to 1m27s on ten cores.
+
+  `--render-workers 1` renders in this process exactly as before, and
+  `--render-workers N` pins the number. Nothing about a page depends on any
+  other page - which only became true when the render context stopped being
+  fifteen mutable globals.
+
 ## [v26.08.26.170] - 2026-08-26
 
 ### Fixed

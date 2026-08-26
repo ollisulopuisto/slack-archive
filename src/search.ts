@@ -35,6 +35,7 @@ import {
   toSearchMessages,
 } from "./search-filter.js";
 import { writeSearchData } from "./data-write.js";
+import { reportTimings, timed } from "./timings.js";
 
 // Format:
 // channelId: [ timestamp0, timestamp1, timestamp2, ... ]
@@ -81,11 +82,12 @@ export async function createSearch() {
   const spinner = ora(`Creating search file...`).start();
   spinner.render();
 
-  await createSearchFile(spinner);
-  await createSearchHTML();
-  await createSearchDatabase(spinner);
+  await timed("search file", () => createSearchFile(spinner));
+  await timed("search page", async () => createSearchHTML());
+  await timed("search database", () => createSearchDatabase(spinner));
 
   spinner.succeed(`Search file created`);
+  console.log(`\n ${reportTimings("Finished")}`);
 }
 
 export async function createSearchDatabase(spinner: Ora) {

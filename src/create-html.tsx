@@ -11,6 +11,7 @@ import esMain from "es-main";
 import slackMarkdown from "slack-markdown";
 
 import {
+  clearMessagesCache,
   getChannels,
   getMessages,
   getUsers,
@@ -38,6 +39,7 @@ import {
   BOTS_PATH,
   FILES_BASE_URL,
   HTML_EXCLUDE_KINDS,
+  RENDER_WORKERS,
   getAvatarHistoryFilePath,
   getProfileFilePath,
   getChannelStatsFilePath,
@@ -51,6 +53,12 @@ import { write } from "./data-write.js";
 import { getSlackArchiveData } from "./archive-data.js";
 import { getEmojiRef, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
 import { splitQuotes } from "./blockquotes.js";
+import { reportTimings, timed } from "./timings.js";
+import {
+  defaultWorkerCount,
+  renderChannelsInWorkers,
+  shareOut,
+} from "./render-workers.js";
 import {
   emptyRenderContext,
   RenderContext,
@@ -509,6 +517,26 @@ const ChannelLink: React.FunctionComponent<ChannelLinkProps> = ({
     </li>
   );
 };
+
+/** Used by a render worker: the context was built in the parent process. */
+export function setRenderContext(context: RenderContext) {
+  render = context;
+}
+
+/**
+ * One process's share of the channel pages. The parent renders everything
+ * else, because everything else is seconds.
+ */
+export async function renderChannelPages(channels: Array<Channel>) {
+  for (const [i, channel] of channels.entries()) {
+    if (!channel.id) {
+      console.warn(`Can't create HTML for channel: No id found`, channel);
+      continue;
+    }
+
+    await createHtmlForChannel({ channel, i, total: channels.length });
+  }
+}
 
 /**
  * The channel list, on every page.
@@ -2044,9 +2072,11 @@ async function createHtmlForChannel({
 }) {
   const messages = await getMessages(channel.id!, true);
   const chunks = chunk(messages, MESSAGE_CHUNK);
-  const spinner = ora(
-    `Rendering HTML for ${i + 1}/${total} ${channel.name || channel.id}`,
-  ).start();
+  const spinner = ora({
+    text: `Rendering HTML for ${i + 1}/${total} ${channel.name || channel.id}`,
+    // Several workers writing spinner frames to one terminal is illegible.
+    isEnabled: !process.env.SLACK_ARCHIVE_QUIET,
+  }).start();
 
   // Calculate info about all chunks
   const chunksInfo: ChunksInfo = [];
@@ -2151,22 +2181,50 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
 
   console.log(`\n Creating HTML files for ${channels.length} channels...`);
 
-  render = await buildRenderContext(channels);
+  render = await timed("reading and counting", () =>
+    buildRenderContext(channels),
+  );
 
-  await renderStatsAndProfiles();
-  await renderNamesPage();
+  await timed("numbers pages", () => renderStatsAndProfiles());
+  await timed("names page", () => renderNamesPage());
 
-  for (const [i, channel] of channels.entries()) {
-    if (!channel.id) {
-      console.warn(`Can't create HTML for channel: No id found`, channel);
-      continue;
+  await timed("channel pages", async () => {
+    const workers = defaultWorkerCount(RENDER_WORKERS);
+
+    if (workers < 2) {
+      await renderChannelPages(channels);
+      return;
     }
 
-    await createHtmlForChannel({ channel, i, total: channels.length });
-  }
+    // The parent has just parsed every message to count them, and is about to
+    // hand the rendering to processes that will read what they need for
+    // themselves. Holding 1.5 GB of messages it will not look at again, while
+    // eight workers allocate their own, is how this runs out of memory.
+    clearMessagesCache();
 
-  await writePageIndex();
-  await renderIndexPage();
+    const weights: Record<string, number> = {};
+    for (const [id, channelStats] of Object.entries(render.stats!.byChannel)) {
+      weights[id] = channelStats.messages;
+    }
+
+    const buckets = shareOut(channels, weights, workers);
+    console.log(
+      `\n Rendering ${channels.length} channels on ${buckets.length} cores`,
+    );
+
+    const { pages } = await renderChannelsInWorkers(render, buckets);
+
+    // The page index is what the workers learned that this process needs: a
+    // permalink cannot find its message without it.
+    for (const [channelId, timestamps] of Object.entries(pages)) {
+      for (const ts of timestamps) recordPage(channelId, ts);
+    }
+  });
+
+  await timed("front page", async () => {
+    await writePageIndex();
+    await renderIndexPage();
+  });
 
   // Copy in fonts & css
   // static/search.html is the TEMPLATE for the search page, with placeholder
@@ -2177,6 +2235,8 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
   fs.copySync(path.join(_dirname, "../static"), path.join(OUT_DIR, "html/"), {
     filter: (src) => path.basename(src) !== "search.html",
   });
+
+  console.log(`\n ${reportTimings("Rendered")}`);
 }
 
 if (esMain(import.meta)) {
