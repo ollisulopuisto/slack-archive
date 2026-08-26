@@ -114,6 +114,8 @@ let userAvatars: UserAvatars = {};
 let userStatuses: UserStatuses = {};
 /** Accounts the workspace marks as bots: they have no profile page to link to. */
 let botIds: Set<string> = new Set();
+/** When this render happened - stamped on every page. */
+let renderedAt = new Date().toISOString();
 /** Stretches of days this archive holds nothing for. Said out loud on every
  * page that counts anything, because a run that never happened looks exactly
  * like a day nobody spoke. */
@@ -581,7 +583,10 @@ const HtmlPage: React.FunctionComponent<HtmlPageProps> = (props) => {
         <title>Slack</title>
         <link rel="stylesheet" href={`${base}style.css`} />
       </head>
-      <body>{props.children}</body>
+      <body>
+        {props.children}
+        <Generated />
+      </body>
     </html>
   );
 };
@@ -783,6 +788,25 @@ function nameKinds(name: UserName): string {
 
   return kinds.map((kind) => NAME_KIND_WORDS[kind] || kind).join(" + ");
 }
+
+/**
+ * When these pages were made.
+ *
+ * A static archive gives a reader no way to tell yesterday's copy from one
+ * that stopped updating in March, and this one is nightly - "last updated 3
+ * days ago" is the difference between a working archive and a broken one. The
+ * exact moment is in the markup and the phrase is worked out in the reader's
+ * browser, so a page read a year from now does not still claim to be fresh.
+ */
+const Generated: React.FunctionComponent = () => (
+  <div className="generated">
+    Archive generated{" "}
+    <time dateTime={renderedAt} data-relative="">
+      {formatIsoDay(renderedAt.slice(0, 10))}
+    </time>
+    <script src={`${base}relative-time.js`} defer />
+  </div>
+);
 
 /** "1.2.2022" from an ISO day. */
 function formatIsoDay(iso: string): string {
@@ -1761,6 +1785,7 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
 
   console.log(`\n Creating HTML files for ${channels.length} channels...`);
 
+  renderedAt = new Date().toISOString();
   users = await getUsers();
   userNames = await getUserNames();
   userAvatars = await getUserAvatars();

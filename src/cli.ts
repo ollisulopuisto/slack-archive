@@ -231,6 +231,26 @@ async function getToken() {
   config.token = result.token;
 }
 
+/**
+ * Every write of archived data goes through here.
+ *
+ * With --no-slack-connect nothing was fetched, so each of these files can only
+ * be rewritten with what was just read out of it. The nightly render pass runs
+ * that way over the same data directory as a different user and died twice on
+ * EACCES writing a file it had no news for. Not writing is both the correct
+ * behaviour and the only version that cannot fail on a permission.
+ *
+ * A flag would state it; this infers it from the one thing that decides it, so
+ * there is nothing to set correctly at the call site.
+ */
+async function saveData(save: () => Promise<unknown>) {
+  if (NO_SLACK_CONNECT) {
+    return;
+  }
+
+  await save();
+}
+
 async function writeLastSuccessfulArchive() {
   // A render is not an archive. With --no-slack-connect nothing was fetched,
   // so stamping "last successful archive" would date an archive that did not
@@ -358,14 +378,14 @@ export async function main() {
   // different user, died twice on EACCES here without touching a byte of new
   // information.
   if (Object.keys(emojis).length > 0) {
-    await writeAndMerge(EMOJIS_DATA_PATH, emojis);
+    await saveData(() => writeAndMerge(EMOJIS_DATA_PATH, emojis));
   }
 
   await downloadAllEmoji(emojis);
 
   // Do we want to merge data?
   await selectMergeFiles();
-  await writeAndMerge(CHANNELS_DATA_PATH, selectedChannels);
+  await saveData(() => writeAndMerge(CHANNELS_DATA_PATH, selectedChannels));
 
   // Download messages and extras for each channel
   await downloadEachChannel();
@@ -420,15 +440,14 @@ export async function main() {
       }
     }
 
-    await write(USER_NAMES_DATA_PATH, JSON.stringify(userNames, undefined, 2));
-
-    await write(
-      USER_AVATARS_DATA_PATH,
-      JSON.stringify(userAvatars, undefined, 2),
+    await saveData(() =>
+      write(USER_NAMES_DATA_PATH, JSON.stringify(userNames, undefined, 2)),
     );
-    await write(
-      USER_STATUS_DATA_PATH,
-      JSON.stringify(userStatuses, undefined, 2),
+    await saveData(() =>
+      write(USER_AVATARS_DATA_PATH, JSON.stringify(userAvatars, undefined, 2)),
+    );
+    await saveData(() =>
+      write(USER_STATUS_DATA_PATH, JSON.stringify(userStatuses, undefined, 2)),
     );
 
     const nicks = Object.values(userNames).reduce(
@@ -564,8 +583,10 @@ export async function main() {
         return parseFloat(b.ts || "0") - parseFloat(a.ts || "0");
       });
 
-      await writeAndMerge(USERS_DATA_PATH, users);
-      await writeJsonArray(getChannelDataFilePath(channel.id), result);
+      await saveData(() => writeAndMerge(USERS_DATA_PATH, users));
+      await saveData(() =>
+        writeJsonArray(getChannelDataFilePath(channel.id!), result),
+      );
 
       // Download files. This needs to run after the messages are saved to disk
       // since it uses the message data to find which files to download.

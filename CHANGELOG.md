@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.163] - 2026-08-26
+
+### Added
+- **Every page says when it was made** - "Archive generated 3 days ago", worked
+  out in the reader's browser from the exact moment in the markup. A static
+  archive looks identical whether it was written last night or stopped
+  updating in March, and this one is nightly, so that difference is the
+  difference between an archive and a broken one. Without JavaScript the date
+  itself still renders.
+
+### Fixed
+- **A render pass no longer writes to the archive at all.** With
+  `--no-slack-connect` nothing was fetched, so every data file it rewrote could
+  only be rewritten with what it had just read - and the nightly render, which
+  runs exactly that way over the same data directory as a different user, died
+  twice today on `EACCES`. Writes now go through one guard that infers this
+  from the argument that decides it, rather than a flag somebody has to
+  remember at eight call sites.
+
 ## [v26.08.26.162] - 2026-08-26
 
 ### Fixed

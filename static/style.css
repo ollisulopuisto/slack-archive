@@ -842,3 +842,15 @@ a.timestamp:focus-visible {
   font-size: 0.85rem;
   text-align: center;
 }
+
+/* When these pages were made. A static archive looks identical whether it was
+   written last night or abandoned in March. */
+.generated {
+  padding: 0.75rem 1rem;
+  color: var(--text-muted, #616061);
+  font-size: 0.8rem;
+}
+
+#index .generated {
+  color: rgba(255, 255, 255, 0.55);
+}
