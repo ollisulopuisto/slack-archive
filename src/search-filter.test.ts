@@ -276,3 +276,29 @@ describe("toSearchMessages", () => {
     expect(message.files).toBeUndefined();
   });
 });
+
+describe("the page index cannot name a channel the file excludes", () => {
+  // The leak this exists to prevent: search.js carried 46 page-index keys
+  // including salahommat, metavursti and a DM, inside a file published to a
+  // site containing none of them. Ids and page timestamps, no names or text -
+  // enough to say those conversations exist and roughly how busy they were.
+  it("keeps only pages for channels the file describes", () => {
+    const channels = { C1: "offtopic", C2: "yleinen" };
+    const merged = {
+      C1: ["3.0", "1.0"],
+      C2: ["9.0"],
+      C_PRIVATE: ["5.0", "4.0"],
+      D_DM: ["2.0"],
+    };
+
+    const pages: Record<string, Array<string>> = {};
+    for (const channelId of Object.keys(channels)) {
+      if (merged[channelId as keyof typeof merged]) {
+        pages[channelId] = merged[channelId as keyof typeof merged];
+      }
+    }
+
+    expect(Object.keys(pages).sort()).toEqual(["C1", "C2"]);
+    expect(pages.C_PRIVATE).toBeUndefined();
+  });
+});

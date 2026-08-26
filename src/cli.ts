@@ -232,8 +232,16 @@ async function getToken() {
 }
 
 async function writeLastSuccessfulArchive() {
+  // A render is not an archive. With --no-slack-connect nothing was fetched,
+  // so stamping "last successful archive" would date an archive that did not
+  // happen - and the publish render, which runs that way by design, would
+  // rewrite the marker every time it produced a website from yesterday's data.
+  if (NO_SLACK_CONNECT) {
+    return;
+  }
+
   const now = new Date();
-  write(DATE_FILE, now.toISOString());
+  await write(DATE_FILE, now.toISOString());
 }
 
 function getLastSuccessfulRun() {

@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.157] - 2026-08-26
+
+### Fixed
+- **`search.js` named channels the file itself excludes.** Its page index was
+  built by merging every channel ever paginated - including runs from before
+  any exclusion existed - so a file containing only public channels still
+  carried 46 page-index entries, among them both private channels and a direct
+  message. Ids and page-boundary timestamps, no names and no message text, but
+  enough to say those conversations exist and roughly how busy they were. Found
+  while publishing that file to a website that contains none of them.
+
+  The page index is now built from the channels the file actually describes, so
+  a channel cannot appear in one and not the other. It also makes a reader's
+  links fail closed: a link into a channel that was never published would
+  otherwise resolve to a page nobody can open.
+
+- **A render no longer claims to be an archive.** `--no-slack-connect` fetches
+  nothing, but still stamped `.last-successful-run` - so the publish render,
+  which runs that way by design, rewrote the "last successful archive" marker
+  every time it built a website out of yesterday's data. The marker now moves
+  only when something was actually archived.
+
 ## [v26.08.26.156] - 2026-08-26
 
 ### Fixed

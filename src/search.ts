@@ -162,7 +162,15 @@ async function createSearchFile(spinner: Ora) {
     channels: {},
     users: {},
     messages: {},
-    pages: { ...existingData.pages, ...INDEX_OF_PAGES },
+    // Only the channels this file is allowed to describe.
+    //
+    // The page index is merged from every channel ever paginated, including
+    // runs before any exclusion existed - so an unfiltered map named the DM
+    // and private channels by id, with their page-boundary timestamps, inside
+    // a file published to a website that contains none of them. No names and
+    // no messages, but enough to say those conversations exist and roughly how
+    // busy they were.
+    pages: {},
     // Oldest first. Somebody looking for a name that was dropped in 2019 is
     // searching for the person, and this is the only place that connects them.
     names: Object.fromEntries(
@@ -220,6 +228,13 @@ async function createSearchFile(spinner: Ora) {
 
     result.messages![channel.id] = messages;
     result.channels[channel.id] = name;
+  }
+
+  // Built last, from the same list the messages came from, so a channel can
+  // never appear in the page index without appearing in the file proper.
+  const merged = { ...existingData.pages, ...INDEX_OF_PAGES };
+  for (const channelId of Object.keys(result.channels)) {
+    if (merged[channelId]) result.pages[channelId] = merged[channelId];
   }
 
   await writeSearchData(SEARCH_DATA_PATH, result);
