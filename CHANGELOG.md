@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.27.192] - 2026-08-27
+
+### Fixed
+- **`.node-version` is 22.23.2, not 22.11.0, and a test now says why.** npm
+  does not fail on an optional dependency whose `engines` exclude the running
+  node - it skips it and installs everything else, quietly. 22.11.0 falls in
+  the hole in rolldown's `^20.19.0 || >=22.12.0`, so vitest's native binding
+  was never installed and the test job died on a module not found, in a place
+  with nothing to do with the version that caused it. The new test walks every
+  `engines.node` in the lockfile against `.node-version`, and checks that the
+  major matches what the Dockerfile ships - which was the point of moving in
+  the first place.
+
 ## [v26.08.27.191] - 2026-08-27
 
 ### Added
