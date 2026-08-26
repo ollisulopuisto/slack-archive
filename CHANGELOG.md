@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.183] - 2026-08-26
+
+### Fixed
+- **A link to a message that is not on the page now repairs itself.** Pages are
+  cut newest-first in blocks of a thousand, so one new message pushes one off
+  the end of every page after it - which means a link built from an older index
+  points at a page that no longer holds its message. Nothing failed: the reader
+  landed at the top of roughly the right era, with no error and no explanation.
+  A miss now hands the timestamp back to the front page, which resolves it
+  against the page index shipped with THIS render and sends the reader on. One
+  hop only; a second miss lands honestly rather than looping.
+
+  This makes the whole class of drift benign - for the bot's links, for links
+  people paste to each other, and for anything bookmarked before a render.
+
 ## [v26.08.26.182] - 2026-08-26
 
 ### Added

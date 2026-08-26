@@ -856,8 +856,11 @@ const IndexPage: React.FunctionComponent = () => {
                 channel = channel + '-' + Math.max(0, page);
               }
 
+              // Marked, so a page that still cannot find the message sends
+              // nobody back here: one hop, then an honest landing.
               window.location.replace(
-                "${"${base}"}" + channel + '.html' + (tsValue ? '#' + tsValue : '')
+                "${"${base}"}" + channel + '.html?resolved=1' +
+                  (tsValue ? '#' + tsValue : '')
               );
             }
             `,
