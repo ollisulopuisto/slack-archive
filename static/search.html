@@ -203,8 +203,10 @@
           // the page either way.
           const pageTsForLookup = p || t;
           const index = channelPages.findIndex((pageTs) => pageTs < pageTsForLookup);
-          const page = `${c}-${index}`;
-          href = `index.html?c=${encodeURIComponent(page)}&ts=${t}`;
+          const page = `${c}-${index < 0 ? 0 : index}`;
+          // Every page has its own URL now, so a result links to the page and
+          // the message on it rather than to a frameset and a query string.
+          href = `html/${page}.html#${t}`;
         }
 
         const message = (

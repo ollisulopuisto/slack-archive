@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.169] - 2026-08-26
+
+### Changed
+- **Every page stands on its own.** The archive was a frameset: one page,
+  `index.html`, holding every conversation in an iframe. So no page had a URL -
+  sharing a message meant sharing the front page plus a query string, the back
+  button moved the frame rather than the page, and a page opened directly had
+  no sidebar. The channel list is now rendered into all 1 143 pages, about five
+  kilobytes each on pages that are already the better part of a megabyte, and
+  `index.html` is a front page: what this archive is, in numbers, and the way
+  in. It still answers the old `?c=…&ts=…` links - they are pasted around Slack
+  and the bot generates them - by sending them on to the page that now exists.
+- **One render context instead of fifteen mutable globals.** Whether a page
+  came out right depended on the order the render happened to call things in,
+  and when it was wrong nothing failed: the page simply came out worse. Two of
+  today's bugs were exactly that. Counting now returns what it learned -
+  `{ stats, gaps, profileIds }` - and `buildRenderContext` assembles the one
+  object a page cannot be rendered without.
+
+### Fixed
+- **`scroll.js` never worked.** `getElementById(window.location.hash)` - the
+  hash carries its own `#`, so it never matched anything, and a message id that
+  is not on this page threw, taking the rest of the page's scripts with it.
+- **A channel nobody ever posted in linked to a numbers page that is not
+  written for it.**
+- **Emoji rendered as `:shortcode:` in everything published from this laptop.**
+  The renderer links an emoji only if it can see the file, and the publish
+  script staged the emoji directory after the render rather than before. 385
+  images were on disk and 137 shortcodes on a single page.
+
 ## [v26.08.26.168] - 2026-08-26
 
 ### Added

@@ -52,6 +52,12 @@ import { getSlackArchiveData } from "./archive-data.js";
 import { getEmojiRef, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
 import { splitQuotes } from "./blockquotes.js";
 import {
+  emptyRenderContext,
+  RenderContext,
+  RenderContextProvider,
+  useRender,
+} from "./render-context.js";
+import {
   archivedFileName,
   archivedThumbName,
   externalFileUrl,
@@ -110,51 +116,24 @@ import {
 const _dirname = dirname(fileURLToPath(import.meta.url));
 const MESSAGE_CHUNK = 1000;
 
-// This used to be a prop on the components, but passing it around
-// was surprisingly slow. Global variables are cool again!
-// Set by createHtmlForChannels().
-let users: Users = {};
-let userNames: UserNames = {};
-let stats: WorkspaceStats | null = null;
+/**
+ * What every page of THIS render knows. Built once, before anything renders,
+ * by buildRenderContext(); components read it through useRender().
+ */
+let render: RenderContext = emptyRenderContext();
+
+/** File id -> "<channelId>/<name on disk>", collected while counting. */
+const fileIndex: Record<string, string> = {};
 
 /**
- * The channels this archive may render.
- *
- * One predicate, applied everywhere channels are enumerated: the pages, the
- * index, the stats and the counting behind them. isChannelSearchable asks
- * exactly the same question of a different list, so it is the same function.
+ * The channels this site publishes. Not rendering beats gating: a page that
+ * was never written cannot leak through a wrong proxy rule.
  */
 function publishable(channels: Array<Channel>): Array<Channel> {
   return channels.filter((channel) =>
     isChannelSearchable(channel, HTML_EXCLUDE_KINDS),
   );
 }
-let userAvatars: UserAvatars = {};
-let userStatuses: UserStatuses = {};
-/** Accounts the workspace marks as bots: they have no profile page to link to. */
-let botIds: Set<string> = new Set();
-/** What this whole archive is called, for the pages that are about all of it. */
-let teamMeta: PageMeta = indexMeta(undefined);
-/** The channels this render publishes - nothing else may be linked to. */
-let publishedChannels: Set<string> = new Set();
-/** Where a Slack link in a message should point instead. */
-let linkContext: ArchiveLinkContext = archiveLinkContext({});
-/** File id -> "<channelId>/<name on disk>", for the links that name a file. */
-const fileIndex: Record<string, string> = {};
-/** When this render happened - stamped on every page. */
-let renderedAt = new Date().toISOString();
-/** Stretches of days this archive holds nothing for. Said out loud on every
- * page that counts anything, because a run that never happened looks exactly
- * like a day nobody spoke. */
-let gaps: Array<Gap> = [];
-/** Everyone a profile page was actually written for. Filled in before the
- * channel pages are rendered, because they link to it. */
-let profileIds: Set<string> = new Set();
-let slackArchiveData: SlackArchiveData = { channels: {} };
-let me: User | null;
-
-// Little hack to switch between ./index.html and ./html/...
-let base = "";
 
 function formatTimestamp(message: Message, dateFormat = "PPPPpppp") {
   const jsTs = slackTimestampToJavaScriptTimestamp(message.ts);
@@ -250,6 +229,8 @@ interface AvatarProps {
   userId?: string;
 }
 const Avatar: React.FunctionComponent<AvatarProps> = ({ userId }) => {
+  const { users, base } = useRender();
+
   if (!userId) return null;
 
   const user = users[userId];
@@ -290,6 +271,8 @@ interface ReactionProps {
   reaction: Reaction;
 }
 const Reaction: React.FunctionComponent<ReactionProps> = ({ reaction }) => {
+  const { users } = useRender();
+
   const reactors = [];
 
   if (reaction.users) {
@@ -310,6 +293,8 @@ interface EmojiProps {
   name: string;
 }
 const Emoji: React.FunctionComponent<EmojiProps> = ({ name }) => {
+  const { base } = useRender();
+
   if (isEmojiUnicode(name)) {
     return <>{getEmojiUnicode(name)}</>;
   }
@@ -331,6 +316,8 @@ interface MessageProps {
   children?: React.ReactNode;
 }
 const Message: React.FunctionComponent<MessageProps> = (props) => {
+  const { users, userNames, linkContext, profileIds } = useRender();
+
   const { message, channelId } = props;
   const username = getName(message.user, users);
 
@@ -353,7 +340,7 @@ const Message: React.FunctionComponent<MessageProps> = (props) => {
   // A profile page exists for everyone who wrote a message, except bots - they
   // get one page between them rather than one each. So the link is offered
   // when there is somewhere for it to go, and never when it would 404.
-  const profile = profileHref(message.user);
+  const profile = profileHref(message.user, profileIds);
 
   const sender = (
     <span
@@ -387,14 +374,11 @@ const Message: React.FunctionComponent<MessageProps> = (props) => {
         ) : (
           sender
         )}
-        {/* A link somebody can paste into Slack: it opens the archive at
-            this message, with the sidebar and the conversation around it.
-            target=_top because the channel pages are read inside a frame, and
-            a link that only moves the frame is not a link anybody can share. */}
+        {/* This page has its own URL, so the link somebody pastes into Slack
+            is the address bar plus this anchor. */}
         <a
           className="timestamp"
-          href={`../index.html?c=${channelId}&ts=${message.ts}`}
-          target="_top"
+          href={`#${message.ts}`}
           title="Link to this message"
         >
           <span className="c-timestamp__label">{formatTimestamp(message)}</span>
@@ -430,6 +414,8 @@ interface MessagesPageProps {
   chunksInfo: ChunksInfo;
 }
 const MessagesPage: React.FunctionComponent<MessagesPageProps> = (props) => {
+  const { gaps, slackArchiveData } = useRender();
+
   const { channel, index, chunksInfo } = props;
   const messagesJs = fs.readFileSync(MESSAGES_JS_PATH, "utf8");
 
@@ -490,6 +476,8 @@ interface ChannelLinkProps {
 const ChannelLink: React.FunctionComponent<ChannelLinkProps> = ({
   channel,
 }) => {
+  const { slackArchiveData, me, base } = useRender();
+
   let name = channel.name || channel.id;
   let leadSymbol = <span># </span>;
 
@@ -514,7 +502,7 @@ const ChannelLink: React.FunctionComponent<ChannelLinkProps> = ({
 
   return (
     <li key={name}>
-      <a title={name} href={`html/${channel.id!}-0.html`} target="iframe">
+      <a title={name} href={`${base}${channel.id!}-0.html`}>
         {leadSymbol}
         <span>{name}</span>
       </a>
@@ -522,168 +510,187 @@ const ChannelLink: React.FunctionComponent<ChannelLinkProps> = ({
   );
 };
 
-interface IndexPageProps {
-  channels: Array<Channel>;
-}
-const IndexPage: React.FunctionComponent<IndexPageProps> = (props) => {
-  const { channels } = props;
+/**
+ * The channel list, on every page.
+ *
+ * It used to exist once, in a frameset, with the conversation in an iframe
+ * beside it - which meant no page had a URL of its own: sharing a message
+ * meant sharing index.html plus a query string, the back button moved the
+ * frame rather than the page, and the sidebar could not be part of a page that
+ * somebody opened directly. Rendering it into all 1 143 pages costs about five
+ * kilobytes each, on pages that are already the better part of a megabyte.
+ */
+const Sidebar: React.FunctionComponent = () => {
+  const { users, channels, base, root, me } = useRender();
   const sortedChannels = sortBy(channels, "name");
+  const links = (
+    filter: (channel: Channel) => boolean,
+    sort?: (a: Channel, b: Channel) => number,
+  ) => {
+    const list = sortedChannels.filter(filter);
+    return (sort ? list.sort(sort) : list).map((channel) => (
+      <ChannelLink key={channel.id} channel={channel} />
+    ));
+  };
 
-  const publicChannels = sortedChannels
-    .filter((channel) => isPublicChannel(channel) && !channel.is_archived)
-    .map((channel) => <ChannelLink key={channel.id} channel={channel} />);
+  return (
+    <>
+      {/* The sidebar is a drawer on a narrow screen. A checkbox rather than a
+          script, so it still works in a copy of this archive opened from a
+          disk in ten years with no network and no expectations. */}
+      <input
+        type="checkbox"
+        id="nav-toggle"
+        className="nav-toggle"
+        aria-label="Show the channel list"
+      />
+      <label htmlFor="nav-toggle" className="nav-open">
+        <span aria-hidden="true">☰</span> Channels
+      </label>
+      <label htmlFor="nav-toggle" className="nav-backdrop" aria-hidden="true" />
+      <div id="channels">
+        {/* Search, from wherever you are. The index itself is 124 MB and
+            cannot be in every page - but the box can be, and the search page
+            picks the query up out of the URL. */}
+        <form
+          className="channel-search"
+          action={`${root}search.html`}
+          method="get"
+          role="search"
+        >
+          <input
+            type="search"
+            name="q"
+            placeholder="Search every message"
+            aria-label="Search every message"
+          />
+          <button type="submit" aria-label="Search">
+            <span aria-hidden="true">⌕</span>
+          </button>
+        </form>
+        <p className="section">Public Channels</p>
+        <ul>{links((c) => !!isPublicChannel(c) && !c.is_archived)}</ul>
+        <p className="section">Private Channels</p>
+        <ul>{links((c) => !!isPrivateChannel(c) && !c.is_archived)}</ul>
+        <p className="section">DMs</p>
+        <ul>
+          {links(
+            (c) => !!isDmChannel(c, users) && !users[c.user!].deleted,
+            (a, b) => {
+              // Self first, then alphabetically.
+              if (me && a.user && a.user === me.id) return -1;
+              return (a.name || "Unknown").localeCompare(b.name || "Unknown");
+            },
+          )}
+        </ul>
+        <p className="section">Group DMs</p>
+        <ul>{links((c) => !!c.is_mpim)}</ul>
+        <p className="section">Bots</p>
+        <ul>
+          {links(
+            (c) => !!isBotChannel(c, users),
+            (a, b) => (a.name && b.name ? a.name.localeCompare(b.name) : 1),
+          )}
+        </ul>
+        <p className="section">Archived Public Channels</p>
+        <ul>{links((c) => !!isPublicChannel(c) && !!c.is_archived)}</ul>
+        <p className="section">Archived Private Channels</p>
+        <ul>{links((c) => !!isPrivateChannel(c) && !!c.is_archived)}</ul>
+        <p className="section">DMs (Deleted Users)</p>
+        <ul>
+          {links(
+            (c) => !!isDmChannel(c, users) && !!users[c.user!].deleted,
+            (a, b) => (a.name || "Unknown").localeCompare(b.name || "Unknown"),
+          )}
+        </ul>
+        <p className="section">The archive itself</p>
+        <ul>
+          <li>
+            <a href={`${root}search.html`}>Search every message</a>
+          </li>
+          <li>
+            <a href={`${base}stats.html`}>Ten years in numbers</a>
+          </li>
+          <li>
+            <a href={`${base}names.html`}>Names over the years</a>
+          </li>
+          <li>
+            <a href={`${base}bots.html`}>What the bots did</a>
+          </li>
+          <li>
+            <a href={`${root}index.html`}>The front page</a>
+          </li>
+        </ul>
+        <Generated />
+      </div>
+    </>
+  );
+};
 
-  const publicArchivedChannels = sortedChannels
-    .filter((channel) => isPublicChannel(channel) && channel.is_archived)
-    .map((channel) => <ChannelLink key={channel.id} channel={channel} />);
-
-  const privateChannels = sortedChannels
-    .filter((channel) => isPrivateChannel(channel) && !channel.is_archived)
-    .map((channel) => <ChannelLink key={channel.id} channel={channel} />);
-
-  const privateArchivedChannels = sortedChannels
-    .filter((channel) => isPrivateChannel(channel) && channel.is_archived)
-    .map((channel) => <ChannelLink key={channel.id} channel={channel} />);
-
-  const dmChannels = sortedChannels
-    .filter(
-      (channel) => isDmChannel(channel, users) && !users[channel.user!].deleted,
-    )
-    .sort((a, b) => {
-      // Self first
-      if (me && a.user && a.user === me.id) {
-        return -1;
-      }
-
-      // Then alphabetically
-      return (a.name || "Unknown").localeCompare(b.name || "Unknown");
-    })
-    .map((channel) => <ChannelLink key={channel.id} channel={channel} />);
-
-  const dmDeletedChannels = sortedChannels
-    .filter(
-      (channel) => isDmChannel(channel, users) && users[channel.user!].deleted,
-    )
-    .sort((a, b) => (a.name || "Unknown").localeCompare(b.name || "Unknown"))
-    .map((channel) => <ChannelLink key={channel.id} channel={channel} />);
-
-  const groupChannels = sortedChannels
-    .filter((channel) => channel.is_mpim)
-    .map((channel) => <ChannelLink key={channel.id} channel={channel} />);
-
-  const botChannels = sortedChannels
-    .filter((channel) => isBotChannel(channel, users))
-    .sort((a, b) => {
-      if (a.name && b.name) {
-        return a.name!.localeCompare(b.name!);
-      }
-
-      return 1;
-    })
-    .map((channel) => <ChannelLink key={channel.id} channel={channel} />);
+/**
+ * The front page: what this archive is, in numbers, and the way in.
+ *
+ * It used to be the whole application - a frameset holding every other page in
+ * an iframe. Now every page stands on its own, and this one is simply the door.
+ */
+const IndexPage: React.FunctionComponent = () => {
+  const { stats, teamMeta, base, channels, gaps } = useRender();
+  const first = channels[0];
 
   return (
     <HtmlPage meta={teamMeta}>
-      <div id="index">
-        {/* The sidebar is a drawer on a narrow screen. A checkbox rather than
-            a script, so it still works in a copy of this archive opened from a
-            disk in ten years with no network and no expectations. */}
-        <input
-          type="checkbox"
-          id="nav-toggle"
-          className="nav-toggle"
-          aria-label="Show the channel list"
-        />
-        <label htmlFor="nav-toggle" className="nav-open">
-          <span aria-hidden="true">☰</span> Channels
-        </label>
-        <label
-          htmlFor="nav-toggle"
-          className="nav-backdrop"
-          aria-hidden="true"
-        />
-        <div id="channels">
-          {/* Search, from wherever you are. The index itself is 124 MB and
-              cannot be in every page - but the box can be, and the search page
-              picks the query up out of the URL. */}
-          <form
-            className="channel-search"
-            action="search.html"
-            method="get"
-            target="iframe"
-            role="search"
-          >
-            <input
-              type="search"
-              name="q"
-              placeholder="Search every message"
-              aria-label="Search every message"
-            />
-            <button type="submit" aria-label="Search">
-              <span aria-hidden="true">⌕</span>
-            </button>
-          </form>
-          <p className="section">Public Channels</p>
-          <ul>{publicChannels}</ul>
-          <p className="section">Private Channels</p>
-          <ul>{privateChannels}</ul>
-          <p className="section">DMs</p>
-          <ul>{dmChannels}</ul>
-          <p className="section">Group DMs</p>
-          <ul>{groupChannels}</ul>
-          <p className="section">Bots</p>
-          <ul>{botChannels}</ul>
-          <p className="section">Archived Public Channels</p>
-          <ul>{publicArchivedChannels}</ul>
-          <p className="section">Archived Private Channels</p>
-          <ul>{privateArchivedChannels}</ul>
-          <p className="section">DMs (Deleted Users)</p>
-          <ul>{dmDeletedChannels}</ul>
-          <p className="section">The archive itself</p>
-          <ul>
-            <li>
-              <a href="search.html" target="iframe">
-                Search every message
-              </a>
-            </li>
-            <li>
-              <a href="html/stats.html" target="iframe">
-                Ten years in numbers
-              </a>
-            </li>
-            <li>
-              <a href="html/names.html" target="iframe">
-                Names over the years
-              </a>
-            </li>
-            <li>
-              <a href="html/bots.html" target="iframe">
-                What the bots did
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="messages">
-          <iframe name="iframe" src={`html/${channels[0].id!}-0.html`} />
-        </div>
-        <script src="html/pages.js" />
+      <div id="front">
+        <h1>{teamMeta.title}</h1>
+        {stats ? (
+          <>
+            <p className="topic">
+              {formatDay(stats.first)} - {formatDay(stats.last)}
+            </p>
+            <GapNotice />
+            <div className="viz-tiles">
+              <Tile label="Messages" value={formatCount(stats.messages)} />
+              <Tile
+                label="People"
+                value={formatCount(
+                  Object.values(stats.byUser).filter(
+                    (person) => person.messages > 0 && !person.isBot,
+                  ).length,
+                )}
+              />
+              <Tile
+                label="Channels"
+                value={formatCount(
+                  Object.values(stats.byChannel).filter(
+                    (channel) => channel.messages > 0,
+                  ).length,
+                )}
+              />
+              <Tile
+                label="Days missing"
+                value={formatCount(gaps.reduce((n, gap) => n + gap.days, 0))}
+                hint={gaps.length > 1 ? `in ${gaps.length} stretches` : ""}
+              />
+            </div>
+          </>
+        ) : null}
+        <p className="front-links">
+          {first ? (
+            <a href={`${base}${first.id}-0.html`}>Start reading</a>
+          ) : null}{" "}
+          · <a href={`${base}stats.html`}>Ten years in numbers</a> ·{" "}
+          <a href={`${base}names.html`}>Names over the years</a>
+        </p>
+
+        {/* Old links, from before every page had its own URL: the archive's
+            own messages carry them, they are pasted around Slack, and the bot
+            generates them. They land here and get sent on. */}
+        <script src={`${base}pages.js`} />
         <script
           dangerouslySetInnerHTML={{
             __html: `
-            const urlSearchParams = new URLSearchParams(window.location.search);
-            const channelValue = urlSearchParams.get("c");
-            const tsValue = urlSearchParams.get("ts");
-            
-            var nav = document.getElementById('nav-toggle');
-            var list = document.getElementById('channels');
-
-            // Picking a channel is done with the drawer; leaving it open would
-            // cover the thing you just asked to read.
-            if (nav && list) {
-              list.addEventListener('click', function (event) {
-                if (event.target.closest('a')) nav.checked = false;
-              });
-            }
+            var params = new URLSearchParams(window.location.search);
+            var channelValue = params.get("c");
+            var tsValue = params.get("ts");
 
             if (channelValue) {
               var channel = decodeURIComponent(channelValue);
@@ -691,8 +698,7 @@ const IndexPage: React.FunctionComponent<IndexPageProps> = (props) => {
 
               // A permalink names the channel and the moment, not the page
               // number - a page number is an accident of how the archive was
-              // chunked, and it changes as the channel grows. Resolve it here,
-              // where the index is.
+              // chunked, and it changes as the channel grows.
               if (!/-\d+$/.test(channel)) {
                 var boundaries = pages[channel];
                 var page = 0;
@@ -707,8 +713,9 @@ const IndexPage: React.FunctionComponent<IndexPageProps> = (props) => {
                 channel = channel + '-' + Math.max(0, page);
               }
 
-              var iframe = document.getElementsByName('iframe')[0];
-              iframe.src = "html/" + channel + '.html' + '#' + (tsValue || '');
+              window.location.replace(
+                "${"${base}"}" + channel + '.html' + (tsValue ? '#' + tsValue : '')
+              );
             }
             `,
           }}
@@ -723,6 +730,8 @@ interface HtmlPageProps {
   meta?: PageMeta;
 }
 const HtmlPage: React.FunctionComponent<HtmlPageProps> = (props) => {
+  const { teamMeta, base } = useRender();
+
   return (
     <html lang="en">
       <head>
@@ -751,8 +760,11 @@ const HtmlPage: React.FunctionComponent<HtmlPageProps> = (props) => {
         <link rel="stylesheet" href={`${base}style.css`} />
       </head>
       <body>
-        {props.children}
-        <Generated />
+        <div id="index">
+          <Sidebar />
+          <main id="messages">{props.children}</main>
+        </div>
+        <script src={`${base}sidebar.js`} defer />
       </body>
     </html>
   );
@@ -764,6 +776,8 @@ interface HeaderProps {
   channel: Channel;
 }
 const Header: React.FunctionComponent<HeaderProps> = (props) => {
+  const { users, stats } = useRender();
+
   const { channel, index, chunksInfo } = props;
   let created;
 
@@ -785,9 +799,13 @@ const Header: React.FunctionComponent<HeaderProps> = (props) => {
     <div className="header">
       <h1>{channel.name || channel.id}</h1>
       {created}
-      <span className="created">
-        <a href={`channel-${channel.id}.html`}>Ten years of this channel</a>
-      </span>
+      {/* Only where there is one: a channel nobody ever posted in gets no
+          numbers page, and this linked to it anyway. */}
+      {(stats?.byChannel[channel.id!]?.messages || 0) > 0 ? (
+        <span className="created">
+          <a href={`channel-${channel.id}.html`}>Ten years of this channel</a>
+        </span>
+      ) : null}
       <p className="topic">{channel.topic?.value}</p>
       <Pagination
         channelId={channel.id!}
@@ -871,6 +889,8 @@ const Pagination: React.FunctionComponent<PaginationProps> = (props) => {
  * shown for each so the difference is visible rather than implied.
  */
 const NamesPage: React.FunctionComponent = () => {
+  const { users, userNames, botIds, profileIds } = useRender();
+
   const people = nameHistory(userNames, botIds).map((person) => ({
     ...person,
     current: getName(person.userId, users),
@@ -899,8 +919,10 @@ const NamesPage: React.FunctionComponent = () => {
           <div className="person" key={person.userId}>
             <h2>
               <Avatar userId={person.userId} />{" "}
-              {profileHref(person.userId) ? (
-                <a href={profileHref(person.userId)}>{person.current}</a>
+              {profileHref(person.userId, profileIds) ? (
+                <a href={profileHref(person.userId, profileIds)}>
+                  {person.current}
+                </a>
               ) : (
                 person.current
               )}
@@ -942,7 +964,7 @@ async function writePageIndex() {
   const published: Record<string, Array<string>> = {};
 
   for (const channelId of Object.keys(index)) {
-    if (publishedChannels.has(channelId))
+    if (render.publishedChannels.has(channelId))
       published[channelId] = index[channelId];
   }
 
@@ -953,7 +975,6 @@ async function writePageIndex() {
 }
 
 async function renderNamesPage() {
-  base = "";
   return renderAndWrite(<NamesPage />, NAMES_PATH);
 }
 
@@ -993,15 +1014,19 @@ function nameKinds(name: UserName): string {
  * exact moment is in the markup and the phrase is worked out in the reader's
  * browser, so a page read a year from now does not still claim to be fresh.
  */
-const Generated: React.FunctionComponent = () => (
-  <div className="generated">
-    Archive generated{" "}
-    <time dateTime={renderedAt} data-relative="">
-      {formatIsoDay(renderedAt.slice(0, 10))}
-    </time>
-    <script src={`${base}relative-time.js`} defer />
-  </div>
-);
+const Generated: React.FunctionComponent = () => {
+  const { renderedAt, base } = useRender();
+
+  return (
+    <div className="generated">
+      Archive generated{" "}
+      <time dateTime={renderedAt} data-relative="">
+        {formatIsoDay(renderedAt.slice(0, 10))}
+      </time>
+      <script src={`${base}relative-time.js`} defer />
+    </div>
+  );
+};
 
 /**
  * Every attachment this archive holds, by Slack's file id.
@@ -1036,6 +1061,8 @@ function formatIsoDay(iso: string): string {
  * said, and a chart that does not say so is simply wrong about those months.
  */
 const GapNotice: React.FunctionComponent = () => {
+  const { gaps } = useRender();
+
   if (gaps.length === 0) return null;
 
   const missing = gaps.reduce((n, gap) => n + gap.days, 0);
@@ -1077,7 +1104,10 @@ const GapDivider: React.FunctionComponent<{ gap: Gap }> = ({ gap }) => (
  * for them - a channel member who never posted, or an account that only ever
  * reacted, has no page, and a link to it is a 404 with their name on it.
  */
-function profileHref(userId: string | undefined): string | undefined {
+function profileHref(
+  userId: string | undefined,
+  profileIds: Set<string>,
+): string | undefined {
   return userId && profileIds.has(userId) ? `user-${userId}.html` : undefined;
 }
 
@@ -1103,21 +1133,28 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const Drilldown: React.FunctionComponent<{
   id: string;
   cube: DayHourCube;
-}> = ({ id, cube }) => (
-  <div className="viz-figure">
-    <div className="viz-figure-caption">
-      <strong>Drill down</strong>
-      <span className="viz-note"> click a year, then a month, then a day</span>
+}> = ({ id, cube }) => {
+  const { base } = useRender();
+
+  return (
+    <div className="viz-figure">
+      <div className="viz-figure-caption">
+        <strong>Drill down</strong>
+        <span className="viz-note">
+          {" "}
+          click a year, then a month, then a day
+        </span>
+      </div>
+      <div className="drilldown" data-drilldown={`${id}-data`} />
+      <script
+        type="application/json"
+        id={`${id}-data`}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(cube) }}
+      />
+      <script src={`${base}drilldown.js`} defer />
     </div>
-    <div className="drilldown" data-drilldown={`${id}-data`} />
-    <script
-      type="application/json"
-      id={`${id}-data`}
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(cube) }}
-    />
-    <script src={`${base}drilldown.js`} defer />
-  </div>
-);
+  );
+};
 
 function yearData(byYear: Record<string, number>): Array<Datum> {
   const years = Object.keys(byYear).sort();
@@ -1197,6 +1234,8 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
   userId,
   person,
 }) => {
+  const { users, userNames, userAvatars, userStatuses, stats, profileIds } =
+    useRender();
   const names = userNames[userId] || [];
   const current = getName(userId, users);
   const events = stats
@@ -1462,6 +1501,7 @@ const EmojiRows: React.FunctionComponent<{
 const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
   data,
 }) => {
+  const { users, teamMeta, profileIds } = useRender();
   const people = Object.values(data.byUser)
     .filter((person) => person.messages > 0 && !person.isBot)
     .sort((a, b) => b.messages - a.messages);
@@ -1555,7 +1595,7 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
             data={people.slice(0, 25).map((person) => ({
               label: getName(person.userId, users) || person.userId,
               value: person.messages,
-              href: profileHref(person.userId),
+              href: profileHref(person.userId, profileIds),
             }))}
           />
         </details>
@@ -1616,7 +1656,7 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
             data={givers.slice(0, 20).map((person) => ({
               label: getName(person.userId, users) || person.userId,
               value: person.reactionsGiven,
-              href: profileHref(person.userId),
+              href: profileHref(person.userId, profileIds),
             }))}
           />
         </details>
@@ -1629,6 +1669,7 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
 const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
   channel,
 }) => {
+  const { users, stats, profileIds } = useRender();
   const posters = Object.entries(channel.byUser)
     .map(([userId, messages]) => ({ userId, messages }))
     .filter(({ userId }) => !stats?.byUser[userId]?.isBot)
@@ -1696,8 +1737,8 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
               {channel.members.map((userId) => (
                 <li key={userId}>
                   <span className="viz-bars-label">
-                    {profileHref(userId) ? (
-                      <a href={profileHref(userId)}>
+                    {profileHref(userId, profileIds) ? (
+                      <a href={profileHref(userId, profileIds)}>
                         {getName(userId, users) || userId}
                       </a>
                     ) : (
@@ -1722,7 +1763,7 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
             data={posters.slice(0, 25).map((poster) => ({
               label: getName(poster.userId, users) || poster.userId,
               value: poster.messages,
-              href: profileHref(poster.userId),
+              href: profileHref(poster.userId, profileIds),
             }))}
           />
         </details>
@@ -1742,6 +1783,7 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
 const BotsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
   data,
 }) => {
+  const { users } = useRender();
   const bots = Object.values(data.byUser)
     .filter((account) => account.isBot && account.messages > 0)
     .sort((a, b) => b.messages - a.messages);
@@ -1823,13 +1865,25 @@ const BotsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
   );
 };
 
-async function renderStatsAndProfiles(channels: Array<Channel>) {
+/**
+ * Count everything, and answer the two questions the pages cannot render
+ * without: which days the archive is missing, and who has a profile page.
+ *
+ * Nothing is written here. It used to write the stats pages too, and set the
+ * globals the channel pages needed as a side effect - so a page rendered
+ * before this ran quietly linked to profiles that did not exist.
+ */
+async function countEverything(channels: Array<Channel>): Promise<{
+  stats: WorkspaceStats;
+  gaps: Array<Gap>;
+  profileIds: Set<string>;
+}> {
   const spinner = ora("Counting ten years of messages...").start();
   // Everything in emojis.json is one the workspace made itself; everything else
   // in a reaction is Slack's.
   const accumulator = createStats({
     customEmoji: new Set(Object.keys(await getEmoji())),
-    bots: botUserIds(users),
+    bots: render.botIds,
   });
 
   for (const channel of channels) {
@@ -1842,11 +1896,26 @@ async function renderStatsAndProfiles(channels: Array<Channel>) {
     indexFiles(channel.id, messages);
   }
 
-  stats = accumulator.result();
-  base = "";
+  const stats = accumulator.result();
 
-  // Before anything that counts is written: every one of those pages says so.
-  gaps = findGaps(dailyTotals(stats.byDayHour));
+  spinner.succeed(
+    `Counted ${formatCount(stats.messages)} messages in ${
+      Object.values(stats.byChannel).filter((c) => c.messages > 0).length
+    } channels.`,
+  );
+
+  return {
+    stats,
+    // Every page that shows a number says which days are absent from it.
+    gaps: findGaps(dailyTotals(stats.byDayHour)),
+    profileIds: profilePageIds(stats.byUser),
+  };
+}
+
+/** The pages that are about the numbers rather than about the messages. */
+async function renderStatsAndProfiles() {
+  const stats = render.stats!;
+  const spinner = ora("Writing the numbers...").start();
 
   await renderAndWrite(<StatsPage data={stats} />, STATS_PATH);
   await renderAndWrite(<BotsPage data={stats} />, BOTS_PATH);
@@ -1858,8 +1927,6 @@ async function renderStatsAndProfiles(channels: Array<Channel>) {
       getChannelStatsFilePath(channel.id),
     );
   }
-
-  profileIds = profilePageIds(stats.byUser);
 
   let written = 0;
   for (const person of Object.values(stats.byUser)) {
@@ -1874,18 +1941,16 @@ async function renderStatsAndProfiles(channels: Array<Channel>) {
   }
 
   spinner.succeed(
-    `Counted ${formatCount(stats.messages)} messages: stats, ${
+    `Wrote the numbers: ${
       Object.values(stats.byChannel).filter((c) => c.messages > 0).length
     } channels and ${written} profiles.`,
   );
 }
 
 async function renderIndexPage() {
-  base = "html/";
-  const channels = publishable(await getChannels());
-  const page = <IndexPage channels={channels} />;
-
-  return renderAndWrite(page, INDEX_PATH);
+  // The only page that does not live in html/, so the only one whose links
+  // have to reach into it.
+  return renderAndWrite(<IndexPage />, INDEX_PATH, "html/");
 }
 
 interface RenderMessagesPageOptions {
@@ -1920,8 +1985,20 @@ function renderMessagesPage(options: RenderMessagesPageOptions, spinner: Ora) {
   return renderAndWrite(page, filePath);
 }
 
-async function renderAndWrite(page: JSX.Element, filePath: string) {
-  const html = ReactDOMServer.renderToStaticMarkup(page);
+async function renderAndWrite(
+  page: JSX.Element,
+  filePath: string,
+  base: string = "",
+) {
+  // A page in html/ reaches the site root through "..", the front page is
+  // already there. One of the two is always right and neither is a guess.
+  const root = base === "" ? "../" : "";
+
+  const html = ReactDOMServer.renderToStaticMarkup(
+    <RenderContextProvider.Provider value={{ ...render, base, root }}>
+      {page}
+    </RenderContextProvider.Provider>,
+  );
   const htmlWDoc = "<!DOCTYPE html>" + html;
 
   await write(filePath, htmlWDoc);
@@ -2010,6 +2087,57 @@ async function createHtmlForChannel({
   );
 }
 
+/**
+ * Everything the pages need, gathered before any of them is written.
+ *
+ * The order in here is the only order that matters, and it is stated once:
+ * read the archive, count it, and only then can a page be rendered - because
+ * counting is what knows which days are missing and whose profile pages exist,
+ * and every page links to both.
+ */
+async function buildRenderContext(
+  channels: Array<Channel>,
+): Promise<RenderContext> {
+  const users = await getUsers();
+  const slackArchiveData = await getSlackArchiveData();
+  const publishedChannels = new Set(
+    channels.map((channel) => channel.id!).filter(Boolean),
+  );
+
+  render = {
+    ...emptyRenderContext(),
+    users,
+    userNames: await getUserNames(),
+    userAvatars: await getUserAvatars(),
+    userStatuses: await getUserStatuses(),
+    botIds: botUserIds(users),
+    publishedChannels,
+    channels,
+    slackArchiveData,
+    teamMeta: indexMeta(slackArchiveData.auth?.team),
+    renderedAt: new Date().toISOString(),
+    me: slackArchiveData.auth?.user_id
+      ? users[slackArchiveData.auth.user_id]
+      : null,
+  };
+
+  // Reads every message, so it also collects the files, which the links in
+  // those messages need.
+  const counted = await countEverything(channels);
+
+  return {
+    ...render,
+    ...counted,
+    linkContext: archiveLinkContext({
+      teamUrl: slackArchiveData.auth?.url,
+      teamId: slackArchiveData.auth?.team_id,
+      files: fileIndex,
+      filesBaseUrl: FILES_BASE_URL,
+      channels: publishedChannels,
+    }),
+  };
+}
+
 export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
   const channels = publishable(allChannels);
 
@@ -2023,33 +2151,9 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
 
   console.log(`\n Creating HTML files for ${channels.length} channels...`);
 
-  renderedAt = new Date().toISOString();
-  publishedChannels = new Set(
-    channels.map((channel) => channel.id!).filter(Boolean),
-  );
-  users = await getUsers();
-  userNames = await getUserNames();
-  userAvatars = await getUserAvatars();
-  userStatuses = await getUserStatuses();
-  botIds = botUserIds(users);
-  slackArchiveData = await getSlackArchiveData();
-  teamMeta = indexMeta(slackArchiveData.auth?.team);
-  me = slackArchiveData.auth?.user_id
-    ? users[slackArchiveData.auth?.user_id]
-    : null;
+  render = await buildRenderContext(channels);
 
-  // Before the channel pages, not after: every message links to its author's
-  // profile page, and this is what decides which of those pages exist. It also
-  // reads every message, which is where the file index comes from.
-  await renderStatsAndProfiles(publishable(await getChannels()));
-
-  linkContext = archiveLinkContext({
-    teamUrl: slackArchiveData.auth?.url,
-    teamId: slackArchiveData.auth?.team_id,
-    files: fileIndex,
-    filesBaseUrl: FILES_BASE_URL,
-    channels: publishedChannels,
-  });
+  await renderStatsAndProfiles();
   await renderNamesPage();
 
   for (const [i, channel] of channels.entries()) {

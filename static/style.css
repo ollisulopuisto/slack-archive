@@ -228,7 +228,7 @@ video {
 
 #index {
   display: flex;
-  height: calc(100vh - 4px);
+  align-items: flex-start;
 }
 
 #channels {
@@ -288,12 +288,7 @@ video {
 
 #messages {
   flex-grow: 1;
-}
-
-#messages iframe {
-  height: 100%;
-  width: calc(100vw - 250px);
-  border: none;
+  min-width: 0;
 }
 
 #search {
@@ -889,7 +884,11 @@ a.timestamp:focus-visible {
   --accent: #39113e;
 }
 
-#index {
+/* The sidebar keeps its own place while the page scrolls past it; the page
+   scrolls, not a box inside it, so anchors and the back button behave. */
+#channels {
+  position: sticky;
+  top: 0;
   height: 100dvh;
 }
 
@@ -902,11 +901,6 @@ a.timestamp:focus-visible {
 
 #messages {
   min-width: 0;
-}
-
-#messages iframe {
-  width: 100%;
-  display: block;
 }
 
 /* The drawer control. A checkbox rather than a script: the sidebar has to work
@@ -945,6 +939,7 @@ a.timestamp:focus-visible {
 
   #index > #channels {
     position: fixed;
+    height: auto;
     top: 0;
     bottom: 0;
     left: 0;
@@ -971,10 +966,6 @@ a.timestamp:focus-visible {
   .nav-toggle:focus-visible ~ .nav-open {
     outline: 2px solid #fff;
     outline-offset: 2px;
-  }
-
-  #messages iframe {
-    padding-top: 0;
   }
 
   /* Room for the button, which floats over whatever is in the frame. The
@@ -1216,4 +1207,26 @@ table.timeline,
 .channel-search button:focus-visible {
   color: #fff;
   background: rgba(255, 255, 255, 0.12);
+}
+
+/* The front page: what this is, before you pick a conversation. */
+#front {
+  max-width: 900px;
+  padding: 32px 24px 48px;
+}
+
+#front h1 {
+  font-size: 28px;
+  letter-spacing: -0.02em;
+}
+
+#front .front-links {
+  margin-top: 24px;
+}
+
+/* The sidebar is on every page now, so its own footer sits at the end of it
+   rather than at the end of whatever page it is attached to. */
+#channels .generated {
+  padding: 16px 20px 24px;
+  color: rgba(255, 255, 255, 0.45);
 }
