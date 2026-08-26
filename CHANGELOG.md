@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.173] - 2026-08-26
+
+### Changed
+- **A page, not a channel, is the unit of rendering work.** Giving each worker
+  a whole channel cannot balance an archive where one channel holds 65% of the
+  messages: nine workers finished in seconds and the tenth rendered seven
+  hundred pages alone. Elements of a JSON array are contiguous, so a page is
+  one byte range - `big-json` now records where every element sits while it
+  reads, and a worker rendering page 431 reads about a megabyte instead of a
+  third of a gigabyte. Channel pages went from 46s to 13s on this archive, and
+  peak memory per worker from "the biggest channel" to "one page".
+- **The image can publish.** It carries `scripts/`, bash, rsync and
+  openssh-client now - about five megabytes - so the NAS runs the same publish
+  the laptop does, with `--ssh-key` for a mounted identity, instead of needing
+  node and the repo on the host.
+
+### Fixed
+- **A reply sent with "also send to channel" was rendered twice**, with the
+  same `id` on both copies - invalid HTML, and an ambiguous permalink. 953 of
+  them on forty pages of one channel. The copy in the thread is kept, matching
+  what the search index chose in .162; a broadcast whose parent is on another
+  page is left alone, because dropping it there would lose the message rather
+  than de-duplicate it.
+- **The channel file is opened once per worker, not once per page** - 714 opens
+  for one channel.
+
 ## [v26.08.26.172] - 2026-08-26
 
 ### Added
