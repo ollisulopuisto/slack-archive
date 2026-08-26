@@ -228,7 +228,12 @@ reads the tree it built. That last one reads what a browser could fetch.
 
 `--exclude-kinds`, `--start-channel`, `--work`, `--node`, `--repo`,
 `--ssh-key`, `--known-hosts` and `--dry-run` are there so nothing about one
-machine has to be baked in. The work directory is claimed with `mkdir`, which
+machine has to be baked in. `--timezone` is there because one thing about the
+machine leaks into the pages whether you name it or not: every timestamp is
+formatted in the renderer's local zone, a container's is UTC, and a publish
+from one silently restates ten years of message times two or three hours
+earlier. Pass an IANA zone - `--timezone Europe/Helsinki` - and the pages read
+the same wherever they were built. The script says so when you leave it out. The work directory is claimed with `mkdir`, which
 is atomic, so a nightly run and a manual one cannot render into each other.
 
 The published image carries the script, along with bash, rsync and

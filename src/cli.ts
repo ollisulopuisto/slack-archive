@@ -23,7 +23,9 @@ import {
   NO_SLACK_CONNECT,
   NO_FILE_DOWNLOAD,
   EXCLUDE_CHANNELS,
+  TIMEZONE,
 } from "./config.js";
+import { useTimezone } from "./timezone.js";
 import { downloadExtras } from "./messages.js";
 import { downloadMessages } from "./messages.js";
 import { downloadFilesForChannel, downloadURL } from "./download-files.js";
@@ -318,7 +320,16 @@ async function getAuthTest() {
 }
 
 export async function main() {
+  // The bin script sets this before anything here is imported, which is what
+  // makes it take effect; this repeats it for anyone calling main() directly
+  // and, more usefully, says on the console which clock the pages will carry.
+  useTimezone(TIMEZONE);
+
   console.log(`Welcome to slack-archive${getLastSuccessfulRun()}`);
+
+  if (TIMEZONE) {
+    console.log(`Rendering timestamps in ${TIMEZONE}`);
+  }
 
   if (AUTOMATIC_MODE) {
     console.log(`Running in fully automatic mode without prompts`);

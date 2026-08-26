@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.27.189] - 2026-08-27
+
+### Fixed
+- **A share of the missing days is now as uncertain as the total it came
+  from.** "Who talks", the busiest channels, who reacts, the bots and every
+  per-person tile swapped to their speculative figure and then sat perfectly
+  still, because each was built with its low end equal to its high: a share has
+  no measured spread of its own. But the workspace total it is cut from does,
+  and that is the part the seasonal model actually measured - so each share now
+  carries that interval scaled by the same proportion. The share itself is
+  treated as exact, which understates the real uncertainty rather than
+  inventing it. A test fails on any estimate whose two ends are the same
+  expression.
+- **`--timezone` states which clock the pages are rendered on.** Every
+  timestamp is formatted in the renderer's local zone. A container has none, so
+  it is UTC - and the first publish from the NAS restated ten years of message
+  times three hours earlier than the same archive rendered on a laptop, with
+  nothing on the page saying which clock it used. The zone is now set before
+  node caches it, an unknown zone is refused instead of silently becoming UTC
+  (node does not treat `Europe/Hensinki` as an error), and `scripts/publish.sh`
+  passes it through and says so when it is missing.
+
 ## [v26.08.27.188] - 2026-08-27
 
 ### Fixed

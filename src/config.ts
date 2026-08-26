@@ -205,6 +205,16 @@ export const RENDER_WORKERS = getNumberCliParameter("--render-workers", 0);
  * better guess than whichever one sorts first.
  */
 export const START_CHANNEL = getCliParameter("--start-channel") || "";
+
+/**
+ * The timezone every timestamp is rendered in, e.g. `Europe/Helsinki`.
+ *
+ * Unset, the archive uses the machine's own, which is right when one machine
+ * renders it and wrong the moment two do: a container has no timezone and so
+ * renders in UTC, and the same messages then carry different wall-clock times
+ * depending on who published last.
+ */
+export const TIMEZONE = getCliParameter("--timezone") || "";
 export const BASE_DIR = process.cwd();
 export const OUT_DIR = path.join(BASE_DIR, "slack-archive");
 export const TOKEN_FILE = path.join(OUT_DIR, ".token");

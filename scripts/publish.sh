@@ -25,6 +25,10 @@
 #   --exclude-user-files LIST  whose attachments were never downloaded, so the
 #                         pages say so instead of linking a file that is not
 #                         there
+#   --timezone ZONE       IANA zone every timestamp is rendered in, e.g.
+#                         Europe/Helsinki. Unset, the machine's own is used -
+#                         which is UTC in a container, and that silently
+#                         restates every timestamp in the archive
 #   --work PATH           scratch directory (default: $TMPDIR/archive-publish)
 #   --node CMD            how to run node (default: node)
 #   --node-memory MB      cap the render's heap (default: node decides)
@@ -44,6 +48,7 @@ SITE=""
 EXCLUDE_KINDS="im,mpim,private"
 START_CHANNEL=""
 EXCLUDE_USER_FILES=""
+TIMEZONE=""
 WORK="${TMPDIR:-/tmp}/archive-publish"
 NODE="node"
 # Unset by default: node sizes its heap to the machine it is on, and this
@@ -63,6 +68,7 @@ while [ $# -gt 0 ]; do
     --exclude-kinds) EXCLUDE_KINDS="$2"; shift 2 ;;
     --start-channel) START_CHANNEL="$2"; shift 2 ;;
     --exclude-user-files) EXCLUDE_USER_FILES="$2"; shift 2 ;;
+    --timezone) TIMEZONE="$2"; shift 2 ;;
     --work) WORK="$2"; shift 2 ;;
     --node) NODE="$2"; shift 2 ;;
     --node-memory) NODE_MEMORY="$2"; shift 2 ;;
@@ -74,6 +80,13 @@ while [ $# -gt 0 ]; do
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
+
+# Not fatal, because a local render of your own archive wants your own clock.
+# Said out loud, because a container's own clock is UTC and a publish from one
+# rewrites the wall-clock time of every message that was ever archived.
+if [ -z "$TIMEZONE" ]; then
+  echo "  no --timezone: rendering in this machine's zone ($(date +%Z))" >&2
+fi
 
 [ -n "$ARCHIVE" ] || { echo "--archive is required" >&2; exit 2; }
 [ -n "$SITE" ] || [ "$DRY_RUN" = "1" ] || { echo "--site is required unless --dry-run" >&2; exit 2; }
@@ -176,6 +189,7 @@ if ! $NODE ${NODE_MEMORY:+--max-old-space-size=$NODE_MEMORY} \
   ${START_CHANNEL:+--start-channel "$START_CHANNEL"} \
   ${RENDER_WORKERS:+--render-workers "$RENDER_WORKERS"} \
   ${EXCLUDE_USER_FILES:+--exclude-user-files "$EXCLUDE_USER_FILES"} \
+  ${TIMEZONE:+--timezone "$TIMEZONE"} \
   > "$RENDER_LOG" 2>&1; then
   echo "  the render FAILED - nothing will be uploaded" >&2
   echo "  last of $RENDER_LOG:" >&2
