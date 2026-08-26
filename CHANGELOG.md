@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.167] - 2026-08-26
+
+### Changed
+- **The archive works on a phone.** It was built as a desktop frameset: a fixed
+  250px sidebar beside an iframe sized `calc(100vw - 250px)`, which on a phone
+  is a sidebar taking most of the screen and a conversation squeezed into what
+  is left. The sidebar is now a drawer under a button on narrow screens - a
+  checkbox rather than a script, so it still works in a copy of this archive
+  opened from a disk years from now - and closes itself when you pick a
+  channel. Messages, charts and tables all fit the width they are given.
+- **The search page reads as a list.** It centred everything, so every result
+  was its own shrink-to-fit box on the middle line: a hundred results, a
+  hundred widths, no two first words in the same place. Results are now a
+  left-aligned column of even cards, the channel and time in a quiet line above
+  the message, with the search box and filters sticky at the top.
+
 ## [v26.08.26.166] - 2026-08-26
 
 ### Added

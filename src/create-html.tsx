@@ -469,7 +469,7 @@ const MessagesPage: React.FunctionComponent<MessagesPageProps> = (props) => {
 
   return (
     <HtmlPage meta={meta}>
-      <div style={{ paddingLeft: 10 }}>
+      <div className="page" style={{ paddingLeft: 10 }}>
         <Header index={index} chunksInfo={chunksInfo} channel={channel} />
         <div className="messages-list">{messages}</div>
         <script dangerouslySetInnerHTML={{ __html: messagesJs }} />
@@ -579,6 +579,23 @@ const IndexPage: React.FunctionComponent<IndexPageProps> = (props) => {
   return (
     <HtmlPage meta={teamMeta}>
       <div id="index">
+        {/* The sidebar is a drawer on a narrow screen. A checkbox rather than
+            a script, so it still works in a copy of this archive opened from a
+            disk in ten years with no network and no expectations. */}
+        <input
+          type="checkbox"
+          id="nav-toggle"
+          className="nav-toggle"
+          aria-label="Show the channel list"
+        />
+        <label htmlFor="nav-toggle" className="nav-open">
+          <span aria-hidden="true">☰</span> Channels
+        </label>
+        <label
+          htmlFor="nav-toggle"
+          className="nav-backdrop"
+          aria-hidden="true"
+        />
         <div id="channels">
           <p className="section">Public Channels</p>
           <ul>{publicChannels}</ul>
@@ -631,6 +648,17 @@ const IndexPage: React.FunctionComponent<IndexPageProps> = (props) => {
             const channelValue = urlSearchParams.get("c");
             const tsValue = urlSearchParams.get("ts");
             
+            var nav = document.getElementById('nav-toggle');
+            var list = document.getElementById('channels');
+
+            // Picking a channel is done with the drawer; leaving it open would
+            // cover the thing you just asked to read.
+            if (nav && list) {
+              list.addEventListener('click', function (event) {
+                if (event.target.closest('a')) nav.checked = false;
+              });
+            }
+
             if (channelValue) {
               var channel = decodeURIComponent(channelValue);
               var pages = window.ARCHIVE_PAGES || {};

@@ -22,8 +22,8 @@ dd {
 }
 
 /* Remove list styles on ul, ol elements with a list role, which suggests default styling will be removed */
-ul[role='list'],
-ol[role='list'] {
+ul[role="list"],
+ol[role="list"] {
   list-style: none;
 }
 
@@ -62,9 +62,9 @@ select {
 /* Remove all animations, transitions and smooth scroll for people that prefer not to see them */
 @media (prefers-reduced-motion: reduce) {
   html:focus-within {
-   scroll-behavior: auto;
+    scroll-behavior: auto;
   }
-  
+
   *,
   *::before,
   *::after {
@@ -77,20 +77,21 @@ select {
 
 @font-face {
   font-family: "Lato";
-  src: url('fonts/Lato-Regular.ttf') format('truetype');
+  src: url("fonts/Lato-Regular.ttf") format("truetype");
   font-weight: normal;
   font-style: normal;
 }
 
 @font-face {
   font-family: "Lato";
-  src: url('fonts/Lato-Bold.ttf') format('truetype');
+  src: url("fonts/Lato-Bold.ttf") format("truetype");
   font-weight: bold;
   font-style: normal;
 }
 
-body, html {
-  font-family: 'Lato', sans-serif;
+body,
+html {
+  font-family: "Lato", sans-serif;
   font-size: 14px;
   color: rgb(29, 28, 29);
 }
@@ -99,7 +100,8 @@ a {
   color: rgb(18, 100, 163);
 }
 
-audio, video {
+audio,
+video {
   max-width: 400px;
 }
 
@@ -123,9 +125,9 @@ audio, video {
 
 .message-gutter:target {
   background-color: #fafafa;
-  border: 2px solid #39113E;
+  border: 2px solid #39113e;
   padding: 10px;
-  border-radius: 5px; 
+  border-radius: 5px;
 }
 
 .message-gutter div:first-of-type {
@@ -155,13 +157,13 @@ audio, video {
   left: 0;
   padding: 10px;
   min-height: 70px;
-  border-bottom: 1px solid #E2E2E2;
+  border-bottom: 1px solid #e2e2e2;
   box-sizing: border-box;
 }
 
 .header h1 {
   font-size: 16px;
-  color: #1D1C1D;
+  color: #1d1c1d;
   display: inline-block;
 }
 
@@ -169,7 +171,8 @@ audio, video {
   color: #616061;
 }
 
-.header a:active, .header a.current {
+.header a:active,
+.header a.current {
   color: #000;
 }
 
@@ -202,7 +205,7 @@ audio, video {
   background-color: #eaeaea;
   display: inline-block;
   border-radius: 10px;
-  font-size: .7em;
+  font-size: 0.7em;
   padding-left: 6px;
   padding-right: 6px;
   padding-bottom: 4px;
@@ -229,9 +232,9 @@ audio, video {
 }
 
 #channels {
-  background: #39113E;
+  background: #39113e;
   width: 250px;
-  color: #CDC3CE;
+  color: #cdc3ce;
   padding-top: 10px;
   overflow: scroll;
   padding-bottom: 20px;
@@ -260,7 +263,7 @@ audio, video {
 #channels a {
   padding: 5px;
   display: block;
-  color: #CDC3CE;
+  color: #cdc3ce;
   text-decoration: none;
   padding-left: 20px;
   display: flex;
@@ -308,7 +311,7 @@ audio, video {
 
 #search li {
   padding: 10px;
-  border-bottom: 1px solid #E2E2E2;
+  border-bottom: 1px solid #e2e2e2;
   background: hsl(0deg 0% 98%);
   border-radius: 5px;
   width: 100%;
@@ -342,7 +345,7 @@ audio, video {
   width: 100%;
   padding: 10px;
   padding-right: 40px;
-  border: 1px solid #E2E2E2;
+  border: 1px solid #e2e2e2;
   border-radius: 4px;
 }
 
@@ -365,7 +368,7 @@ audio, video {
 
 .Filters select {
   padding: 5px 10px;
-  border: 1px solid #E2E2E2;
+  border: 1px solid #e2e2e2;
   border-radius: 4px;
   background: white;
   min-width: 150px;
@@ -543,7 +546,7 @@ svg.viz {
 .viz-label {
   fill: var(--viz-ink-muted);
   font-size: 13px;
-  font-family: 'Lato', sans-serif;
+  font-family: "Lato", sans-serif;
 }
 
 /* Rankings: name, bar, number. Direct labels on every row, so the bar is the
@@ -863,4 +866,284 @@ a.timestamp:focus-visible {
   border-radius: 4px;
   color: var(--text-muted, #616061);
   font-size: 0.85rem;
+}
+
+/* ==========================================================================
+   Layout, on a screen of any width
+   --------------------------------------------------------------------------
+   The archive was built as a desktop frameset: a 250px sidebar and an iframe
+   sized `calc(100vw - 250px)`, which on a phone is a sidebar taking most of
+   the screen and a conversation squeezed into what is left. People read Slack
+   on phones; they will read this on phones.
+   ========================================================================== */
+
+:root {
+  --sidebar: #39113e;
+  --sidebar-hover: #301034;
+  --sidebar-ink: #cdc3ce;
+  --ink: rgb(29, 28, 29);
+  --ink-muted: #616061;
+  --line: #e2e2e2;
+  --surface: #ffffff;
+  --surface-sunken: #faf9fa;
+  --accent: #39113e;
+}
+
+#index {
+  height: 100dvh;
+}
+
+#channels {
+  flex-shrink: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+#messages {
+  min-width: 0;
+}
+
+#messages iframe {
+  width: 100%;
+  display: block;
+}
+
+/* The drawer control. A checkbox rather than a script: the sidebar has to work
+   in a page that may be opened from a file:// copy years from now. */
+.nav-toggle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.nav-open,
+.nav-backdrop {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .nav-open {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    /* Above the drawer, so the same control that opens it closes it. */
+    z-index: 60;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: var(--sidebar);
+    color: #fff;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  }
+
+  #index > #channels {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    width: min(82vw, 300px);
+    padding-top: 56px;
+    transform: translateX(-100%);
+    transition: transform 0.18s ease-out;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.4);
+  }
+
+  #index > .nav-toggle:checked ~ #channels {
+    transform: none;
+  }
+
+  #index > .nav-toggle:checked ~ .nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    background: rgba(0, 0, 0, 0.45);
+  }
+
+  .nav-toggle:focus-visible ~ .nav-open {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+  }
+
+  #messages iframe {
+    padding-top: 0;
+  }
+
+  /* Room for the button, which floats over whatever is in the frame. The
+     search page has no sidebar and no button, so it is not in this list. */
+  .page,
+  #stats,
+  #profile,
+  #names {
+    padding-top: 52px;
+  }
+}
+
+/* The conversation itself, narrow. */
+@media (max-width: 600px) {
+  body,
+  html {
+    font-size: 15px;
+  }
+
+  .message-gutter {
+    margin: 10px 8px;
+  }
+
+  .messages-list .avatar {
+    height: 30px;
+    width: 30px;
+    margin-right: 8px;
+  }
+
+  audio,
+  video,
+  .files img {
+    max-width: 100%;
+  }
+
+  .viz-tiles {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+}
+
+/* Wide content inside a narrow screen scrolls itself rather than the page. */
+table.timeline,
+#names table,
+#stats table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* ==========================================================================
+   The search page
+   --------------------------------------------------------------------------
+   It centred everything: the heading, the filters, and every result as its own
+   shrink-to-fit box on the middle line. A list of a hundred results became a
+   hundred boxes of a hundred different widths, none of whose first words line
+   up - so the eye has to find the start of every line before it can read it.
+   A list of results is a list. It starts at the left.
+   ========================================================================== */
+
+#search {
+  margin: 0;
+  padding: 0 16px 48px;
+  text-align: left;
+}
+
+.Header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  margin: 0 -16px 20px;
+  padding: 18px 16px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.Header h1 {
+  max-width: 900px;
+  margin: 0 auto 12px;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+
+.SearchBox {
+  max-width: 900px;
+  margin: 0 auto;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.Search {
+  max-width: none;
+}
+
+.Search input {
+  padding: 12px 40px 12px 14px;
+  border-radius: 8px;
+  border: 1px solid #d5d0d6;
+}
+
+.Search input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+.Filters {
+  justify-content: flex-start;
+}
+
+.Filters select {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #d5d0d6;
+  background: var(--surface);
+  max-width: 100%;
+}
+
+#search ul {
+  display: block;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0;
+}
+
+#search li {
+  width: auto;
+  max-width: none;
+  margin: 0 0 8px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  border-radius: 10px;
+  text-align: left;
+}
+
+#search a {
+  display: block;
+}
+
+#search a:hover li,
+#search a:focus-visible li {
+  background: var(--surface-sunken);
+  border-color: #d6c9d8;
+}
+
+/* The line that says where and when: quiet, and the same shape every time, so
+   a column of them can be skimmed rather than read. */
+#search li p:first-child {
+  color: var(--ink-muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+#search li .Channel {
+  font-weight: 800;
+  color: var(--accent);
+}
+
+#search li p:last-child {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .Filters {
+    flex-direction: column;
+  }
+
+  .Filters select {
+    width: 100%;
+  }
 }
