@@ -27,6 +27,8 @@
 #                         there
 #   --work PATH           scratch directory (default: $TMPDIR/archive-publish)
 #   --node CMD            how to run node (default: node)
+#   --node-memory MB      cap the render's heap (default: node decides)
+#   --render-workers N    cores to render on; fewer use less memory
 #   --ssh-key PATH        identity for rsync and the web-root check
 #   --known-hosts PATH    host keys to trust (a container has no home to
 #                         keep them in, and an unverified host is not a host)
@@ -44,6 +46,11 @@ START_CHANNEL=""
 EXCLUDE_USER_FILES=""
 WORK="${TMPDIR:-/tmp}/archive-publish"
 NODE="node"
+# Unset by default: node sizes its heap to the machine it is on, and this
+# script runs on machines with very different amounts of memory. The old
+# hardcoded 12 GB was fine on a laptop and nonsense on a NAS.
+NODE_MEMORY=""
+RENDER_WORKERS=""
 SSH_KEY=""
 KNOWN_HOSTS=""
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -58,6 +65,8 @@ while [ $# -gt 0 ]; do
     --exclude-user-files) EXCLUDE_USER_FILES="$2"; shift 2 ;;
     --work) WORK="$2"; shift 2 ;;
     --node) NODE="$2"; shift 2 ;;
+    --node-memory) NODE_MEMORY="$2"; shift 2 ;;
+    --render-workers) RENDER_WORKERS="$2"; shift 2 ;;
     --repo) REPO="$2"; shift 2 ;;
     --ssh-key) SSH_KEY="$2"; shift 2 ;;
     --known-hosts) KNOWN_HOSTS="$2"; shift 2 ;;
@@ -150,11 +159,34 @@ if [ -x "$REPO/node_modules/.bin/tsc" ]; then
 else
   echo "  using the prebuilt lib/ (no compiler here)"
 fi
-cd "$WORK" && $NODE --max-old-space-size=12288 "$REPO/bin/slack-archive.js" \
+# The render's exit status decides whether anything else happens. It used to
+# end in `| grep ... || true`, which takes grep's status and then throws that
+# away too - so a render that SEGFAULTED walked straight into the checks, and
+# the checks would have been inspecting whatever tree was left behind. A
+# publish that cannot tell a finished render from a crashed one is not a
+# publish, it is a coin toss.
+RENDER_LOG="$WORK/render.log"
+
+cd "$WORK" || exit 1
+
+if ! $NODE ${NODE_MEMORY:+--max-old-space-size=$NODE_MEMORY} \
+  "$REPO/bin/slack-archive.js" \
   --no-slack-connect --no-backup --force-html-generation \
   --html-exclude-kinds "$EXCLUDE_KINDS" \
   ${START_CHANNEL:+--start-channel "$START_CHANNEL"} \
-  ${EXCLUDE_USER_FILES:+--exclude-user-files "$EXCLUDE_USER_FILES"} 2>&1 | grep -E "Not rendering|Search|Rendered in|Finished in|All done" || true
+  ${RENDER_WORKERS:+--render-workers "$RENDER_WORKERS"} \
+  ${EXCLUDE_USER_FILES:+--exclude-user-files "$EXCLUDE_USER_FILES"} \
+  > "$RENDER_LOG" 2>&1; then
+  echo "  the render FAILED - nothing will be uploaded" >&2
+  echo "  last of $RENDER_LOG:" >&2
+  tail -20 "$RENDER_LOG" >&2
+  echo >&2
+  echo "  If it died on memory: fewer workers use less of it." >&2
+  echo "  Try --render-workers 2, and --node-memory to cap the heap." >&2
+  exit 1
+fi
+
+grep -E "Not rendering|Search|Rendered in|Finished in|All done" "$RENDER_LOG" || true
 
 # search.html and data/search.js are written by the render above, from the same
 # --html-exclude-kinds the pages used. Shipping the NAS's copy instead is how a

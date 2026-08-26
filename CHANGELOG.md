@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.186] - 2026-08-26
+
+### Fixed
+- **A crashed render no longer walks into the checks.** The render ended in
+  `| grep ... || true`, which takes grep's exit status and then discards that
+  too - so when node segfaulted on the NAS, the script carried on to the checks
+  as though nothing had happened. This time the checks crashed as well; they
+  could just as easily have passed on a stale tree and uploaded it. The
+  render's status now decides whether anything else runs, and its full output
+  is kept in `render.log` rather than filtered away.
+- **The heap size is no longer hardcoded to 12 GB.** That was right for the
+  laptop it was written on and arbitrary anywhere else. `--node-memory` sets
+  it; unset, node sizes its own heap for the machine it is on.
+- **`--render-workers` passes through**, so a machine that struggles can render
+  on fewer cores.
+
 ## [v26.08.26.185] - 2026-08-26
 
 ### Fixed
