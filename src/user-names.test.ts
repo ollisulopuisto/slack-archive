@@ -34,6 +34,7 @@ describe("mineNames", () => {
         nick: "selim",
         seen: "2016-09-28T11:39:18.000Z",
         source: "mention",
+        kind: "handle",
       },
     ]);
   });
@@ -70,6 +71,7 @@ describe("mineNames", () => {
         nick: "closingbell",
         seen: "2016-09-28T11:39:18.000Z",
         source: "username",
+        kind: "handle",
       },
     ]);
   });
@@ -109,6 +111,7 @@ describe("mineNames", () => {
         nick: "John Stuart Mill",
         seen: "2020-09-13T12:26:40.000Z",
         source: "attachment",
+        kind: "display",
       },
     ]);
   });
@@ -207,12 +210,14 @@ describe("recordNames", () => {
         nick: "dst",
         seen: "2016-10-06T00:00:00.000Z",
         source: "mention",
+        kind: "handle",
       },
       {
         userId: "U1",
         nick: "dst",
         seen: "2016-11-22T00:00:00.000Z",
         source: "mention",
+        kind: "handle",
       },
     ]);
 
@@ -222,6 +227,7 @@ describe("recordNames", () => {
         first: "2016-10-06T00:00:00.000Z",
         last: "2016-11-22T00:00:00.000Z",
         sources: ["mention"],
+        kinds: ["handle"],
       },
     ]);
   });
@@ -233,18 +239,21 @@ describe("recordNames", () => {
         nick: "btngbldrgrndn",
         seen: "2025-01-15T00:00:00.000Z",
         source: "mention",
+        kind: "handle",
       },
       {
         userId: "U1",
         nick: "dst",
         seen: "2016-10-06T00:00:00.000Z",
         source: "mention",
+        kind: "handle",
       },
       {
         userId: "U1",
         nick: "katthufvud",
         seen: "2016-11-24T00:00:00.000Z",
         source: "mention",
+        kind: "handle",
       },
     ]);
 
@@ -262,18 +271,21 @@ describe("recordNames", () => {
         nick: "dst",
         seen: "2016-10-06T00:00:00.000Z",
         source: "mention",
+        kind: "handle",
       },
       {
         userId: "U1",
         nick: "dst",
         seen: "2026-08-25T00:00:00.000Z",
         source: "profile",
+        kind: "display",
       },
       {
         userId: "U1",
         nick: "dst",
         seen: "2026-08-26T00:00:00.000Z",
         source: "profile",
+        kind: "display",
       },
     ]);
 
@@ -296,12 +308,14 @@ describe("recordNames", () => {
         nick: "jaricurry",
         seen: "2016-10-11T00:00:00.000Z",
         source: "mention",
+        kind: "handle",
       },
       {
         userId: "U2",
         nick: "vappu",
         seen: "2016-10-09T00:00:00.000Z",
         source: "mention",
+        kind: "handle",
       },
     ]);
 
@@ -327,12 +341,14 @@ describe("recordNames", () => {
         nick: "dst",
         seen: "2026-08-25T00:00:00.000Z",
         source: "profile",
+        kind: "display",
       },
       {
         userId: "U1",
         nick: "katthufvud",
         seen: "2016-11-24T00:00:00.000Z",
         source: "mention",
+        kind: "handle",
       },
     ]);
 
@@ -451,5 +467,87 @@ describe("nameHistory()", () => {
       "U2",
       "U1",
     ]);
+  });
+});
+
+describe("nicks are not display names", () => {
+  it("knows which is which when it takes today's snapshot", () => {
+    const sightings = snapshotNames(
+      {
+        U1: {
+          id: "U1",
+          name: "infosota",
+          profile: { display_name: "tsippadai", real_name: "Jimmie Åkesson" },
+        },
+      } as never,
+      "2026-08-26T00:00:00.000Z",
+    );
+
+    expect(sightings.map(({ nick, kind }) => ({ nick, kind }))).toEqual([
+      { nick: "tsippadai", kind: "display" },
+      { nick: "Jimmie Åkesson", kind: "real" },
+      { nick: "infosota", kind: "handle" },
+    ]);
+  });
+
+  it("mines a pipe mention as a handle and a shared message as a display name", () => {
+    const sightings = mineNames({
+      ts: "1475062758.000002",
+      text: "moi <@U2H06BCQZ|jaricurry>",
+      attachments: [{ author_id: "U1", author_name: "John Stuart Bill" }],
+    } as never);
+
+    expect(sightings.map(({ nick, kind }) => ({ nick, kind }))).toEqual([
+      { nick: "jaricurry", kind: "handle" },
+      { nick: "John Stuart Bill", kind: "display" },
+    ]);
+  });
+
+  it("keeps the kinds on the record, so a real name is never shown as a nick", () => {
+    const history = recordNames({}, [
+      {
+        userId: "U1",
+        nick: "tsippadai",
+        seen: "2026-01-01T00:00:00.000Z",
+        source: "profile",
+        kind: "display",
+      },
+      {
+        userId: "U1",
+        nick: "tsippadai",
+        seen: "2026-02-01T00:00:00.000Z",
+        source: "mention",
+        kind: "handle",
+      },
+    ]);
+
+    expect(history.U1[0].kinds).toEqual(["display", "handle"]);
+  });
+
+  it("answers with what they were called, not with their passport", () => {
+    const history = {
+      U1: [
+        {
+          nick: "Jimmie Åkesson",
+          first: "2016-01-01T00:00:00.000Z",
+          last: "2026-01-01T00:00:00.000Z",
+          sources: ["profile"],
+          kinds: ["real" as const],
+        },
+        {
+          nick: "tsippadai",
+          first: "2020-01-01T00:00:00.000Z",
+          last: "2021-01-01T00:00:00.000Z",
+          sources: ["profile"],
+          kinds: ["display" as const],
+        },
+      ],
+    };
+
+    expect(nameAt(history, "U1", "2020-06-01T00:00:00.000Z")).toBe("tsippadai");
+    // Nothing else covers 2017, so the real name is better than nothing.
+    expect(nameAt(history, "U1", "2017-06-01T00:00:00.000Z")).toBe(
+      "Jimmie Åkesson",
+    );
   });
 });

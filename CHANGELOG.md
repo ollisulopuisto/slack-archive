@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.160] - 2026-08-26
+
+### Added
+- **The archive says what it is missing.** 521 days in five stretches - the
+  longest 1.2.2022 to 10.9.2022 - have no messages in them, because nothing was
+  run then. Stats, bots, names, every channel page and every profile now carry
+  a notice saying which days are absent, and a channel's message pages print
+  the gap in place, between the last message before it and the first message
+  after. A chart that does not say this is simply wrong about those months.
+  The stretches are found in the data (`findGaps`), not configured, so they
+  correct themselves if the gaps are ever backfilled.
+- **Handles, display names and real names are told apart.** They were recorded
+  in one pile, so `infosota` (the account's handle), `tsippadai` (the display
+  name) and `Jimmie Åkesson` (the real-name field) read as three nicknames. Each
+  sighting now records which field it came from, and the names pages label
+  them. `nameAt`, which signs old messages, prefers what somebody was actually
+  called and falls back to the real-name field only when nothing else covers
+  that date.
+- **Profile titles are kept, next to the statuses.** In this workspace the
+  title field is used exactly like the status line - "value creator", "Euroopan
+  viimeinen uusliberalisti" - and nothing was reading it. It is snapshotted
+  with the statuses, kept apart from them in the record, and shown in the same
+  pile on the profile page.
+
+  The search database keeps both distinctions too, so the bot answers "who was
+  John Stuart Bill in 2021" with a name somebody actually went by rather than
+  with whatever was in the real-name field.
+
+### Fixed
+- **A run that cannot reach Slack no longer rewrites the emoji list with
+  nothing.** The nightly render pass runs `--no-slack-connect` over the same
+  data directory as a different user and died twice on
+  `EACCES: .../data/emojis.json` while carrying no new information at all.
+
 ## [v26.08.26.159] - 2026-08-26
 
 ### Added

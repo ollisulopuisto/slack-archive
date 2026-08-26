@@ -10,6 +10,18 @@ import { ArchiveMessage, User, Users } from "./interfaces.js";
  * been juusokarhu, kuningaslitmanen, reijotossavainen, hevosenkuerpae,
  * ullaappelsin, natsiblondi and lahtari, all in eleven months.
  */
+/**
+ * What kind of name this is - because they are not the same thing and this
+ * archive was showing them in one pile.
+ *
+ * `handle` is the @-name Slack knows the account by (`users.name`, and the
+ * name the old pipe-form mentions carry). `display` is what the person set as
+ * their display name, which is what everyone actually sees and what changes
+ * for a joke twice a month. `real` is the real-name field, which in this
+ * workspace is another joke field, but is still not a nick.
+ */
+export type NameKind = "display" | "handle" | "real";
+
 export interface UserName {
   nick: string;
   /** ISO 8601, earliest sighting. */
@@ -18,6 +30,11 @@ export interface UserName {
   last: string;
   /** Where the sighting came from, sorted: mention, profile, username. */
   sources: Array<string>;
+  /**
+   * Which fields this name was seen in, sorted. Absent on entries recorded
+   * before the archive told the two apart.
+   */
+  kinds?: Array<NameKind>;
 }
 
 export type UserNames = Record<string, Array<UserName>>;
@@ -30,6 +47,7 @@ export interface NameSighting {
   /** ISO 8601. */
   seen: string;
   source: NameSource;
+  kind: NameKind;
 }
 
 /**
@@ -63,12 +81,20 @@ export function mineNames(message: ArchiveMessage): Array<NameSighting> {
     for (const match of String(message.text || "").matchAll(
       MENTION_WITH_NAME,
     )) {
-      add(sightings, match[1], match[2], seen, "mention");
+      // The pipe form carries the HANDLE, not the display name.
+      add(sightings, match[1], match[2], seen, "mention", "handle");
     }
 
     // Bot and legacy messages carry the posting name directly.
     if (message.user && typeof message.username === "string") {
-      add(sightings, message.user, message.username, seen, "username");
+      add(
+        sightings,
+        message.user,
+        message.username,
+        seen,
+        "username",
+        "handle",
+      );
     }
 
     // Sharing a message quotes it as an attachment carrying the author's
@@ -80,7 +106,15 @@ export function mineNames(message: ArchiveMessage): Array<NameSighting> {
       if (!MEMBER_ID.test(String(attachment?.author_id || ""))) continue;
 
       for (const name of [attachment.author_name, attachment.author_subname]) {
-        add(sightings, attachment.author_id, name, seen, "attachment");
+        // A quoted message is signed with the display name of that day.
+        add(
+          sightings,
+          attachment.author_id,
+          name,
+          seen,
+          "attachment",
+          "display",
+        );
       }
     }
   }
@@ -97,22 +131,32 @@ export function snapshotNames(users: Users, now: string): Array<NameSighting> {
   const sightings: Array<NameSighting> = [];
 
   for (const [userId, user] of Object.entries(users || {})) {
-    for (const nick of profileNames(user)) {
-      add(sightings, userId, nick, now, "profile");
+    for (const { nick, kind } of profileNames(user)) {
+      add(sightings, userId, nick, now, "profile", kind);
     }
   }
 
   return sightings;
 }
 
-function profileNames(user: User | undefined): Array<string> {
+function profileNames(
+  user: User | undefined,
+): Array<{ nick: string; kind: NameKind }> {
   if (!user) return [];
 
   // display_name is the one people change; the others are recorded because a
-  // person who never set a display name is still known by something.
-  return [user.profile?.display_name, user.profile?.real_name, user.name]
-    .map((name) => (typeof name === "string" ? name.trim() : ""))
-    .filter((name) => name.length > 0);
+  // person who never set a display name is still known by something. Each is
+  // recorded as what it is.
+  return [
+    { nick: user.profile?.display_name, kind: "display" as const },
+    { nick: user.profile?.real_name, kind: "real" as const },
+    { nick: user.name, kind: "handle" as const },
+  ]
+    .map(({ nick, kind }) => ({
+      nick: typeof nick === "string" ? nick.trim() : "",
+      kind,
+    }))
+    .filter(({ nick }) => nick.length > 0);
 }
 
 function add(
@@ -121,6 +165,7 @@ function add(
   nick: string | undefined,
   seen: string,
   source: NameSource,
+  kind: NameKind,
 ) {
   const trimmed = typeof nick === "string" ? nick.trim() : "";
 
@@ -128,7 +173,7 @@ function add(
   // so recording it would teach the history that a person is called U2GV75QA2.
   if (!userId || trimmed.length === 0 || MEMBER_ID.test(trimmed)) return;
 
-  sightings.push({ userId, nick: trimmed, seen, source });
+  sightings.push({ userId, nick: trimmed, seen, source, kind });
 }
 
 /**
@@ -155,16 +200,31 @@ export function nameAt(
   const names = history[userId] || [];
   if (names.length === 0) return null;
 
-  const covering = names.find((name) => iso >= name.first && iso <= name.last);
-  if (covering) return covering.nick;
+  // A real name is not what somebody was called - it is the field next to it -
+  // so a display name or a handle wins over it. But only at the same distance
+  // in time: a real name covering 2017 beats a display name first seen in
+  // 2020, because the question is what this message was signed with.
+  const spoken = names.filter((name) => !isOnlyRealName(name));
+  const covering = (from: Array<UserName>) =>
+    from.find((name) => iso >= name.first && iso <= name.last);
+  const earlier = (from: Array<UserName>) =>
+    from.filter((name) => name.first <= iso).slice(-1)[0];
 
-  // Otherwise the most recent name whose window had already begun.
-  const earlier = names.filter((name) => name.first <= iso);
-  if (earlier.length > 0) {
-    return earlier[earlier.length - 1].nick;
-  }
+  const answer =
+    covering(spoken) ||
+    covering(names) ||
+    earlier(spoken) ||
+    earlier(names) ||
+    spoken[0] ||
+    names[0];
 
-  return names[0].nick;
+  return answer ? answer.nick : null;
+}
+
+function isOnlyRealName(name: UserName): boolean {
+  return (
+    (name.kinds || []).length > 0 && name.kinds!.every((k) => k === "real")
+  );
 }
 
 /**
@@ -182,15 +242,22 @@ export function recordNames(
     merged[userId] = names.map((name) => ({
       ...name,
       sources: [...name.sources],
+      ...(name.kinds ? { kinds: [...name.kinds] } : {}),
     }));
   }
 
-  for (const { userId, nick, seen, source } of sightings) {
+  for (const { userId, nick, seen, source, kind } of sightings) {
     const names = (merged[userId] = merged[userId] || []);
     const known = names.find((name) => name.nick === nick);
 
     if (!known) {
-      names.push({ nick, first: seen, last: seen, sources: [source] });
+      names.push({
+        nick,
+        first: seen,
+        last: seen,
+        sources: [source],
+        kinds: [kind],
+      });
       continue;
     }
 
@@ -198,6 +265,9 @@ export function recordNames(
     if (seen > known.last) known.last = seen;
     if (!known.sources.includes(source)) {
       known.sources = [...known.sources, source].sort();
+    }
+    if (!(known.kinds || []).includes(kind)) {
+      known.kinds = [...(known.kinds || []), kind].sort();
     }
   }
 

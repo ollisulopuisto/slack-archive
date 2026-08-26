@@ -680,3 +680,67 @@ describe("statuses and membership", () => {
     expect(Number(m.n)).toBe(0);
   });
 });
+
+describe("what kind of name and status", () => {
+  it("keeps handles, display names and real names apart in the database", async () => {
+    const file = path.join(dir, "kinds.db");
+
+    await buildSearchDatabase(file, {
+      users: { U1: "infosota" },
+      channels: [],
+      loadMessages: async () => [],
+      names: {
+        U1: [
+          {
+            nick: "tsippadai",
+            first: "2026-01-01T00:00:00.000Z",
+            last: "2026-08-01T00:00:00.000Z",
+            sources: ["profile"],
+            kinds: ["display"],
+          },
+          {
+            nick: "Jimmie Åkesson",
+            first: "2026-08-01T00:00:00.000Z",
+            last: "2026-08-01T00:00:00.000Z",
+            sources: ["profile"],
+            kinds: ["real"],
+          },
+        ],
+      },
+      statuses: {
+        U1: [
+          {
+            text: "kaljalla",
+            emoji: ":beer:",
+            kind: "status",
+            first: "2026-01-01T00:00:00.000Z",
+            last: "2026-01-02T00:00:00.000Z",
+          },
+          {
+            text: "value creator",
+            emoji: "",
+            kind: "title",
+            first: "2026-01-01T00:00:00.000Z",
+            last: "2026-01-02T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    const db = openSearchDatabase(file);
+
+    expect(db.all("SELECT nick, kinds FROM user_names ORDER BY nick")).toEqual([
+      { nick: "Jimmie Åkesson", kinds: "real" },
+      { nick: "tsippadai", kinds: "display" },
+    ]);
+
+    expect(
+      db.all("SELECT text, kind FROM user_statuses ORDER BY text"),
+    ).toEqual([
+      { text: "kaljalla", kind: "status" },
+      { text: "value creator", kind: "title" },
+    ]);
+
+    db.close();
+  });
+});

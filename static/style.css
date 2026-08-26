@@ -814,3 +814,31 @@ a.timestamp:focus-visible {
   background: #fff8d4;
   scroll-margin-top: 1rem;
 }
+
+/* What the archive does not have. Every count on the page is a count of what
+   was fetched, and where nothing was fetched that is not the same thing. */
+.gap-notice {
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 1rem;
+  border-left: 4px solid #d97706;
+  background: #fff7ed;
+  color: #7c2d12;
+  line-height: 1.5;
+  max-width: 60rem;
+}
+
+.gap-notice .gap-range {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.gap-divider {
+  margin: 1.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px dashed #d97706;
+  border-bottom: 1px dashed #d97706;
+  background: #fff7ed;
+  color: #7c2d12;
+  font-size: 0.85rem;
+  text-align: center;
+}

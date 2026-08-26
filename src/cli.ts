@@ -349,11 +349,18 @@ export async function main() {
   );
   const newMessages: Record<string, number> = {};
 
-  // Emoji
-  // We don't actually download the images here, we'll
-  // do that as needed
+  // Emoji: the list, then every image in it, once.
   const emojis = await downloadEmojiList();
-  await writeAndMerge(EMOJIS_DATA_PATH, emojis);
+
+  // A run that could not ask Slack has learned nothing, and rewriting the file
+  // with nothing needs write access this run may not have: the nightly render
+  // pass, which runs --no-slack-connect over the same data directory as a
+  // different user, died twice on EACCES here without touching a byte of new
+  // information.
+  if (Object.keys(emojis).length > 0) {
+    await writeAndMerge(EMOJIS_DATA_PATH, emojis);
+  }
+
   await downloadAllEmoji(emojis);
 
   // Do we want to merge data?

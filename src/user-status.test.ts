@@ -21,7 +21,15 @@ describe("snapshotStatuses", () => {
         } as any,
         NOW,
       ),
-    ).toEqual([{ userId: "U1", text: "kaljalla", emoji: ":beer:", seen: NOW }]);
+    ).toEqual([
+      {
+        userId: "U1",
+        text: "kaljalla",
+        emoji: ":beer:",
+        kind: "status",
+        seen: NOW,
+      },
+    ]);
   });
 
   it("records an emoji-only status", () => {
@@ -33,6 +41,7 @@ describe("snapshotStatuses", () => {
       userId: "U1",
       text: "",
       emoji: ":palmtree:",
+      kind: "status" as const,
       seen: NOW,
     });
   });
@@ -58,19 +67,49 @@ describe("snapshotStatuses", () => {
 describe("recordStatuses", () => {
   it("widens a status it already knows rather than repeating it", () => {
     const history = recordStatuses({}, [
-      { userId: "U1", text: "kaljalla", emoji: ":beer:", seen: NOW },
-      { userId: "U1", text: "kaljalla", emoji: ":beer:", seen: LATER },
+      {
+        userId: "U1",
+        text: "kaljalla",
+        emoji: ":beer:",
+        kind: "status",
+        seen: NOW,
+      },
+      {
+        userId: "U1",
+        text: "kaljalla",
+        emoji: ":beer:",
+        kind: "status",
+        seen: LATER,
+      },
     ]);
 
     expect(history.U1).toEqual([
-      { text: "kaljalla", emoji: ":beer:", first: NOW, last: LATER },
+      {
+        text: "kaljalla",
+        emoji: ":beer:",
+        kind: "status",
+        first: NOW,
+        last: LATER,
+      },
     ]);
   });
 
   it("treats the same text with a different emoji as a different status", () => {
     const history = recordStatuses({}, [
-      { userId: "U1", text: "lomalla", emoji: ":palmtree:", seen: NOW },
-      { userId: "U1", text: "lomalla", emoji: ":snowflake:", seen: LATER },
+      {
+        userId: "U1",
+        text: "lomalla",
+        emoji: ":palmtree:",
+        kind: "status",
+        seen: NOW,
+      },
+      {
+        userId: "U1",
+        text: "lomalla",
+        emoji: ":snowflake:",
+        kind: "status",
+        seen: LATER,
+      },
     ]);
 
     expect(history.U1).toHaveLength(2);
@@ -78,8 +117,8 @@ describe("recordStatuses", () => {
 
   it("keeps them oldest first", () => {
     const history = recordStatuses({}, [
-      { userId: "U1", text: "toinen", emoji: "", seen: LATER },
-      { userId: "U1", text: "eka", emoji: "", seen: NOW },
+      { userId: "U1", text: "toinen", emoji: "", kind: "status", seen: LATER },
+      { userId: "U1", text: "eka", emoji: "", kind: "status", seen: NOW },
     ]);
 
     expect(history.U1.map((s) => s.text)).toEqual(["eka", "toinen"]);
@@ -91,10 +130,78 @@ describe("recordStatuses", () => {
     };
 
     const after = recordStatuses(before, [
-      { userId: "U1", text: "toinen", emoji: "", seen: LATER },
+      { userId: "U1", text: "toinen", emoji: "", kind: "status", seen: LATER },
     ]);
 
     expect(before.U1).toHaveLength(1);
     expect(after.U1).toHaveLength(2);
+  });
+});
+
+describe("titles", () => {
+  it("records the profile title as its own kind of status", () => {
+    // "value creator", "Euroopan viimeinen uusliberalisti" - in this workspace
+    // the title field is used exactly like the status line, and nothing was
+    // reading it.
+    const sightings = snapshotStatuses(
+      {
+        U1: {
+          id: "U1",
+          profile: {
+            status_text: "kaljalla",
+            status_emoji: ":beer:",
+            title: "value creator",
+          },
+        },
+      } as never,
+      "2026-08-26T00:00:00.000Z",
+    );
+
+    expect(sightings).toEqual([
+      {
+        userId: "U1",
+        text: "kaljalla",
+        emoji: ":beer:",
+        kind: "status",
+        seen: "2026-08-26T00:00:00.000Z",
+      },
+      {
+        userId: "U1",
+        text: "value creator",
+        emoji: "",
+        kind: "title",
+        seen: "2026-08-26T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("keeps a title and a status with the same words apart", () => {
+    const history = recordStatuses({}, [
+      {
+        userId: "U1",
+        text: "hommissa",
+        emoji: "",
+        kind: "status",
+        seen: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        userId: "U1",
+        text: "hommissa",
+        emoji: "",
+        kind: "title",
+        seen: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+
+    expect(history.U1.map((entry) => entry.kind)).toEqual(["status", "title"]);
+  });
+
+  it("says nothing about an empty title", () => {
+    const sightings = snapshotStatuses(
+      { U1: { id: "U1", profile: { title: "  " } } } as never,
+      "2026-08-26T00:00:00.000Z",
+    );
+
+    expect(sightings).toEqual([]);
   });
 });

@@ -54,10 +54,12 @@ import {
   nameAt,
   nameHistory,
   slackTimestampToIso,
+  UserName,
   UserNames,
 } from "./user-names.js";
 import { botUserIds, isChannelSearchable } from "./search-filter.js";
 import { profilePageIds } from "./profiles.js";
+import { dailyTotals, findGaps, Gap, gapBetween } from "./gaps.js";
 import { UserAvatars } from "./user-avatars.js";
 import { UserStatuses } from "./user-status.js";
 import {
@@ -112,6 +114,10 @@ let userAvatars: UserAvatars = {};
 let userStatuses: UserStatuses = {};
 /** Accounts the workspace marks as bots: they have no profile page to link to. */
 let botIds: Set<string> = new Set();
+/** Stretches of days this archive holds nothing for. Said out loud on every
+ * page that counts anything, because a run that never happened looks exactly
+ * like a day nobody spoke. */
+let gaps: Array<Gap> = [];
 /** Everyone a profile page was actually written for. Filled in before the
  * channel pages are rendered, because they link to it. */
 let profileIds: Set<string> = new Set();
@@ -357,12 +363,31 @@ const MessagesPage: React.FunctionComponent<MessagesPageProps> = (props) => {
   const { channel, index, chunksInfo } = props;
   const messagesJs = fs.readFileSync(MESSAGES_JS_PATH, "utf8");
 
-  // Newest message is first
-  const messages = props.messages
-    .map((m) => (
-      <ParentMessage key={m.ts} message={m} channelId={channel.id!} />
-    ))
-    .reverse();
+  // Newest message is first; the page reads oldest first.
+  const oldestFirst = [...props.messages].reverse();
+  const messages: Array<React.ReactNode> = [];
+
+  for (const [i, message] of oldestFirst.entries()) {
+    // Where the archive stops and starts again, say so in place, rather than
+    // letting September follow February as if nothing was in between.
+    const gap = gapBetween(
+      gaps,
+      dayOf(oldestFirst[i - 1]?.ts),
+      dayOf(message.ts),
+    );
+
+    if (gap) {
+      messages.push(<GapDivider key={`gap-${gap.from}`} gap={gap} />);
+    }
+
+    messages.push(
+      <ParentMessage
+        key={message.ts}
+        message={message}
+        channelId={channel.id!}
+      />,
+    );
+  }
 
   if (messages.length === 0) {
     messages.push(<span key="empty">No messages were ever sent!</span>);
@@ -691,6 +716,8 @@ const NamesPage: React.FunctionComponent = () => {
           rename history - these were recovered from the messages themselves,
           and are kept from here on.
         </p>
+
+        <GapNotice />
         {people.map((person) => (
           <div className="person" key={person.userId}>
             <h2>
@@ -712,6 +739,7 @@ const NamesPage: React.FunctionComponent = () => {
                         : ""}
                     </td>
                     <td className="sender">{name.nick}</td>
+                    <td className="kind">{nameKinds(name)}</td>
                     <td className="timestamp">{name.sources.join(", ")}</td>
                   </tr>
                 ))}
@@ -728,6 +756,83 @@ async function renderNamesPage() {
   base = "";
   return renderAndWrite(<NamesPage />, NAMES_PATH);
 }
+
+/** The ISO day a message was posted, for gap comparisons. */
+function dayOf(ts: string | undefined): string {
+  return (slackTimestampToIso(ts || "") || "").slice(0, 10);
+}
+
+const NAME_KIND_WORDS: Record<string, string> = {
+  display: "display name",
+  handle: "handle",
+  real: "real name",
+};
+
+/**
+ * What kind of name this was, told apart rather than piled together: the
+ * @-handle Slack knows the account by, the display name everyone actually
+ * sees, and the real-name field. Older entries predate the distinction and
+ * say where they came from instead.
+ */
+function nameKinds(name: UserName): string {
+  const kinds = name.kinds || [];
+
+  if (kinds.length === 0) {
+    return name.sources.includes("attachment") ? "display name" : "";
+  }
+
+  return kinds.map((kind) => NAME_KIND_WORDS[kind] || kind).join(" + ");
+}
+
+/** "1.2.2022" from an ISO day. */
+function formatIsoDay(iso: string): string {
+  const [year, month, day] = iso.split("-");
+  return `${Number(day)}.${Number(month)}.${year}`;
+}
+
+/**
+ * What is missing, on every page that shows a number.
+ *
+ * Every count, chart and league table on these pages counts what was
+ * archived. Where the archiver did not run, that is not the same as what was
+ * said, and a chart that does not say so is simply wrong about those months.
+ */
+const GapNotice: React.FunctionComponent = () => {
+  if (gaps.length === 0) return null;
+
+  const missing = gaps.reduce((n, gap) => n + gap.days, 0);
+
+  return (
+    <div className="gap-notice" role="note">
+      <strong>
+        The archive is missing {formatCount(missing)} days
+        {gaps.length > 1 ? ` in ${gaps.length} stretches` : ""}.
+      </strong>{" "}
+      Nothing was archived{" "}
+      {gaps.map((gap, i) => (
+        <span key={gap.from}>
+          {i > 0 ? (i === gaps.length - 1 ? " and " : ", ") : ""}
+          <span className="gap-range">
+            {formatIsoDay(gap.from)}&nbsp;-&nbsp;{formatIsoDay(gap.to)}
+          </span>
+        </span>
+      ))}
+      , because the archiver was not run. Whether Slack still holds those
+      messages depends on the workspace's retention, and this archive does not
+      have them: every number and chart on this page counts what was archived,
+      not what was said.
+    </div>
+  );
+};
+
+/** The same thing, in one line, where a whole paragraph would be in the way. */
+const GapDivider: React.FunctionComponent<{ gap: Gap }> = ({ gap }) => (
+  <div className="gap-divider" role="note">
+    {formatCount(gap.days)} days missing from the archive here -{" "}
+    {formatIsoDay(gap.from)} to {formatIsoDay(gap.to)}. Not silence: nothing was
+    archived then.
+  </div>
+);
 
 /**
  * The link to somebody's profile page, or nothing when no page was written
@@ -893,6 +998,8 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
           </div>
         </div>
 
+        <GapNotice />
+
         <div className="viz-tiles">
           <Tile label="Messages" value={formatCount(person.messages)} />
           <Tile label="Names" value={formatCount(names.length)} />
@@ -988,12 +1095,17 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
             <table className="timeline">
               <tbody>
                 {(userStatuses[userId] || []).map((status) => (
-                  <tr key={`${status.emoji}-${status.text}`}>
+                  <tr
+                    key={`${status.kind || "status"}-${status.emoji}-${status.text}`}
+                  >
                     <td className="timestamp">
                       {status.first.slice(0, 10)}
                       {status.last.slice(0, 10) !== status.first.slice(0, 10)
                         ? ` - ${status.last.slice(0, 10)}`
                         : ""}
+                    </td>
+                    <td className="kind">
+                      {status.kind === "title" ? "title" : "status"}
                     </td>
                     <td>
                       {status.emoji ? (
@@ -1051,6 +1163,7 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
                       : ""}
                   </td>
                   <td className="sender">{name.nick}</td>
+                  <td className="kind">{nameKinds(name)}</td>
                   <td className="kind">{name.sources.join(", ")}</td>
                 </tr>
               ))}
@@ -1138,6 +1251,8 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
           {formatDay(data.first)} - {formatDay(data.last)} ·{" "}
           <a href="bots.html">what the bots did</a>
         </p>
+
+        <GapNotice />
 
         <div className="viz-tiles">
           <Tile
@@ -1285,6 +1400,8 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
           <a href={`${channel.id}-0.html`}>read the messages</a>
         </p>
 
+        <GapNotice />
+
         <div className="viz-tiles">
           <Tile label="Messages" value={formatCount(channel.messages)} />
           <Tile label="People who posted" value={formatCount(posters.length)} />
@@ -1396,6 +1513,8 @@ const BotsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
           of people · <a href="stats.html">back to the archive</a>
         </p>
 
+        <GapNotice />
+
         <div className="viz-tiles">
           <Tile label="Messages" value={formatCount(data.botMessages)} />
           <Tile label="Share of everything" value={`${share}%`} />
@@ -1463,6 +1582,9 @@ async function renderStatsAndProfiles(channels: Array<Channel>) {
 
   stats = accumulator.result();
   base = "";
+
+  // Before anything that counts is written: every one of those pages says so.
+  gaps = findGaps(dailyTotals(stats.byDayHour));
 
   await renderAndWrite(<StatsPage data={stats} />, STATS_PATH);
   await renderAndWrite(<BotsPage data={stats} />, BOTS_PATH);

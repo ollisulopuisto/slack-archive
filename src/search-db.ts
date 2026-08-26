@@ -227,7 +227,11 @@ export async function buildSearchDatabase(
       nick    TEXT,
       first   TEXT,
       last    TEXT,
-      sources TEXT
+      sources TEXT,
+      -- display, handle or real: an account's @-handle, the display name
+      -- everybody sees, and the real-name field are three different things,
+      -- and answering "who was this" with the wrong one is a wrong answer.
+      kinds   TEXT
     )`);
     db.exec("CREATE INDEX user_names_user_id ON user_names (user_id)");
     db.exec("CREATE INDEX user_names_nick ON user_names (nick)");
@@ -241,7 +245,10 @@ export async function buildSearchDatabase(
       text    TEXT,
       emoji   TEXT,
       first   TEXT,
-      last    TEXT
+      last    TEXT,
+      -- status or title. This workspace uses the title field for jokes the
+      -- same way it uses the status line, but they are still two fields.
+      kind    TEXT
     )`);
     db.exec("CREATE INDEX user_statuses_user_id ON user_statuses (user_id)");
 
@@ -365,8 +372,8 @@ export async function buildSearchDatabase(
     userStmt.finalize();
 
     const nameStmt = db.prepare(
-      `INSERT INTO user_names (user_id, nick, first, last, sources)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO user_names (user_id, nick, first, last, sources, kinds)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     );
     for (const [userId, userNames] of Object.entries(names || {})) {
       for (const name of userNames) {
@@ -376,14 +383,15 @@ export async function buildSearchDatabase(
           name.first,
           name.last,
           name.sources.join(","),
+          (name.kinds || []).join(","),
         ]);
       }
     }
     nameStmt.finalize();
 
     const statusStmt = db.prepare(
-      `INSERT INTO user_statuses (user_id, text, emoji, first, last)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO user_statuses (user_id, text, emoji, first, last, kind)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     );
     for (const [userId, userStatuses] of Object.entries(statuses || {})) {
       for (const status of userStatuses) {
@@ -393,6 +401,7 @@ export async function buildSearchDatabase(
           status.emoji,
           status.first,
           status.last,
+          status.kind || "status",
         ]);
       }
     }

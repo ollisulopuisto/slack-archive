@@ -10,6 +10,14 @@ import { User, Users } from "./interfaces.js";
  * used as a joke channel, "kaljalla" for three days in July 2019 is the same
  * kind of artefact as a nickname - and equally gone if nobody records it.
  */
+/**
+ * A status line, or the title field - which this workspace uses the same way
+ * ("value creator", "Euroopan viimeinen uusliberalisti") and which nothing was
+ * reading. Absent on entries recorded before titles were kept, which were all
+ * statuses.
+ */
+export type StatusKind = "status" | "title";
+
 export interface UserStatus {
   text: string;
   /** Slack's `:emoji:` shortcode, or "" when the status is text only. */
@@ -18,6 +26,7 @@ export interface UserStatus {
   first: string;
   /** ISO 8601, most recent time it was seen. */
   last: string;
+  kind?: StatusKind;
 }
 
 export type UserStatuses = Record<string, Array<UserStatus>>;
@@ -26,6 +35,7 @@ export interface StatusSighting {
   userId: string;
   text: string;
   emoji: string;
+  kind: StatusKind;
   seen: string;
 }
 
@@ -44,9 +54,21 @@ export function snapshotStatuses(
     // An empty status is a real state - somebody cleared theirs - but it is
     // not worth a row of its own: the gap between two statuses says the same
     // thing, and recording every blank would bury the ones that say something.
-    if (!text && !emoji) continue;
+    if (text || emoji) {
+      sightings.push({ userId, text, emoji, kind: "status", seen: now });
+    }
 
-    sightings.push({ userId, text, emoji, seen: now });
+    const title = (profile?.title || "").trim();
+
+    if (title) {
+      sightings.push({
+        userId,
+        text: title,
+        emoji: "",
+        kind: "title",
+        seen: now,
+      });
+    }
   }
 
   return sightings;
@@ -66,14 +88,17 @@ export function recordStatuses(
     merged[userId] = statuses.map((status) => ({ ...status }));
   }
 
-  for (const { userId, text, emoji, seen } of sightings) {
+  for (const { userId, text, emoji, kind, seen } of sightings) {
     const statuses = (merged[userId] = merged[userId] || []);
     const known = statuses.find(
-      (status) => status.text === text && status.emoji === emoji,
+      (status) =>
+        status.text === text &&
+        status.emoji === emoji &&
+        (status.kind || "status") === kind,
     );
 
     if (!known) {
-      statuses.push({ text, emoji, first: seen, last: seen });
+      statuses.push({ text, emoji, kind, first: seen, last: seen });
       continue;
     }
 
