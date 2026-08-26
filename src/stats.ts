@@ -53,6 +53,8 @@ export interface ChannelStats {
   byDayHour: DayHourCube;
   /** User id -> messages they posted here. */
   byUser: Record<string, number>;
+  /** Reactions left on messages in this channel. */
+  reactions: number;
 }
 
 export interface UserStats {
@@ -272,6 +274,7 @@ export function createStats({ customEmoji, bots }: StatsOptions = {}) {
       const n = Number(reaction.count) || 0;
       received += n;
       stats.reactions += n;
+      if (channelStats) channelStats.reactions += n;
 
       const name = reaction.name;
       if (!name) continue;
@@ -344,6 +347,7 @@ export function createStats({ customEmoji, bots }: StatsOptions = {}) {
           last: "",
           byDayHour: {},
           byUser: {},
+          reactions: 0,
         };
       }
 

@@ -1520,3 +1520,51 @@ table.timeline,
   fill: var(--viz-series);
   opacity: 0.12;
 }
+
+/* The estimate on a bar: hollow, because it was not counted, with a whisker
+   for the range the surrounding years disagree over. */
+.viz-estimate-cap {
+  fill: var(--viz-series);
+  fill-opacity: 0.14;
+  stroke: var(--viz-series);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+.viz-estimate-whisker {
+  stroke: var(--viz-series);
+  stroke-width: 1.5;
+  opacity: 0.5;
+}
+
+/* The control that turns speculation on. */
+.speculate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  margin: 0 0 20px;
+  font-size: 13px;
+}
+
+.speculate label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.speculate-note {
+  color: var(--ink-muted);
+}
+
+/* While it is on, the numbers that changed say so rather than looking like
+   counts. */
+body.speculating .viz-tile[data-speculative] {
+  border-style: dashed;
+}
+
+body.speculating .viz-tile[data-speculative] .viz-tile-value {
+  color: var(--viz-series);
+}

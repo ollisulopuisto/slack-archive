@@ -99,6 +99,7 @@ import { botUserIds, isChannelSearchable } from "./search-filter.js";
 import { profilePageIds } from "./profiles.js";
 import { dailyTotals, findGaps, Gap, gapBetween } from "./gaps.js";
 import { estimateMissingByMonth, MonthEstimate } from "./estimate.js";
+import { estimatesByYear, speculativeTotals } from "./speculative.js";
 import { UserAvatars } from "./user-avatars.js";
 import { UserStatuses } from "./user-status.js";
 import {
@@ -118,6 +119,7 @@ import {
   Datum,
   Figure,
   formatCount,
+  SpeculateToggle,
   Tile,
 } from "./charts.js";
 import {
@@ -1292,7 +1294,10 @@ const Drilldown: React.FunctionComponent<{
   );
 };
 
-function yearData(byYear: Record<string, number>): Array<Datum> {
+function yearData(
+  byYear: Record<string, number>,
+  estimates: Record<string, MonthEstimate> = {},
+): Array<Datum> {
   const years = Object.keys(byYear).sort();
   if (years.length === 0) return [];
 
@@ -1302,7 +1307,11 @@ function yearData(byYear: Record<string, number>): Array<Datum> {
   const to = Number(years[years.length - 1]);
   const all: Array<Datum> = [];
   for (let year = from; year <= to; year++) {
-    all.push({ label: String(year), value: byYear[String(year)] || 0 });
+    all.push({
+      label: String(year),
+      value: byYear[String(year)] || 0,
+      estimate: estimates[String(year)],
+    });
   }
   return all;
 }
@@ -1644,7 +1653,7 @@ const EmojiRows: React.FunctionComponent<{
 const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
   data,
 }) => {
-  const { users, teamMeta, profileIds, estimates } = useRender();
+  const { users, teamMeta, profileIds, estimates, base } = useRender();
   const people = Object.values(data.byUser)
     .filter((person) => person.messages > 0 && !person.isBot)
     .sort((a, b) => b.messages - a.messages);
@@ -1663,8 +1672,12 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
     .filter((channel) => channel.messages > 0)
     .sort((a, b) => b.messages - a.messages);
 
-  const years = yearData(data.byYear);
+  const years = yearData(data.byYear, estimatesByYear(estimates));
   const months = monthData(data.byMonth, estimates);
+  const speculative = speculativeTotals(
+    { messages: data.messages, reactions: data.reactions },
+    estimates,
+  );
   const allEmoji = Object.values(data.emojiStats).sort(
     (a, b) => b.count - a.count,
   );
@@ -1696,17 +1709,30 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
             label="Messages"
             value={formatCount(humanMessages)}
             hint={`people only · ${formatCount(data.botMessages)} more from bots`}
+            speculative={formatCount(
+              humanMessages + speculative.missingMessages,
+            )}
+            speculativeHint={`${formatCount(speculative.missingMessages)} estimated for the missing days`}
           />
           <Tile label="People who posted" value={formatCount(people.length)} />
           <Tile label="Channels" value={formatCount(channels.length)} />
           <Tile label="Files" value={formatCount(data.files)} />
-          <Tile label="Reactions" value={formatCount(data.reactions)} />
+          <Tile
+            label="Reactions"
+            value={formatCount(data.reactions)}
+            speculative={formatCount(speculative.reactions)}
+            speculativeHint={`${formatCount(speculative.missingReactions)} estimated at the archive's own rate`}
+          />
           <Tile
             label="Thread replies"
             value={formatCount(data.replies)}
             hint={`${Math.round((data.replies / Math.max(1, data.messages)) * 100)}% of everything`}
           />
         </div>
+
+        {speculative.missingMessages > 0 ? (
+          <SpeculateToggle base={base} />
+        ) : null}
 
         <Figure title="Messages per month" data={months}>
           <Area data={months} />
@@ -1812,22 +1838,35 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
 const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
   channel,
 }) => {
-  const { users, stats, profileIds } = useRender();
+  const { users, stats, profileIds, gaps, base } = useRender();
   const posters = Object.entries(channel.byUser)
     .map(([userId, messages]) => ({ userId, messages }))
     .filter(({ userId }) => !stats?.byUser[userId]?.isBot)
     .sort((a, b) => b.messages - a.messages);
 
   const byYear: Record<string, number> = {};
+  const byMonth: Record<string, number> = {};
   const byHour = new Array(24).fill(0);
   for (const [day, hours] of Object.entries(channel.byDayHour)) {
     for (const [hour, n] of Object.entries(hours)) {
       byYear[day.slice(0, 4)] = (byYear[day.slice(0, 4)] || 0) + n;
+      byMonth[day.slice(0, 7)] = (byMonth[day.slice(0, 7)] || 0) + n;
       byHour[Number(hour)] += n;
     }
   }
 
-  const years = yearData(byYear);
+  // This channel's own seasons, not the workspace's: #offtopic in July is not
+  // #rekry in July, and estimating one from the other would be a guess about
+  // the wrong room. The gaps are the archive's, because that is when nobody
+  // was archiving anything.
+  const channelEstimates = estimateMissingByMonth(byMonth, gaps);
+  const yearEstimates = estimatesByYear(channelEstimates);
+  const years = yearData(byYear, yearEstimates);
+  const months = monthData(byMonth, channelEstimates);
+  const speculative = speculativeTotals(
+    { messages: channel.messages, reactions: channel.reactions || 0 },
+    channelEstimates,
+  );
 
   return (
     <HtmlPage meta={channelStatsMeta(channel.name, channel.messages)}>
@@ -1841,7 +1880,12 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
         <GapNotice />
 
         <div className="viz-tiles">
-          <Tile label="Messages" value={formatCount(channel.messages)} />
+          <Tile
+            label="Messages"
+            value={formatCount(channel.messages)}
+            speculative={formatCount(speculative.messages)}
+            speculativeHint={`${formatCount(speculative.missingMessages)} estimated`}
+          />
           <Tile label="People who posted" value={formatCount(posters.length)} />
           {channel.members.length > 0 ? (
             <Tile
@@ -1855,6 +1899,14 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
             value={formatCount(Object.keys(byYear).length)}
           />
         </div>
+
+        {speculative.missingMessages > 0 ? (
+          <SpeculateToggle base={base} />
+        ) : null}
+
+        <Figure title="Messages per month" data={months}>
+          <Area data={months} />
+        </Figure>
 
         <Figure title="Messages per year" data={years}>
           <Columns data={years} />

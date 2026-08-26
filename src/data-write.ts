@@ -1,14 +1,60 @@
 import fs from "fs-extra";
+import path from "path";
 import { differenceBy } from "lodash-es";
 
 import { retry } from "./retry.js";
 import { SearchFile } from "./interfaces.js";
 import { writeJsonArraySync, writeSearchDataSync } from "./big-json.js";
 
-export async function write(filePath: string, data: any) {
+/**
+ * An archive is written by one process and read by another.
+ *
+ * The renderer writes it, a verifier inspects it, a web server serves it, a
+ * person opens it years later - often as different users. A umask of 0077
+ * inside a container produces files only the writing uid can read, and the
+ * symptom is not an error at write time but a publish that stops the next day
+ * saying it "could not read search.js to check it". So the mode is set,
+ * explicitly, rather than inherited from whatever the environment happened to
+ * have. Same reasoning as chmod-after-mkdir: what is inherited is not
+ * guaranteed, and what is not guaranteed will differ somewhere.
+ *
+ * Secrets pass `mode` and say so; nothing else has to think about it.
+ */
+const READABLE_FILE = 0o644;
+const TRAVERSABLE_DIR = 0o755;
+
+export async function write(
+  filePath: string,
+  data: any,
+  options: { mode?: number } = {},
+) {
   await retry({ name: `Writing ${filePath}` }, () => {
+    ensureReadableDirs(filePath);
     fs.outputFileSync(filePath, data);
+    fs.chmodSync(filePath, options.mode ?? READABLE_FILE);
   });
+}
+
+/** Every directory this write had to create, traversable by whoever reads. */
+function ensureReadableDirs(filePath: string) {
+  const missing: Array<string> = [];
+  let dir = path.dirname(path.resolve(filePath));
+
+  while (!fs.existsSync(dir) && path.dirname(dir) !== dir) {
+    missing.push(dir);
+    dir = path.dirname(dir);
+  }
+
+  fs.ensureDirSync(path.dirname(filePath));
+
+  for (const created of missing.reverse()) {
+    try {
+      fs.chmodSync(created, TRAVERSABLE_DIR);
+    } catch {
+      // Somebody else's directory, or a filesystem with its own ideas. The
+      // write itself is what matters.
+    }
+  }
 }
 
 /**
@@ -17,7 +63,9 @@ export async function write(filePath: string, data: any) {
  */
 export async function writeJsonArray(filePath: string, items: unknown[]) {
   await retry({ name: `Writing ${filePath}` }, () => {
+    ensureReadableDirs(filePath);
     writeJsonArraySync(filePath, items);
+    fs.chmodSync(filePath, READABLE_FILE);
   });
 }
 
@@ -27,7 +75,9 @@ export async function writeJsonArray(filePath: string, items: unknown[]) {
  */
 export async function writeSearchData(filePath: string, data: SearchFile) {
   await retry({ name: `Writing ${filePath}` }, () => {
+    ensureReadableDirs(filePath);
     writeSearchDataSync(filePath, data);
+    fs.chmodSync(filePath, READABLE_FILE);
   });
 }
 
@@ -59,6 +109,8 @@ export async function writeAndMerge(filePath: string, newData: any) {
       }
     }
 
+    ensureReadableDirs(filePath);
     fs.outputFileSync(filePath, JSON.stringify(dataToWrite, undefined, 2));
+    fs.chmodSync(filePath, READABLE_FILE);
   });
 }

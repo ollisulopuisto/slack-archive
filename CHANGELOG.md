@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.178] - 2026-08-26
+
+### Added
+- **The bar charts carry the estimate too**: a hollow dashed cap for what the
+  archive is missing from that year, on the same scale as the solid bar, with
+  a whisker for the range the surrounding years disagree over.
+- **Speculative totals, behind a toggle that defaults to off.** "Count what is
+  missing too" swaps Messages and Reactions to the estimated figures, marks the
+  tiles as speculative while it is on, and is off again on every load - a page
+  should open by saying what it knows. Reactions are estimated at the archive's
+  own rate, which is a weaker claim than the message estimate and is labelled
+  as one.
+- **Channel pages get all of it**, computed from their own seasons rather than
+  the workspace's: #offtopic in July is not #rekry in July. They also gain a
+  messages-per-month chart, and channels now count their own reactions.
+
+### Fixed
+- **Everything the archive writes is readable by whoever reads it next.** With
+  a umask of 0077 - which is what a container can easily have - files came out
+  mode 600, and the failure showed up not at write time but as a publish that
+  stopped the next day saying it could not read `search.js` to check it. Modes
+  are now set explicitly rather than inherited, for files and for the
+  directories created along the way, with an opt-out for anything that is a
+  secret. What is inherited is not guaranteed, and what is not guaranteed will
+  differ on somebody's machine.
+
 ## [v26.08.26.177] - 2026-08-26
 
 ### Fixed

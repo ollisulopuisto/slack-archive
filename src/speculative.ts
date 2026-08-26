@@ -1,0 +1,66 @@
+import { MonthEstimate } from "./estimate.js";
+
+/**
+ * What the archive might have held, kept apart from what it does hold.
+ *
+ * Every headline number on these pages counts what was archived. This is the
+ * other question - "so how much is missing?" - answered separately, shown only
+ * when somebody asks for it, and never mixed into the first answer. The moment
+ * an estimate is added into a total that is presented as a count, the page has
+ * stopped saying what it knows and started saying what it supposes.
+ *
+ * Reactions are estimated at the rate the archive itself shows: if the
+ * archived messages carry a quarter of a reaction each, the missing ones
+ * probably did too. That is a weaker claim than the message estimate, which at
+ * least has seasonality behind it, and it is labelled as speculation for the
+ * same reason.
+ */
+export interface SpeculativeTotals {
+  messages: number;
+  reactions: number;
+  missingMessages: number;
+  missingReactions: number;
+}
+
+export function speculativeTotals(
+  archived: { messages: number; reactions: number },
+  estimates: Record<string, MonthEstimate>,
+): SpeculativeTotals {
+  const missingMessages = Object.values(estimates).reduce(
+    (total, month) => total + month.estimate,
+    0,
+  );
+  const perMessage =
+    archived.messages > 0 ? archived.reactions / archived.messages : 0;
+  const missingReactions = Math.round(missingMessages * perMessage);
+
+  return {
+    messages: archived.messages + missingMessages,
+    reactions: archived.reactions + missingReactions,
+    missingMessages,
+    missingReactions,
+  };
+}
+
+/** The same estimates, gathered per year, for the yearly bars. */
+export function estimatesByYear(
+  estimates: Record<string, MonthEstimate>,
+): Record<string, MonthEstimate> {
+  const years: Record<string, MonthEstimate> = {};
+
+  for (const [month, estimate] of Object.entries(estimates)) {
+    const year = month.slice(0, 4);
+    const running = years[year];
+
+    years[year] = running
+      ? {
+          estimate: running.estimate + estimate.estimate,
+          low: running.low + estimate.low,
+          high: running.high + estimate.high,
+          missingDays: running.missingDays + estimate.missingDays,
+        }
+      : { ...estimate };
+  }
+
+  return years;
+}

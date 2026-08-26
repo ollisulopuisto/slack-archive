@@ -74,7 +74,9 @@ export const Columns: React.FunctionComponent<ColumnsProps> = ({
   data,
   labelEvery = 1,
 }) => {
-  const max = niceMax(data.map((d) => d.value));
+  // The estimate shares the scale, so a hollow cap of six thousand looks like
+  // six thousand next to a solid bar of six thousand.
+  const max = niceMax(data.flatMap((d) => [d.value, d.estimate?.high ?? 0]));
   const width = PLOT_WIDTH / Math.max(1, data.length);
 
   return (
@@ -96,14 +98,47 @@ export const Columns: React.FunctionComponent<ColumnsProps> = ({
         const x = i * width;
         const barWidth = Math.max(1, width - GAP);
 
+        const scale = (value: number) => (value / max) * (PLOT_HEIGHT - 4);
+        const estimated = datum.estimate
+          ? scale(datum.value + datum.estimate.estimate)
+          : 0;
+
         return (
           <g key={datum.label}>
             <path
               className="viz-mark"
               d={barPath(x, PLOT_HEIGHT - height, barWidth, height)}
             />
+
+            {/* What the archive is missing from this bar: hollow, because it
+                was not counted, and capped with the range the surrounding
+                years disagree over. */}
+            {datum.estimate ? (
+              <>
+                <rect
+                  className="viz-estimate-cap"
+                  x={x}
+                  y={PLOT_HEIGHT - estimated}
+                  width={barWidth}
+                  height={Math.max(1, estimated - height)}
+                />
+                <line
+                  className="viz-estimate-whisker"
+                  x1={x + barWidth / 2}
+                  x2={x + barWidth / 2}
+                  y1={PLOT_HEIGHT - scale(datum.value + datum.estimate.low)}
+                  y2={PLOT_HEIGHT - scale(datum.value + datum.estimate.high)}
+                />
+              </>
+            ) : null}
+
             <title>
-              {datum.title || `${datum.label}: ${formatCount(datum.value)}`}
+              {datum.title ||
+                (datum.estimate
+                  ? `${datum.label}: ${formatCount(datum.value)} archived, perhaps ${formatCount(
+                      datum.value + datum.estimate.estimate,
+                    )} in all`
+                  : `${datum.label}: ${formatCount(datum.value)}`)}
             </title>
             {i % labelEvery === 0 ? (
               <text
@@ -155,9 +190,7 @@ export const Area: React.FunctionComponent<ColumnsProps> = ({
 }) => {
   // The estimate is drawn against the same scale as the archive, so a dotted
   // line at eight thousand looks like eight thousand.
-  const max = niceMax(
-    data.flatMap((d) => [d.value, d.estimate?.high ?? 0]),
-  );
+  const max = niceMax(data.flatMap((d) => [d.value, d.estimate?.high ?? 0]));
   const step = PLOT_WIDTH / Math.max(1, data.length - 1);
   const y = (value: number) => PLOT_HEIGHT - (value / max) * (PLOT_HEIGHT - 4);
   const points = data.map((d, i) => `${i * step},${y(d.value)}`);
@@ -298,10 +331,38 @@ export const Tile: React.FunctionComponent<{
   label: string;
   value: string;
   hint?: string;
-}> = ({ label, value, hint }) => (
-  <div className="viz-tile">
+  /** What this number might be if the missing months were counted. */
+  speculative?: string;
+  speculativeHint?: string;
+}> = ({ label, value, hint, speculative, speculativeHint }) => (
+  <div
+    className="viz-tile"
+    data-speculative={speculative}
+    data-speculative-hint={speculativeHint}
+  >
     <div className="viz-tile-value">{value}</div>
     <div className="viz-tile-label">{label}</div>
-    {hint ? <div className="viz-tile-hint">{hint}</div> : null}
+    {hint || speculative ? (
+      <div className="viz-tile-hint">{hint || ""}</div>
+    ) : null}
+  </div>
+);
+
+/**
+ * The control that turns speculation on. Off by default, and off again on
+ * every load: a page should open by saying what it knows.
+ */
+export const SpeculateToggle: React.FunctionComponent<{ base: string }> = ({
+  base,
+}) => (
+  <div className="speculate">
+    <label htmlFor="speculate">
+      <input type="checkbox" id="speculate" />
+      Count what is missing too
+    </label>
+    <span className="speculate-note">
+      estimated from the months either side; never included above
+    </span>
+    <script src={`${base}speculative.js`} defer />
   </div>
 );
