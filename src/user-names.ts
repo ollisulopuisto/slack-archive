@@ -209,3 +209,25 @@ export function recordNames(
 
   return merged;
 }
+
+export interface NameHistoryEntry {
+  userId: string;
+  names: Array<UserName>;
+}
+
+/**
+ * The people the names page is about, most-renamed first.
+ *
+ * `exclude` is the bot accounts: they never renamed themselves, the names
+ * mined for them come from their own message signatures, and the page links
+ * every row to a profile page that is not written for bots.
+ */
+export function nameHistory(
+  userNames: UserNames,
+  exclude: Set<string>,
+): Array<NameHistoryEntry> {
+  return Object.entries(userNames)
+    .filter(([userId, names]) => names.length > 0 && !exclude.has(userId))
+    .map(([userId, names]) => ({ userId, names }))
+    .sort((a, b) => b.names.length - a.names.length);
+}

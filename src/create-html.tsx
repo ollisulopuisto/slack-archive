@@ -48,10 +48,16 @@ import { slackTimestampToJavaScriptTimestamp } from "./timestamp.js";
 import { recordPage } from "./search.js";
 import { write } from "./data-write.js";
 import { getSlackArchiveData } from "./archive-data.js";
-import { getEmojiFilePath, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
+import { getEmojiRef, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
 import { getName } from "./users.js";
-import { nameAt, slackTimestampToIso, UserNames } from "./user-names.js";
+import {
+  nameAt,
+  nameHistory,
+  slackTimestampToIso,
+  UserNames,
+} from "./user-names.js";
 import { botUserIds, isChannelSearchable } from "./search-filter.js";
+import { profilePageIds } from "./profiles.js";
 import { UserAvatars } from "./user-avatars.js";
 import { UserStatuses } from "./user-status.js";
 import {
@@ -104,6 +110,11 @@ function publishable(channels: Array<Channel>): Array<Channel> {
 }
 let userAvatars: UserAvatars = {};
 let userStatuses: UserStatuses = {};
+/** Accounts the workspace marks as bots: they have no profile page to link to. */
+let botIds: Set<string> = new Set();
+/** Everyone a profile page was actually written for. Filled in before the
+ * channel pages are rendered, because they link to it. */
+let profileIds: Set<string> = new Set();
 let slackArchiveData: SlackArchiveData = { channels: {} };
 let me: User | null;
 
@@ -240,7 +251,15 @@ const Emoji: React.FunctionComponent<EmojiProps> = ({ name }) => {
     return <>{getEmojiUnicode(name)}</>;
   }
 
-  return <img src={getEmojiFilePath(name)} />;
+  const ref = getEmojiRef(name);
+
+  // An emoji this workspace made but never downloaded: better the shortcode
+  // than an empty box that says nothing about what was reacted with.
+  if (!ref) {
+    return <span className="emoji-missing">:{name}:</span>;
+  }
+
+  return <img src={`${base}${ref}`} alt={`:${name}:`} title={`:${name}:`} />;
 };
 
 interface MessageProps {
@@ -268,21 +287,50 @@ const Message: React.FunctionComponent<MessageProps> = (props) => {
     user: ({ id }: { id: string }) => `@${getName(id, users)}`,
   };
 
+  // A profile page exists for everyone who wrote a message, except bots - they
+  // get one page between them rather than one each. So the link is offered
+  // when there is somewhere for it to go, and never when it would 404.
+  const profile = profileHref(message.user);
+
+  const sender = (
+    <span
+      className="sender"
+      title={wasCalled ? `Then known as ${wasCalled}` : undefined}
+    >
+      {username}
+    </span>
+  );
+
   return (
     <div className="message-gutter" id={message.ts}>
       <div className="" data-stringify-ignore="true">
-        <Avatar userId={message.user} />
+        {profile ? (
+          <a
+            href={profile}
+            className="author-link"
+            title={`${username} - ten years of them`}
+          >
+            <Avatar userId={message.user} />
+          </a>
+        ) : (
+          <Avatar userId={message.user} />
+        )}
       </div>
       <div className="">
-        <span
-          className="sender"
-          title={wasCalled ? `Then known as ${wasCalled}` : undefined}
+        {profile ? (
+          <a href={profile} className="author-link">
+            {sender}
+          </a>
+        ) : (
+          sender
+        )}
+        <a
+          className="timestamp"
+          href={`#${message.ts}`}
+          title="Link to this message"
         >
-          {username}
-        </span>
-        <span className="timestamp">
           <span className="c-timestamp__label">{formatTimestamp(message)}</span>
-        </span>
+        </a>
         <br />
         <div
           className="text"
@@ -451,6 +499,11 @@ const IndexPage: React.FunctionComponent<IndexPageProps> = (props) => {
           <ul>{dmDeletedChannels}</ul>
           <p className="section">The archive itself</p>
           <ul>
+            <li>
+              <a href="search.html" target="iframe">
+                Search every message
+              </a>
+            </li>
             <li>
               <a href="html/stats.html" target="iframe">
                 Ten years in numbers
@@ -621,14 +674,10 @@ const Pagination: React.FunctionComponent<PaginationProps> = (props) => {
  * shown for each so the difference is visible rather than implied.
  */
 const NamesPage: React.FunctionComponent = () => {
-  const people = Object.entries(userNames)
-    .map(([userId, names]) => ({
-      userId,
-      current: getName(userId, users),
-      names,
-    }))
-    .filter((person) => person.names.length > 0)
-    .sort((a, b) => b.names.length - a.names.length);
+  const people = nameHistory(userNames, botIds).map((person) => ({
+    ...person,
+    current: getName(person.userId, users),
+  }));
 
   const day = (iso: string) => iso.slice(0, 10);
 
@@ -646,7 +695,11 @@ const NamesPage: React.FunctionComponent = () => {
           <div className="person" key={person.userId}>
             <h2>
               <Avatar userId={person.userId} />{" "}
-              <a href={`user-${person.userId}.html`}>{person.current}</a>
+              {profileHref(person.userId) ? (
+                <a href={profileHref(person.userId)}>{person.current}</a>
+              ) : (
+                person.current
+              )}
             </h2>
             <table>
               <tbody>
@@ -674,6 +727,15 @@ const NamesPage: React.FunctionComponent = () => {
 async function renderNamesPage() {
   base = "";
   return renderAndWrite(<NamesPage />, NAMES_PATH);
+}
+
+/**
+ * The link to somebody's profile page, or nothing when no page was written
+ * for them - a channel member who never posted, or an account that only ever
+ * reacted, has no page, and a link to it is a 404 with their name on it.
+ */
+function profileHref(userId: string | undefined): string | undefined {
+  return userId && profileIds.has(userId) ? `user-${userId}.html` : undefined;
 }
 
 /** Slack timestamp -> "12.4.2019". */
@@ -1124,7 +1186,7 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
             data={people.slice(0, 25).map((person) => ({
               label: getName(person.userId, users) || person.userId,
               value: person.messages,
-              href: `user-${person.userId}.html`,
+              href: profileHref(person.userId),
             }))}
           />
         </details>
@@ -1185,7 +1247,7 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
             data={givers.slice(0, 20).map((person) => ({
               label: getName(person.userId, users) || person.userId,
               value: person.reactionsGiven,
-              href: `user-${person.userId}.html`,
+              href: profileHref(person.userId),
             }))}
           />
         </details>
@@ -1263,9 +1325,13 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
               {channel.members.map((userId) => (
                 <li key={userId}>
                   <span className="viz-bars-label">
-                    <a href={`user-${userId}.html`}>
-                      {getName(userId, users) || userId}
-                    </a>
+                    {profileHref(userId) ? (
+                      <a href={profileHref(userId)}>
+                        {getName(userId, users) || userId}
+                      </a>
+                    ) : (
+                      getName(userId, users) || userId
+                    )}
                   </span>
                   <span />
                   <span className="viz-bars-value">
@@ -1285,7 +1351,7 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
             data={posters.slice(0, 25).map((poster) => ({
               label: getName(poster.userId, users) || poster.userId,
               value: poster.messages,
-              href: `user-${poster.userId}.html`,
+              href: profileHref(poster.userId),
             }))}
           />
         </details>
@@ -1408,6 +1474,8 @@ async function renderStatsAndProfiles(channels: Array<Channel>) {
       getChannelStatsFilePath(channel.id),
     );
   }
+
+  profileIds = profilePageIds(stats.byUser);
 
   let written = 0;
   for (const person of Object.values(stats.byUser)) {
@@ -1575,10 +1643,16 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
   userNames = await getUserNames();
   userAvatars = await getUserAvatars();
   userStatuses = await getUserStatuses();
+  botIds = botUserIds(users);
   slackArchiveData = await getSlackArchiveData();
   me = slackArchiveData.auth?.user_id
     ? users[slackArchiveData.auth?.user_id]
     : null;
+
+  // Before the channel pages, not after: every message links to its author's
+  // profile page, and this is what decides which of those pages exist.
+  await renderStatsAndProfiles(publishable(await getChannels()));
+  await renderNamesPage();
 
   for (const [i, channel] of channels.entries()) {
     if (!channel.id) {
@@ -1589,8 +1663,6 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
     await createHtmlForChannel({ channel, i, total: channels.length });
   }
 
-  await renderNamesPage();
-  await renderStatsAndProfiles(publishable(await getChannels()));
   await renderIndexPage();
 
   // Copy in fonts & css

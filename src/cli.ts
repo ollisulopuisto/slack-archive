@@ -58,7 +58,7 @@ import {
   UserStatuses,
 } from "./user-status.js";
 import { getSlackArchiveData, setSlackArchiveData } from "./archive-data.js";
-import { downloadEmojiList, downloadEmojis } from "./emoji.js";
+import { downloadAllEmoji, downloadEmojiList } from "./emoji.js";
 import { downloadAllUsers, downloadAvatars } from "./users.js";
 import { downloadChannels, downloadChannelMembers } from "./channels.js";
 import { authTest } from "./web-client.js";
@@ -354,6 +354,7 @@ export async function main() {
   // do that as needed
   const emojis = await downloadEmojiList();
   await writeAndMerge(EMOJIS_DATA_PATH, emojis);
+  await downloadAllEmoji(emojis);
 
   // Do we want to merge data?
   await selectMergeFiles();
@@ -543,7 +544,6 @@ export async function main() {
       newMessages[channel.id] = downloadData.new;
 
       await downloadExtras(channel, result, users);
-      await downloadEmojis(result, emojis);
       await downloadAvatars();
 
       // Sort messages

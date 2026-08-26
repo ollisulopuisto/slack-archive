@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import {
   nameAt,
+  nameHistory,
   mineNames,
   recordNames,
   slackTimestampToIso,
@@ -388,5 +389,67 @@ describe("nameAt", () => {
   it("has no answer for somebody with no history", () => {
     expect(nameAt(history, "U9", "2020-01-01T00:00:00.000Z")).toBeNull();
     expect(nameAt(history, undefined, "2020-01-01T00:00:00.000Z")).toBeNull();
+  });
+});
+
+describe("nameHistory()", () => {
+  const history = {
+    U1: [
+      {
+        nick: "olli",
+        first: "2016-01-01",
+        last: "2020-01-01",
+        sources: ["mention"],
+      },
+    ],
+    UBOT: [
+      {
+        nick: "slackbot",
+        first: "2016-01-01",
+        last: "2026-01-01",
+        sources: ["mention"],
+      },
+    ],
+    UEMPTY: [],
+  };
+
+  it("leaves out accounts with no names at all", () => {
+    expect(nameHistory(history, new Set()).map((p) => p.userId)).toEqual([
+      "U1",
+      "UBOT",
+    ]);
+  });
+
+  it("leaves out excluded accounts", () => {
+    // Bots do not rename themselves, they have no profile page to link to,
+    // and a page about what people called themselves is about people.
+    expect(
+      nameHistory(history, new Set(["UBOT"])).map((p) => p.userId),
+    ).toEqual(["U1"]);
+  });
+
+  it("puts the people with the most names first", () => {
+    const many = {
+      U1: history.U1,
+      U2: [
+        {
+          nick: "a",
+          first: "2016-01-01",
+          last: "2017-01-01",
+          sources: ["mention"],
+        },
+        {
+          nick: "b",
+          first: "2017-01-01",
+          last: "2018-01-01",
+          sources: ["mention"],
+        },
+      ],
+    };
+
+    expect(nameHistory(many, new Set()).map((p) => p.userId)).toEqual([
+      "U2",
+      "U1",
+    ]);
   });
 });

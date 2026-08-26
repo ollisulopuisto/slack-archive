@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.159] - 2026-08-26
+
+### Added
+- **Custom emoji are downloaded, all of them, once per run.** The archiver
+  scanned each run's messages for the emoji used in their *reactions* and
+  downloaded those. An emoji only ever typed in message text was never fetched;
+  neither was one used in a channel that had no new messages that night. The
+  whole workspace list is a few hundred small files and `downloadURL` skips
+  what is already on disk, so the run after the first is nearly free. Aliases
+  are stored under their own name, because `:salut-2:` is what the page asks
+  for.
+- **Every message links to itself.** The timestamp is now the permalink to the
+  anchor each message already had, and the linked message is highlighted when
+  you arrive at it.
+- **The avatar and the name on a message link to that person's profile page.**
+  Both pages existed; nothing connected them.
+- **A search link in the sidebar.** `search.html` was built, published and
+  reachable only by typing the URL.
+
+### Fixed
+- **Custom emoji rendered as an empty box.** The `<img>` src was the absolute
+  filesystem path of the machine that rendered the page - a broken image
+  everywhere else, and the archive is published to a website. It is now
+  relative, like avatars. An emoji that was never downloaded now shows its
+  shortcode instead of nothing.
+- **Seven dead profile links per channel page.** Two places decided who has a
+  profile page: the renderer wrote one for everyone with a message in a
+  published channel, bots excluded, while the links were offered to anyone with
+  a user id - Slackbot, channel members who never posted, accounts that only
+  ever reacted. One function, `profilePageIds`, now answers that question for
+  the pages and for every link to them, and the profiles are rendered before
+  the channel pages so the links know. Verified against the rendered tree:
+  every profile link has a page, every page has a link.
+- **Bots are off the names page.** They never renamed themselves, the names
+  mined for them come from their own message signatures, and every row linked
+  to a profile page that is not written for bots.
+
 ## [v26.08.26.158] - 2026-08-26
 
 ### Fixed

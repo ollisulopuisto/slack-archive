@@ -1,0 +1,67 @@
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import fs from "fs-extra";
+import path from "path";
+
+import { EMOJIS_DIR } from "./config.js";
+
+const { downloadURL } = vi.hoisted(() => ({
+  downloadURL: vi.fn(async (_url: string, _filePath: string) => "downloaded"),
+}));
+
+vi.mock("./download-files.js", () => ({ downloadURL }));
+
+import { downloadAllEmoji, getEmojiRef } from "./emoji.js";
+
+describe("getEmojiRef()", () => {
+  const file = path.join(EMOJIS_DIR, "test-emoji-ref.png");
+
+  beforeEach(() => fs.outputFileSync(file, "x"));
+  afterEach(() => fs.removeSync(file));
+
+  it("is relative to the html directory, not an absolute local path", () => {
+    // An absolute /Users/... src is a broken image on every machine but the
+    // one that rendered it - and the archive is published to a website.
+    expect(getEmojiRef("test-emoji-ref")).toBe("emojis/test-emoji-ref.png");
+  });
+
+  it("is undefined for an emoji that was never downloaded", () => {
+    expect(getEmojiRef("no-such-emoji-anywhere")).toBeUndefined();
+  });
+});
+
+describe("downloadAllEmoji()", () => {
+  beforeEach(() => downloadURL.mockClear());
+
+  it("downloads every custom emoji, not only the ones in reactions", async () => {
+    await downloadAllEmoji({
+      party: "https://emoji.slack.com/party.gif",
+      dart: "https://emoji.slack.com/dart.png",
+    });
+
+    expect(downloadURL).toHaveBeenCalledTimes(2);
+    expect(downloadURL.mock.calls.map((call) => call[0])).toEqual([
+      "https://emoji.slack.com/party.gif",
+      "https://emoji.slack.com/dart.png",
+    ]);
+    expect(downloadURL.mock.calls[0][1]).toBe(
+      path.join(EMOJIS_DIR, "party.gif"),
+    );
+  });
+
+  it("stores an alias under its own name, so :salut-2: renders too", async () => {
+    await downloadAllEmoji({
+      salut: "https://emoji.slack.com/salut.png",
+      "salut-2": "alias:salut",
+    });
+
+    const paths = downloadURL.mock.calls.map((call) => call[1]);
+    expect(paths).toContain(path.join(EMOJIS_DIR, "salut.png"));
+    expect(paths).toContain(path.join(EMOJIS_DIR, "salut-2.png"));
+  });
+
+  it("skips an alias to a standard emoji rather than warning about it", async () => {
+    await downloadAllEmoji({ shipit: "alias:squirrel" });
+
+    expect(downloadURL).not.toHaveBeenCalled();
+  });
+});

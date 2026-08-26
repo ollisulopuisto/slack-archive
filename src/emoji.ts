@@ -41,6 +41,19 @@ export function getEmojiFilePath(name: string, extension?: string) {
   }
 }
 
+/**
+ * How the HTML refers to a downloaded custom emoji, relative to the html
+ * directory - the same way avatars are referenced.
+ *
+ * Not the filesystem path: that starts with /Users/somebody and is a broken
+ * image everywhere except the machine that rendered the page.
+ */
+export function getEmojiRef(name: string) {
+  const filePath = getEmojiFilePath(name);
+
+  return filePath ? `emojis/${path.basename(filePath)}` : undefined;
+}
+
 export function isEmojiUnicode(name: string) {
   const unicodeEmoji = getUnicodeEmoji();
   return !!unicodeEmoji[name];
@@ -103,33 +116,68 @@ export function getEmojiAlias(name: string): string {
   return alias!;
 }
 
-export async function downloadEmojis(
-  messages: Array<ArchiveMessage>,
-  emojis: Emojis,
-) {
-  const regex = /:[^:\s]*(?:::[^:\s]*)*:/g;
+/**
+ * Every emoji this workspace made itself, downloaded once per run.
+ *
+ * It used to scan messages for the emoji in their REACTIONS, which meant an
+ * emoji only ever typed in message text was never downloaded, and one added
+ * to a channel that had no new messages this run was never downloaded either.
+ * The whole list is a few hundred small files and the existence check makes
+ * every run after the first one nearly free, so there is nothing to be clever
+ * about.
+ */
+export async function downloadAllEmoji(emojis: Emojis) {
+  const names = Object.keys(emojis);
 
-  const spinner = ora(
-    `Scanning 0/${messages.length} messages for emoji shortcodes...`,
-  ).start();
+  if (names.length === 0) {
+    return;
+  }
+
+  const spinner = ora(`Downloading ${names.length} custom emoji...`).start();
   let downloaded = 0;
+  let skipped = 0;
 
-  for (const [i, message] of messages.entries()) {
-    spinner.text = `Scanning ${i}/${messages.length} messages for emoji shortcodes...`;
+  for (const [i, name] of names.entries()) {
+    spinner.text = `Downloading custom emoji ${i + 1}/${names.length}: ${name}`;
+    spinner.render();
 
-    // Reactions
-    if (message.reactions && message.reactions.length > 0) {
-      for (const reaction of message.reactions) {
-        const reactEmoji = emojis[reaction.name!];
-        if (reactEmoji) {
-          downloaded++;
-          await downloadEmoji(reaction.name!, reactEmoji, emojis);
-        }
-      }
+    const url = resolveEmojiUrl(name, emojis);
+
+    // An alias pointing at one of Slack's own emoji, e.g. shipit -> squirrel.
+    // There is nothing to download and nothing wrong.
+    if (!url) {
+      skipped++;
+      continue;
     }
+
+    // Under its OWN name, not the target's: the message says :salut-2:, and
+    // that is the file the page will ask for.
+    await downloadURL(url, getEmojiFilePath(name, path.extname(url))!);
+    downloaded++;
   }
 
   spinner.succeed(
-    `Scanned ${messages.length} messages for emoji (and downloaded ${downloaded})`,
+    `Downloaded ${downloaded} custom emoji${skipped > 0 ? ` (${skipped} alias to standard emoji)` : ""}`,
   );
+}
+
+/** Follows alias chains to the URL that actually holds an image. */
+function resolveEmojiUrl(
+  name: string,
+  emojis: Emojis,
+  seen = new Set<string>(),
+): string | undefined {
+  const url = emojis[name];
+
+  if (!url || seen.has(name)) {
+    return undefined;
+  }
+
+  if (!url.startsWith("alias:")) {
+    return url;
+  }
+
+  seen.add(name);
+
+  return resolveEmojiUrl(getEmojiAlias(url), emojis, seen);
 }
