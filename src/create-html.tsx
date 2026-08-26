@@ -35,6 +35,7 @@ import {
   INDEX_PATH,
   NAMES_PATH,
   PAGES_INDEX_PATH,
+  SIDEBAR_PATH,
   STATS_PATH,
   BOTS_PATH,
   FILES_BASE_URL,
@@ -987,6 +988,26 @@ const NamesPage: React.FunctionComponent = () => {
  * turn that into one of the channel's numbered pages. It is a few hundred
  * timestamps; search.js knows the same thing but is 124 MB.
  */
+/**
+ * The sidebar, as a fragment, for the search page.
+ *
+ * search.html is not rendered here - it is a template with a browser-side app
+ * in it - so it had no channel list and no way back to the archive, which made
+ * it the one page in the site that felt like a different site. It sits at the
+ * root, so its links into html/ carry that prefix.
+ */
+async function writeSidebarFragment() {
+  const html = ReactDOMServer.renderToStaticMarkup(
+    <RenderContextProvider.Provider
+      value={{ ...render, base: "html/", root: "" }}
+    >
+      <Sidebar />
+    </RenderContextProvider.Provider>,
+  );
+
+  await write(SIDEBAR_PATH, html);
+}
+
 async function writePageIndex() {
   const index = getPageIndex();
   const published: Record<string, Array<string>> = {};
@@ -2223,6 +2244,7 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
 
   await timed("front page", async () => {
     await writePageIndex();
+    await writeSidebarFragment();
     await renderIndexPage();
   });
 

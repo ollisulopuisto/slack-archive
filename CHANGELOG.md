@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.172] - 2026-08-26
+
+### Added
+- **`scripts/publish.sh`** - rendering the public half of an archive and
+  putting it on a web host, in the repository rather than on one machine. There
+  were two copies of this job, one on a laptop and one on the NAS, and they
+  drifted into the same blind spot: every check read the rendered HTML, neither
+  read the data directory, and the data directory held ten years of direct
+  messages one rsync flag away from a web root. It stages only the channels the
+  site publishes, runs six checks before uploading anything, and then reads the
+  WEB ROOT ITSELF to assert that `data/` holds `search.js` and nothing else -
+  because every other check reads the tree we built, which is the thing that
+  might be wrong.
+- **The search page has the sidebar** and a way back into the archive. It is a
+  template with a browser-side app in it, so the render writes the channel list
+  once and the search page picks it up - which also means the build says so if
+  it is missing rather than shipping the one page with no way home.
+
 ## [v26.08.26.171] - 2026-08-26
 
 ### Added

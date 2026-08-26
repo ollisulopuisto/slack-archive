@@ -16,6 +16,7 @@ import {
   SEARCH_DB_PATH,
   SEARCH_PATH,
   SEARCH_TEMPLATE_PATH,
+  SIDEBAR_PATH,
 } from "./config.js";
 import { SearchFile, SearchMessage, SearchPageIndex } from "./interfaces.js";
 import {
@@ -301,6 +302,20 @@ async function createSearchHTML() {
   );
 
   template = template.replace(`<!-- Size -->`, getSize());
+
+  // The channel list, rendered by create-html, which runs before this. Without
+  // it the search page is the only page in the archive with no way back into
+  // it - so if it is missing, say so rather than shipping that page.
+  if (fs.existsSync(SIDEBAR_PATH)) {
+    template = template.replace(
+      "<!-- sidebar -->",
+      fs.readFileSync(SIDEBAR_PATH, "utf8"),
+    );
+  } else {
+    console.warn(
+      `Search page has no sidebar: ${SIDEBAR_PATH} was not written by the render.`,
+    );
+  }
 
   fs.outputFileSync(SEARCH_PATH, template);
 }

@@ -171,6 +171,15 @@ export const SEARCH_PATH = path.join(OUT_DIR, "search.html");
 export const NAMES_PATH = path.join(HTML_DIR, "names.html");
 /** Which timestamps start which page, so a permalink can find its message. */
 export const PAGES_INDEX_PATH = path.join(HTML_DIR, "pages.js");
+/**
+ * The channel list on its own, for the search page, which is a template rather
+ * than something this renderer writes.
+ *
+ * In data/ rather than html/ because it is a build input, not a page: in html/
+ * it gets counted as one, and published as a fragment nobody should be able to
+ * open.
+ */
+export const SIDEBAR_PATH = path.join(DATA_DIR, "sidebar.html");
 export const STATS_PATH = path.join(HTML_DIR, "stats.html");
 export const BOTS_PATH = path.join(HTML_DIR, "bots.html");
 
