@@ -741,7 +741,17 @@ const Sidebar: React.FunctionComponent = () => {
  * an iframe. Now every page stands on its own, and this one is simply the door.
  */
 const IndexPage: React.FunctionComponent = () => {
-  const { stats, teamMeta, base, channels, gaps } = useRender();
+  const { stats, teamMeta, base, channels, gaps, estimates } = useRender();
+  const speculative = stats
+    ? speculativeTotals(
+        { messages: stats.messages, reactions: stats.reactions },
+        estimates,
+      )
+    : null;
+  const range = Object.values(estimates).reduce(
+    (r, month) => ({ low: r.low + month.low, high: r.high + month.high }),
+    { low: 0, high: 0 },
+  );
   const messages: Record<string, number> = {};
 
   for (const [id, channel] of Object.entries(stats?.byChannel || {})) {
@@ -761,7 +771,20 @@ const IndexPage: React.FunctionComponent = () => {
             </p>
             <GapNotice />
             <div className="viz-tiles">
-              <Tile label="Messages" value={formatCount(stats.messages)} />
+              <Tile
+                label="Messages"
+                value={formatCount(stats.messages)}
+                speculative={
+                  speculative ? formatCount(speculative.messages) : undefined
+                }
+                speculativeHint={
+                  speculative
+                    ? `${formatCount(speculative.missingMessages)} estimated`
+                    : undefined
+                }
+                low={stats.messages + range.low}
+                high={stats.messages + range.high}
+              />
               <Tile
                 label="People"
                 value={formatCount(
@@ -786,6 +809,11 @@ const IndexPage: React.FunctionComponent = () => {
             </div>
           </>
         ) : null}
+
+        {speculative && speculative.missingMessages > 0 ? (
+          <SpeculateToggle base={base} />
+        ) : null}
+
         <p className="front-links">
           {first ? (
             <a href={`${base}${first.id}-0.html`}>
@@ -1978,6 +2006,29 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
     channelEstimates,
   );
 
+  // What this channel reacts with, in the shape the emoji rows want: the
+  // count is this channel's, the rest of what is known about the emoji comes
+  // from the archive as a whole.
+  const emojiHere = Object.entries(channel.emoji || {})
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => ({
+      ...(stats?.emojiStats[name] || {
+        name,
+        custom: false,
+        first: "",
+        last: "",
+        byYear: {},
+        givers: {},
+      }),
+      name,
+      count,
+    }));
+  const customHere = emojiHere.filter((emoji) => emoji.custom);
+  const giversHere = Object.entries(channel.reactionsGiven || {})
+    .map(([userId, count]) => ({ userId, count }))
+    .filter(({ userId }) => !stats?.byUser[userId]?.isBot)
+    .sort((a, b) => b.count - a.count);
+
   /** Somebody's share of what this channel is missing. */
   const missingHere = (theirs: number) => {
     const estimate = shareOfMissing(
@@ -2024,6 +2075,11 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
             />
           ) : null}
           <Tile
+            label="Thread replies"
+            value={formatCount(channel.replies || 0)}
+            hint={`${Math.round(((channel.replies || 0) / Math.max(1, channel.messages)) * 100)}% of everything here`}
+          />
+          <Tile
             label="Active years"
             value={formatCount(Object.keys(byYear).length)}
           />
@@ -2046,6 +2102,65 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
         <Figure title="Hour of day" data={hourData(byHour)}>
           <Columns data={hourData(byHour)} labelEvery={2} />
         </Figure>
+
+        <details className="drill">
+          <summary>
+            Reactions{" "}
+            <span className="count">{formatCount(channel.reactions || 0)}</span>
+          </summary>
+
+          <div className="viz-tiles">
+            <Tile
+              label="Reactions"
+              value={formatCount(channel.reactions || 0)}
+              speculative={formatCount(speculative.reactions)}
+              speculativeHint={`${formatCount(speculative.missingReactions)} estimated`}
+            />
+            <Tile
+              label="Custom emoji used"
+              value={formatCount(customHere.length)}
+              hint={`of ${formatCount(emojiHere.length)} distinct`}
+            />
+            <Tile
+              label="With our own emoji"
+              value={`${Math.round(((channel.customReactions || 0) / Math.max(1, channel.reactions || 1)) * 100)}%`}
+              hint={formatCount(channel.customReactions || 0)}
+            />
+            <Tile
+              label="Files"
+              value={formatCount(channel.files || 0)}
+              speculative={
+                missingHere(channel.files || 0)
+                  ? formatCount(
+                      (channel.files || 0) +
+                        (missingHere(channel.files || 0)?.estimate || 0),
+                    )
+                  : undefined
+              }
+              speculativeHint="if the missing days were like the rest"
+            />
+          </div>
+
+          {emojiHere.length > 0 ? (
+            <>
+              <p className="topic">Most used here</p>
+              <EmojiRows emoji={emojiHere.slice(0, 20)} />
+            </>
+          ) : null}
+
+          {giversHere.length > 0 ? (
+            <>
+              <p className="topic">Who reacts here</p>
+              <Bars
+                data={giversHere.slice(0, 15).map((giver) => ({
+                  label: getName(giver.userId, users) || giver.userId,
+                  value: giver.count,
+                  href: profileHref(giver.userId, profileIds),
+                }))}
+              />
+            </>
+          ) : null}
+        </details>
 
         {channel.members.length > 0 ? (
           <details className="drill">
@@ -2119,7 +2234,19 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
 const BotsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
   data,
 }) => {
-  const { users } = useRender();
+  const { users, estimates, base } = useRender();
+  // Bots posted during the missing days too, at whatever share of the traffic
+  // they usually have.
+  const missing = Object.values(estimates).reduce(
+    (total, month) => total + month.estimate,
+    0,
+  );
+  const botShare = data.messages > 0 ? data.botMessages / data.messages : 0;
+  const botsMissing = Math.round(missing * botShare);
+  const inflateBot = (value: number) =>
+    data.botMessages > 0 && botsMissing > 0
+      ? formatCount(Math.round(value * (1 + botsMissing / data.botMessages)))
+      : undefined;
   const bots = Object.values(data.byUser)
     .filter((account) => account.isBot && account.messages > 0)
     .sort((a, b) => b.messages - a.messages);
@@ -2152,8 +2279,15 @@ const BotsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
 
         <GapNotice />
 
+        {botsMissing > 0 ? <SpeculateToggle base={base} /> : null}
+
         <div className="viz-tiles">
-          <Tile label="Messages" value={formatCount(data.botMessages)} />
+          <Tile
+            label="Messages"
+            value={formatCount(data.botMessages)}
+            speculative={inflateBot(data.botMessages)}
+            speculativeHint={`${formatCount(botsMissing)} estimated for the missing days`}
+          />
           <Tile label="Share of everything" value={`${share}%`} />
           <Tile label="Bots and apps" value={formatCount(bots.length)} />
         </div>
@@ -2170,6 +2304,20 @@ const BotsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
             data={bots.map((bot) => ({
               label: getName(bot.userId, users) || bot.userId,
               value: bot.messages,
+              estimate:
+                botsMissing > 0 && data.botMessages > 0
+                  ? {
+                      estimate: Math.round(
+                        bot.messages * (botsMissing / data.botMessages),
+                      ),
+                      low: Math.round(
+                        bot.messages * (botsMissing / data.botMessages),
+                      ),
+                      high: Math.round(
+                        bot.messages * (botsMissing / data.botMessages),
+                      ),
+                    }
+                  : undefined,
             }))}
           />
         </details>

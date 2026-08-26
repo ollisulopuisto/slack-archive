@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.182] - 2026-08-26
+
+### Added
+- **Channel pages count their own reactions.** Each one now has its emoji
+  ranking, who reacts in it, how much of it is the workspace's own emoji, its
+  files and its thread replies - measured for that channel rather than
+  inherited from the workspace. #offtopic and #financephalograph do not react
+  with the same things.
+- **The speculative toggle is on every page that has a speculative number**,
+  which now includes the front page and the bots page - bots kept posting
+  during the missing days too. A test holds the line, because the front page
+  shipped one render with a speculative number and no way to reveal it: the
+  worst of both, a number that cannot be shown and never changes, so nobody
+  learns it exists.
+
 ## [v26.08.26.181] - 2026-08-26
 
 ### Added

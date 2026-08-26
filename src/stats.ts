@@ -55,6 +55,16 @@ export interface ChannelStats {
   byUser: Record<string, number>;
   /** Reactions left on messages in this channel. */
   reactions: number;
+  /** Reactions with the workspace's own emoji. */
+  customReactions: number;
+  /** Emoji name -> times used in a reaction here. */
+  emoji: Record<string, number>;
+  /** User id -> reactions they gave here, as far as Slack reported who. */
+  reactionsGiven: Record<string, number>;
+  /** Files shared here. */
+  files: number;
+  /** Thread replies posted here. */
+  replies: number;
 }
 
 export interface UserStats {
@@ -264,6 +274,8 @@ export function createStats({ customEmoji, bots }: StatsOptions = {}) {
       if (!channelStats.last || message.ts! > channelStats.last) {
         channelStats.last = message.ts!;
       }
+      channelStats.files += message.files?.length || 0;
+      if (isReply) channelStats.replies++;
     }
 
     if (!stats.first || message.ts! < stats.first) stats.first = message.ts!;
@@ -274,7 +286,19 @@ export function createStats({ customEmoji, bots }: StatsOptions = {}) {
       const n = Number(reaction.count) || 0;
       received += n;
       stats.reactions += n;
-      if (channelStats) channelStats.reactions += n;
+
+      if (channelStats) {
+        channelStats.reactions += n;
+        if (reaction.name) {
+          channelStats.emoji[reaction.name] =
+            (channelStats.emoji[reaction.name] || 0) + n;
+          if (customEmoji?.has(reaction.name)) channelStats.customReactions += n;
+        }
+        for (const giver of reaction.users || []) {
+          channelStats.reactionsGiven[giver] =
+            (channelStats.reactionsGiven[giver] || 0) + 1;
+        }
+      }
 
       const name = reaction.name;
       if (!name) continue;
@@ -348,6 +372,11 @@ export function createStats({ customEmoji, bots }: StatsOptions = {}) {
           byDayHour: {},
           byUser: {},
           reactions: 0,
+          customReactions: 0,
+          emoji: {},
+          reactionsGiven: {},
+          files: 0,
+          replies: 0,
         };
       }
 
