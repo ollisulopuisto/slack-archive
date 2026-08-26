@@ -6,20 +6,29 @@
 # compile happens inside the image from a known checkout, and the image is
 # tagged with that commit.
 
-FROM node:18-slim AS builder
+FROM node:22-bookworm-slim AS builder
 # No build toolchain: nothing here compiles any more. The search database used
 # to be `sqlite3`, a node-gyp addon with no musl prebuilt, which is why this
 # stage carried python3/make/g++. It is now node-sqlite3-wasm - a .wasm file,
 # identical on every platform and architecture.
 WORKDIR /app
 
-# Everything is copied BEFORE npm ci, which costs the dependency layer cache but
-# is what makes the build work at all: package.json has
-# `"prepare": "npm run compile"`, and npm runs it at the end of install. With
-# only package*.json present it fires before src/ exists and tsc fails. With the
-# source already here it compiles exactly as intended.
+# Dependencies first, so a source-only change does not reinstall them. This
+# needs --ignore-scripts to work at all: package.json has
+# `"prepare": "npm run compile"`, npm runs it at the end of install, and with
+# only package*.json present it would fire before src/ exists and tsc would
+# fail. So the compile is invoked explicitly below instead, once the source is
+# actually here.
+#
+# --ignore-scripts is safe HERE because nothing in this dependency tree defines
+# an install, preinstall or postinstall script - the search database is
+# WebAssembly, not a node-gyp addon. It is not a house convention; a project
+# with a native dependency needs those scripts to run.
+COPY package*.json ./
+RUN npm ci --ignore-scripts
+
 COPY . .
-RUN npm ci
+RUN npm run compile
 
 # Debian rather than Alpine, i.e. glibc rather than musl.
 #
@@ -36,7 +45,13 @@ RUN npm ci
 # We have an unexplained segfault on this image on arm64. Changing the base
 # does not diagnose it, but it removes a variable that was only ever there for
 # a saving we do not need.
-FROM node:18-slim AS runtime
+#
+# node 22 rather than 18: 18 went end-of-life in April 2025 and stopped getting
+# security updates, and the tests ran on a major this image did not ship - the
+# smoke test exists specifically to catch an ESM/CJS load failure that tsc and
+# vitest both pass, so running it on a different runtime than production is the
+# one gap it cannot cover. .node-version moves with this.
+FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 
 # node_modules is copied rather than reinstalled, which also keeps the runtime

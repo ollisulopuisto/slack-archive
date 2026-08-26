@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.27.190] - 2026-08-27
+
+### Changed
+- **node 22 instead of node 18, in both build stages.** 18 went end-of-life in
+  April 2025 and takes no more security updates, and the gap mattered more than
+  the age: the test job ran on 20 while the image shipped 18, and `npm run
+  smoke` exists precisely to catch an ESM/CJS load failure that typechecking
+  and vitest both pass. A smoke test on a runtime you do not ship cannot do
+  that job. `.node-version` moves to 22 with it, so the tests run the major
+  that runs in production, and this matches the only other Node image in the
+  estate.
+- **Dependencies install in their own layer again.** `COPY . .` before `npm ci`
+  invalidated the dependency layer on every source change. The install now runs
+  with `--ignore-scripts` - which is what makes the split possible at all,
+  since `prepare` would otherwise run tsc before `src/` had been copied - and
+  the compile is invoked explicitly afterwards. Safe here because nothing in
+  this dependency tree has an install script; not a rule to copy into a project
+  with a native addon.
+
 ## [v26.08.27.189] - 2026-08-27
 
 ### Fixed
