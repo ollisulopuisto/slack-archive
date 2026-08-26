@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.177] - 2026-08-26
+
+### Fixed
+- **The publish lock claimed a busy publish when it could not write a lock.**
+  It created the lock beside the work directory, which in a container is often
+  `/` owned by root while the process is not - so `mkdir` failed with a
+  permission error and the script reported "another publish is already using
+  this", inventing a specific cause for a generic failure. The lock now lives
+  inside the work directory, existence and permission are separate questions,
+  and a permission error says so.
+
 ## [v26.08.26.176] - 2026-08-26
 
 ### Added

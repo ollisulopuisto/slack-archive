@@ -68,15 +68,29 @@ say() { printf "\n\033[1m%s\033[0m\n" "$*"; }
 
 # Two of these at once share a scratch tree and destroy each other's render -
 # which is what a nightly run and somebody's manual run look like on the same
-# machine. mkdir is atomic; a lock file's existence would only prove that a
+# machine. mkdir is atomic; a lock FILE's existence would only prove that a
 # lock file exists, which is a lesson this project has already paid for.
-LOCK="$WORK.lock"
-if ! mkdir "$LOCK" 2>/dev/null; then
+#
+# The lock lives inside the work directory, not beside it: beside it means
+# creating a directory in whatever the parent happens to be, and in a container
+# that is often "/" owned by root while the process is not. The first version
+# of this reported "another publish is already using it" for what was actually
+# a permission error - a specific cause invented for a generic failure.
+mkdir -p "$WORK" || { echo "Cannot create $WORK" >&2; exit 1; }
+LOCK="$WORK/.publish-lock"
+
+if [ -d "$LOCK" ]; then
   echo "Another publish is already using $WORK." >&2
   echo "Wait for it to finish, or pass a different --work." >&2
   echo "If nothing is running, remove $LOCK." >&2
   exit 1
 fi
+
+if ! mkdir "$LOCK"; then
+  echo "Cannot lock $WORK - see the error above." >&2
+  exit 1
+fi
+
 trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
 
 say "1/7  checking the archive"
@@ -87,7 +101,8 @@ say "2/7  staging"
 # Metadata is COPIED so the renderer cannot write back into the archive - it
 # rewrites slack-archive.json on every run. Message files are symlinked because
 # they are 1.5 GB and only read.
-rm -rf "$WORK"; mkdir -p "$WORK/slack-archive/data"
+# The work directory itself survives: it holds the lock this run is using.
+rm -rf "$WORK/slack-archive"; mkdir -p "$WORK/slack-archive/data"
 for f in channels.json users.json slack-archive.json emojis.json \
          user-names.json user-avatars.json user-status.json; do
   cp "$ARCHIVE/data/$f" "$WORK/slack-archive/data/$f" 2>/dev/null || true
