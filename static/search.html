@@ -30,9 +30,15 @@
             this.loadSearchDataWhenReady.bind(this);
 
           this.searchInputRef = React.createRef();
+
+          // A search box lives in the sidebar of every page, and hands the
+          // query over here: index.html's frame loads search.html?q=... The
+          // 124 MB index cannot be in every page, but the box can.
+          const query = new URLSearchParams(window.location.search).get("q");
+
           this.state = {
             matchingMessages: [],
-            searchValue: "",
+            searchValue: query || "",
             selectedChannel: "",
             selectedUser: "",
             ready: false,
@@ -74,7 +80,11 @@
           miniSearch.addAll(allMessages);
           console.timeEnd(`Loading minisearch`);
 
-          this.setState({ ready: true, miniSearch });
+          // Run whatever arrived in the URL, now that there is something to
+          // run it against.
+          this.setState({ ready: true, miniSearch }, () => {
+            if (this.state.searchValue) this.updateResults();
+          });
         }
 
         handleSearchChange({ target: { value } }) {

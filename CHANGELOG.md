@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.168] - 2026-08-26
+
+### Added
+- **A search box in the sidebar, on every page.** The index itself is 124 MB
+  and cannot be in every page; the box can, and hands its query to the search
+  page through the URL, which now reads it and runs it as soon as the index has
+  loaded.
+
+### Fixed
+- **Quoted messages are quotes again.** Slack escapes message text, so a quote
+  arrives as `&gt; the thing somebody said`: the markdown renderer looks for
+  `>`, does not find it, and the browser draws the entity back as a stray angle
+  bracket in front of the sentence. Ten years of quoted articles looked like
+  that; 10 056 of them are blockquotes now. The marker is recognised in its
+  escaped form and stripped - unescaping the text first would have fixed the
+  quotes and handed every message in the archive whatever HTML somebody typed
+  into Slack ten years ago.
+
 ## [v26.08.26.167] - 2026-08-26
 
 ### Changed

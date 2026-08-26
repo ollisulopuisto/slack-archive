@@ -50,6 +50,7 @@ import { getPageIndex, recordPage } from "./search.js";
 import { write } from "./data-write.js";
 import { getSlackArchiveData } from "./archive-data.js";
 import { getEmojiRef, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
+import { splitQuotes } from "./blockquotes.js";
 import {
   archivedFileName,
   archivedThumbName,
@@ -399,18 +400,23 @@ const Message: React.FunctionComponent<MessageProps> = (props) => {
           <span className="c-timestamp__label">{formatTimestamp(message)}</span>
         </a>
         <br />
-        <div
-          className="text"
-          dangerouslySetInnerHTML={{
-            __html: rewriteSlackLinks(
-              slackMarkdown.toHTML(message.text || "", {
+        <div className="text">
+          {splitQuotes(message.text).map((block, i) => {
+            const html = rewriteSlackLinks(
+              slackMarkdown.toHTML(block.text, {
                 escapeHTML: false,
                 slackCallbacks,
               }),
               linkContext,
-            ),
-          }}
-        />
+            );
+
+            return block.quote ? (
+              <blockquote key={i} dangerouslySetInnerHTML={{ __html: html }} />
+            ) : (
+              <div key={i} dangerouslySetInnerHTML={{ __html: html }} />
+            );
+          })}
+        </div>
         {props.children}
       </div>
     </div>
@@ -597,6 +603,26 @@ const IndexPage: React.FunctionComponent<IndexPageProps> = (props) => {
           aria-hidden="true"
         />
         <div id="channels">
+          {/* Search, from wherever you are. The index itself is 124 MB and
+              cannot be in every page - but the box can be, and the search page
+              picks the query up out of the URL. */}
+          <form
+            className="channel-search"
+            action="search.html"
+            method="get"
+            target="iframe"
+            role="search"
+          >
+            <input
+              type="search"
+              name="q"
+              placeholder="Search every message"
+              aria-label="Search every message"
+            />
+            <button type="submit" aria-label="Search">
+              <span aria-hidden="true">⌕</span>
+            </button>
+          </form>
           <p className="section">Public Channels</p>
           <ul>{publicChannels}</ul>
           <p className="section">Private Channels</p>

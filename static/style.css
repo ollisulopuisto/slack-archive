@@ -1147,3 +1147,73 @@ table.timeline,
     width: 100%;
   }
 }
+
+/* Somebody quoting something. Slack shows it as a bar down the left, and this
+   archive showed it as a sentence with a stray angle bracket in front. */
+.text blockquote {
+  margin: 4px 0;
+  padding: 2px 0 2px 12px;
+  border-left: 4px solid #d5d0d6;
+  color: #454245;
+}
+
+.text blockquote:first-child {
+  margin-top: 0;
+}
+
+/* The search box in the sidebar. Collapsed it is a line; focused it lifts and
+   fills, because a search field that looks like a search field is worth more
+   than the 40 pixels it costs. */
+.channel-search {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0 12px 12px;
+  padding: 4px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  transition:
+    background 0.15s ease-out,
+    box-shadow 0.15s ease-out;
+}
+
+.channel-search:focus-within {
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
+}
+
+.channel-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #fff;
+  font-size: 13px;
+}
+
+.channel-search input::placeholder {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.channel-search input:focus {
+  outline: none;
+}
+
+.channel-search button {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.channel-search button:hover,
+.channel-search button:focus-visible {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
