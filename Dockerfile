@@ -31,6 +31,13 @@ COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/package*.json ./
 COPY bin ./bin
 COPY static ./static
+COPY scripts ./scripts
+
+# What publishing needs, and nothing else: the archive renders here, so the
+# thing that puts it on a web host runs here too rather than on whichever
+# machine happens to have a shell. bash because the script is bash; rsync and
+# ssh because that is the transport. About 5 MB on alpine.
+RUN apk add --no-cache bash openssh-client rsync
 
 # Drop devDependencies now that the compile is done. `prune` does not run
 # lifecycle scripts, so `prepare` stays quiet.
