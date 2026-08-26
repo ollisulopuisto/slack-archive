@@ -18,6 +18,7 @@ import {
   EMOJIS_DATA_PATH,
   USER_NAMES_DATA_PATH,
   USER_AVATARS_DATA_PATH,
+  USER_STATUS_DATA_PATH,
   getAvatarHistoryFilePath,
   NO_SLACK_CONNECT,
   NO_FILE_DOWNLOAD,
@@ -41,13 +42,19 @@ import {
   getChannels,
   getUserNames,
   getUserAvatars,
+  getUserStatuses,
 } from "./data-load.js";
 import { mineNames, recordNames, snapshotNames } from "./user-names.js";
 import { mineAvatars, recordAvatars, UserAvatars } from "./user-avatars.js";
+import {
+  recordStatuses,
+  snapshotStatuses,
+  UserStatuses,
+} from "./user-status.js";
 import { getSlackArchiveData, setSlackArchiveData } from "./archive-data.js";
 import { downloadEmojiList, downloadEmojis } from "./emoji.js";
 import { downloadAllUsers, downloadAvatars } from "./users.js";
-import { downloadChannels } from "./channels.js";
+import { downloadChannels, downloadChannelMembers } from "./channels.js";
 import { authTest } from "./web-client.js";
 import { User, Channel, SlackArchiveChannelData } from "./interfaces.js";
 
@@ -309,7 +316,19 @@ export async function main() {
   );
   let userAvatars: UserAvatars = await getUserAvatars();
 
+  // Statuses have no retroactive source at all - a status is never quoted in a
+  // message - so today's snapshot is the only record that will ever exist of
+  // today.
+  const userStatuses: UserStatuses = recordStatuses(
+    await getUserStatuses(),
+    snapshotStatuses(users, new Date().toISOString()),
+  );
+
   const channels = await downloadChannels({ types: channelTypes }, users);
+
+  // Who is in each conversation, which nothing has ever recorded and which
+  // cannot be asked about the past.
+  await downloadChannelMembers(channels);
   const selectedChannels = await selectChannels(
     channels,
     slackArchiveData.channels,
@@ -384,6 +403,10 @@ export async function main() {
     await write(
       USER_AVATARS_DATA_PATH,
       JSON.stringify(userAvatars, undefined, 2),
+    );
+    await write(
+      USER_STATUS_DATA_PATH,
+      JSON.stringify(userStatuses, undefined, 2),
     );
 
     const nicks = Object.values(userNames).reduce(

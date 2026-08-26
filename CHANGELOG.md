@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.154] - 2026-08-26
+
+### Added
+- **Statuses are recorded.** Slack keeps no history of them and, unlike names
+  and profile pictures, there is nothing to mine - a status is never quoted in
+  a message - so every run snapshots what everybody's status says and appends
+  it to `data/user-status.json` when it changes. Profile pages list them with
+  the window each was seen in.
+
+  A cleared status is deliberately not a row: the gap between two statuses says
+  the same thing, and a row per blank would bury the ones that say something.
+
+- **Channel membership is recorded**, onto `channels.json` as `members`.
+  No channel in a Slack archive has ever carried one, which means
+  per-conversation access - showing a private channel or a DM only to the
+  people who were in it - has nothing to be built on. `conversations.members`
+  answers for today only, so every day nobody records it is a day that cannot
+  be reconstructed. One call per channel, failing soft: a channel the token
+  cannot read keeps the membership it already had rather than being recorded as
+  empty.
+
+  Both of these begin at the first run that has them. Neither is recoverable
+  backwards, which is the whole argument for adding them before more days pass.
+
 ## [v26.08.25.153] - 2026-08-26
 
 ### Added

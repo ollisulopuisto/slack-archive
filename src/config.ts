@@ -192,6 +192,7 @@ export const USERS_DATA_PATH = path.join(DATA_DIR, "users.json");
 export const EMOJIS_DATA_PATH = path.join(DATA_DIR, "emojis.json");
 export const USER_NAMES_DATA_PATH = path.join(DATA_DIR, "user-names.json");
 export const USER_AVATARS_DATA_PATH = path.join(DATA_DIR, "user-avatars.json");
+export const USER_STATUS_DATA_PATH = path.join(DATA_DIR, "user-status.json");
 export const SLACK_ARCHIVE_DATA_PATH = path.join(
   DATA_DIR,
   "slack-archive.json",

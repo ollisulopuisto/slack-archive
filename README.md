@@ -104,6 +104,13 @@ Two sources put it back, and neither needs an API that exists:
   as an attachment keeps `author_id` beside `author_name` and `author_icon`,
   and an avatar URL has its upload date in its own path.
 
+**Statuses have no retroactive source at all** - a status is never quoted in a
+message - so they are snapshotted on every run instead. The first run that has
+this is the first day that will ever be recorded; everything before it is gone.
+The same is true of **channel membership**: `conversations.members` answers for
+today, and nothing in an archive says who was in a channel last year, so it is
+recorded onto `channels.json` on every run.
+
 In one real ten-year archive that is 173 names for 32 people and 212 dated
 profile pictures for 13 of them. A message's author then shows _what they were
 called when they wrote it_ rather than what they are called now.

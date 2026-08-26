@@ -9,6 +9,62 @@ import { Channel, ChannelKind, Users } from "./interfaces.js";
 import { downloadUser, getName } from "./users.js";
 import { getWebClient } from "./web-client.js";
 
+/**
+ * Who is in each channel, recorded on the channel itself.
+ *
+ * No channel in this archive has ever carried a members list, which means
+ * per-conversation access - showing a private channel or a DM only to the
+ * people who were in it - has no data to be built on. Membership is not
+ * recoverable after the fact either: `conversations.members` answers for
+ * today, so every day nobody records it is a day that cannot be reconstructed.
+ *
+ * One call per channel, and it fails soft: a channel the token cannot see
+ * keeps whatever membership it already had rather than losing it.
+ */
+export async function downloadChannelMembers(
+  channels: Array<Channel>,
+): Promise<number> {
+  if (NO_SLACK_CONNECT) return 0;
+
+  const spinner = ora("Downloading channel members...").start();
+  let recorded = 0;
+  let refused = 0;
+
+  for (const [i, channel] of channels.entries()) {
+    if (!channel.id) continue;
+
+    spinner.text = `Downloading channel members (${i + 1}/${channels.length}) ${
+      channel.name || channel.id
+    }`;
+    spinner.render();
+
+    try {
+      const members: Array<string> = [];
+
+      for await (const page of getWebClient().paginate(
+        "conversations.members",
+        { channel: channel.id, limit: 200 },
+      )) {
+        members.push(...((page as any).members || []));
+      }
+
+      (channel as any).members = members;
+      recorded++;
+    } catch (error) {
+      // A channel the token cannot read keeps the membership it already has.
+      // Overwriting it with nothing would look like an empty channel rather
+      // than an unanswerable question.
+      refused++;
+    }
+  }
+
+  spinner.succeed(
+    `Channel members: ${recorded} recorded, ${refused} the token could not read.`,
+  );
+
+  return recorded;
+}
+
 export function getChannelName(channel: Channel) {
   return (
     channel.name || channel.id || channel.purpose?.value || "Unknown channel"

@@ -11,7 +11,15 @@ import {
 export type User = NonNullable<UsersInfoResponse["user"]>;
 export type Channel = NonNullable<
   ConversationsListResponse["channels"]
->[number];
+>[number] & {
+  /**
+   * User ids in the conversation, as of the last run that could read it.
+   *
+   * Slack's channel list does not carry this and there is no way to ask what
+   * it was last year, so it exists only from the first run that recorded it.
+   */
+  members?: Array<string>;
+};
 export type Message = {
   ts: string;
   user?: string;

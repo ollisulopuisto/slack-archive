@@ -16,6 +16,7 @@ import {
   getUsers,
   getUserNames,
   getUserAvatars,
+  getUserStatuses,
   getEmoji,
 } from "./data-load.js";
 import {
@@ -52,6 +53,7 @@ import { getName } from "./users.js";
 import { nameAt, slackTimestampToIso, UserNames } from "./user-names.js";
 import { botUserIds, isChannelSearchable } from "./search-filter.js";
 import { UserAvatars } from "./user-avatars.js";
+import { UserStatuses } from "./user-status.js";
 import {
   ChannelStats,
   createStats,
@@ -101,6 +103,7 @@ function publishable(channels: Array<Channel>): Array<Channel> {
   );
 }
 let userAvatars: UserAvatars = {};
+let userStatuses: UserStatuses = {};
 let slackArchiveData: SlackArchiveData = { channels: {} };
 let me: User | null;
 
@@ -912,6 +915,39 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
           />
         </details>
 
+        {(userStatuses[userId] || []).length > 0 ? (
+          <details className="drill">
+            <summary>
+              Statuses{" "}
+              <span className="count">
+                {(userStatuses[userId] || []).length}
+              </span>
+            </summary>
+            <table className="timeline">
+              <tbody>
+                {(userStatuses[userId] || []).map((status) => (
+                  <tr key={`${status.emoji}-${status.text}`}>
+                    <td className="timestamp">
+                      {status.first.slice(0, 10)}
+                      {status.last.slice(0, 10) !== status.first.slice(0, 10)
+                        ? ` - ${status.last.slice(0, 10)}`
+                        : ""}
+                    </td>
+                    <td>
+                      {status.emoji ? (
+                        <span className="emoji-mark">
+                          <Emoji name={status.emoji.replace(/:/g, "")} />
+                        </span>
+                      ) : null}{" "}
+                      {status.text}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
+        ) : null}
+
         <details className="drill">
           <summary>
             Emoji they reach for{" "}
@@ -1503,6 +1539,7 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
   users = await getUsers();
   userNames = await getUserNames();
   userAvatars = await getUserAvatars();
+  userStatuses = await getUserStatuses();
   slackArchiveData = await getSlackArchiveData();
   me = slackArchiveData.auth?.user_id
     ? users[slackArchiveData.auth?.user_id]
