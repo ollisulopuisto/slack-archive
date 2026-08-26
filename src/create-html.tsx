@@ -57,6 +57,7 @@ import { write } from "./data-write.js";
 import { getSlackArchiveData } from "./archive-data.js";
 import { getEmojiRef, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
 import { splitQuotes } from "./blockquotes.js";
+import { withoutBroadcastCopies } from "./broadcasts.js";
 import { reportTimings, timed } from "./timings.js";
 import { defaultWorkerCount, renderPagesInWorkers } from "./render-workers.js";
 import { ChannelPlan, planChannel, shareOutPages } from "./render-plan.js";
@@ -431,8 +432,10 @@ const MessagesPage: React.FunctionComponent<MessagesPageProps> = (props) => {
   const { channel, index, chunksInfo } = props;
   const messagesJs = fs.readFileSync(MESSAGES_JS_PATH, "utf8");
 
-  // Newest message is first; the page reads oldest first.
-  const oldestFirst = [...props.messages].reverse();
+  // Newest message is first; the page reads oldest first. A reply sent with
+  // "also send to channel" arrives twice - once here, once inside its parent -
+  // and is shown in the thread.
+  const oldestFirst = [...withoutBroadcastCopies(props.messages)].reverse();
   const messages: Array<React.ReactNode> = [];
 
   for (const [i, message] of oldestFirst.entries()) {
