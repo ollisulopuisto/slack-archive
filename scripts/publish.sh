@@ -98,6 +98,18 @@ fi
 
 trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
 
+# ssh calls getpwuid() at startup and refuses to run without an entry - "No
+# user exists for uid 1026". A container run with --user <host uid> has no
+# passwd entry for it, and the archive renders for five minutes before rsync
+# reaches ssh and dies. Check it here, where it costs nothing, and say what to
+# do about it.
+if [ -n "$SITE" ] && ! id -un >/dev/null 2>&1; then
+  echo "This user (uid $(id -u)) has no passwd entry, and ssh will not run without one." >&2
+  echo "In a container, mount the host's: -v /etc/passwd:/etc/passwd:ro" >&2
+  echo "The key and known_hosts are passed explicitly, so nothing else needs the home directory." >&2
+  exit 1
+fi
+
 say "1/7  checking the archive"
 [ -d "$ARCHIVE/data" ] || { echo "No data directory in $ARCHIVE" >&2; exit 1; }
 echo "  $(ls "$ARCHIVE/data"/[CDG]*.json 2>/dev/null | wc -l | tr -d ' ') channel files"

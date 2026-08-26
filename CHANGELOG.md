@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.185] - 2026-08-26
+
+### Fixed
+- **The publish now refuses at the start when ssh cannot run, instead of after
+  the render.** A container running as a host uid has no `/etc/passwd` entry
+  for it, and ssh calls `getpwuid()` on startup and dies with "No user exists
+  for uid 1026" - which the first successful NAS render reached after five and
+  a half minutes of work, at the upload. The check now runs before anything is
+  staged and names the remedy: mount the host's passwd file read-only.
+
 ## [v26.08.26.184] - 2026-08-26
 
 ### Fixed

@@ -241,6 +241,7 @@ docker run --rm --user 1026:100 --entrypoint bash \
   -v /path/to/work:/work \
   -v /path/to/publish-key:/keys/id_ed25519:ro \
   -v /path/to/known_hosts:/keys/known_hosts:ro \
+  -v /etc/passwd:/etc/passwd:ro \
   ghcr.io/ollisulopuisto/slack-archive:<tag> \
   scripts/publish.sh --archive /archive --work /work \
     --site user@host:/var/www/archive \
