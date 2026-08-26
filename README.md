@@ -62,7 +62,24 @@ slack-archive --bot
 --html-exclude-kinds        Channel kinds to leave out of the HTML entirely,
                             e.g. im,mpim,private. Filters the pages and the
                             statistics behind them, not just the pages.
+--render-workers <n>        Render the channel pages on n cores. 0 (the
+                            default) picks one per core, less one, up to eight;
+                            1 renders in this process the way it always did.
 ```
+
+Rendering is the slow half of a run, and almost all of it is one loop: on a
+ten-year archive, the channel pages were 2m32s of a 3m11s run and everything
+else was seconds. They are rendered by a pool of workers now, balanced by
+message count rather than by channel count - one channel in that archive holds
+65% of its messages, so an even split of the list would leave one worker
+working while the rest sat idle. Every run prints where its time went:
+
+```
+Rendered in 1m01s: reading and counting 10s, channel pages 51s
+```
+
+That line is worth reading on a schedule: a nightly render that quietly doubles
+in length should say why.
 
 ## What it generates
 
@@ -70,12 +87,18 @@ Beyond a page per channel:
 
 | Page                     | What is on it                                                                                                                                              |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.html`             | every channel, and links to the pages below                                                                                                                |
+| `index.html`             | the front page: the archive in numbers, and the way in                                                                                                     |
 | `html/stats.html`        | the whole workspace: messages per month, per year, hour of day, day of week, who talks, busiest channels, reactions                                        |
 | `html/channel-<id>.html` | the same questions asked of one channel                                                                                                                    |
 | `html/user-<id>.html`    | one person: their decade in numbers, when they post, a dated timeline of renames and joins, the channels they use, every name they have had, and the faces |
 | `html/names.html`        | everyone, and everything they have ever been called                                                                                                        |
 | `html/bots.html`         | what the bots did, kept off the pages about people                                                                                                         |
+
+Every page carries the channel list, and every page has its own URL - so a
+message can be linked to, shared into Slack, and opened with the conversation
+around it. The timestamp on a message is that link. Older links of the form
+`index.html?c=<channel>&ts=<ts>` still work: the front page resolves them to
+the page that holds the message.
 
 The statistics pages carry a **drill-down**: click a year for its months, a month
 for its days, a day for its hours. Only one number per day and hour is stored -
@@ -144,6 +167,30 @@ proxy rule or a forgotten auth block.
 
 Note that direct messages in an archive are one person's conversations with
 named other people. They can publish their own half of those.
+
+### The publish script
+
+`scripts/publish.sh` does the whole of it - render the public half of an
+archive and put it on a web host - and it lives here rather than on the machine
+that runs it, because two hand-maintained copies of this job drifted into the
+same blind spot: every check read the rendered HTML, neither read the data
+directory, and the data directory held every direct message, one rsync flag
+away from a web root.
+
+```sh
+scripts/publish.sh --archive /path/to/slack-archive \
+                   --site user@host:/var/www/archive
+```
+
+It stages only the channels the site publishes, so there is nothing for a wrong
+rsync line to send; copies avatars and emoji before the render, because the
+renderer will only link an emoji whose file it can see; runs six checks and
+uploads nothing unless all of them pass; and then reads the web root over ssh
+to assert that `data/` holds `search.js` and nothing else. Every other check
+reads the tree it built. That last one reads what a browser could fetch.
+
+`--exclude-kinds`, `--work`, `--node`, `--repo` and `--dry-run` are there so
+nothing about one machine has to be baked in.
 
 For the search index the same idea has its own flags, because an index is read
 by things other than a browser: `--search-exclude-kinds`,
