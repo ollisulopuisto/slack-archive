@@ -1,6 +1,6 @@
 {
   "name": "slack-archive",
-  "version": "26.8.27+192",
+  "version": "26.8.27+193",
   "description": "Create static HTML archives for your Slack workspaces",
   "scripts": {
     "prettier": "npx prettier --write src/*",
@@ -55,6 +55,8 @@
     "@types/node-fetch": "^2.6.13",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
+    "@types/semver": "^7.8.0",
+    "semver": "^7.8.5",
     "ts-node": "^10.9.2",
     "tslib": "^2.8.1",
     "typescript": "^5.7.3",

@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
-## [v26.08.27.192] - 2026-08-27
+## [v26.08.27.193] - 2026-08-27
 
 ### Fixed
 - **`.node-version` is 22.23.2, not 22.11.0, and a test now says why.** npm
@@ -16,7 +16,9 @@ and this project adheres to [Calendar Versioning](https://calver.org/).
   with nothing to do with the version that caused it. The new test walks every
   `engines.node` in the lockfile against `.node-version`, and checks that the
   major matches what the Dockerfile ships - which was the point of moving in
-  the first place.
+  the first place. `semver` is a declared devDependency now rather than one
+  borrowed from another package's tree, which is the second way this same
+  change failed.
 
 ## [v26.08.27.191] - 2026-08-27
 

@@ -20,10 +20,12 @@ WORKDIR /app
 # fail. So the compile is invoked explicitly below instead, once the source is
 # actually here.
 #
-# --ignore-scripts is safe HERE because nothing in this dependency tree defines
-# an install, preinstall or postinstall script - the search database is
-# WebAssembly, not a node-gyp addon. It is not a house convention; a project
-# with a native dependency needs those scripts to run.
+# --ignore-scripts is safe HERE because nothing this image installs defines an
+# install, preinstall or postinstall script - the search database is
+# WebAssembly, not a node-gyp addon. The one package in the tree that has one
+# is fsevents, which is darwin-only and optional and so is never installed on
+# this base at all. It is not a house convention; a project with a native
+# dependency needs those scripts to run.
 COPY package*.json ./
 RUN npm ci --ignore-scripts
 
