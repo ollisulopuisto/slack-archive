@@ -45,7 +45,13 @@ import {
   getUserStatuses,
 } from "./data-load.js";
 import { mineNames, recordNames, snapshotNames } from "./user-names.js";
-import { mineAvatars, recordAvatars, UserAvatars } from "./user-avatars.js";
+import {
+  markRefused,
+  mineAvatars,
+  pendingAvatars,
+  recordAvatars,
+  UserAvatars,
+} from "./user-avatars.js";
 import {
   recordStatuses,
   snapshotStatuses,
@@ -436,44 +442,70 @@ export async function main() {
    * public, and there are a couple of hundred of them.
    */
   async function downloadAvatarHistory() {
-    const entries = Object.entries(userAvatars);
-    if (entries.length === 0 || NO_FILE_DOWNLOAD) return;
+    const pending = pendingAvatars(userAvatars);
+    const known = Object.values(userAvatars).reduce(
+      (total, avatars) => total + avatars.length,
+      0,
+    );
+    if (known === 0 || NO_FILE_DOWNLOAD) return;
 
     const spinner = ora("Downloading past profile pictures...").start();
     let attempted = 0;
     let stored = 0;
     let already = 0;
+    let refused = 0;
+    let failed = 0;
 
-    for (const [userId, avatars] of entries) {
-      for (const avatar of avatars) {
-        const extension = path.extname(new URL(avatar.url).pathname) || ".jpg";
-        const filePath = getAvatarHistoryFilePath(
+    for (const { userId, avatar } of pending) {
+      const extension = path.extname(new URL(avatar.url).pathname) || ".jpg";
+      const filePath = getAvatarHistoryFilePath(userId, avatar.date, extension);
+
+      if (fs.existsSync(filePath)) {
+        already++;
+        continue;
+      }
+
+      attempted++;
+      spinner.text = `Downloading past profile pictures (${attempted})`;
+      spinner.render();
+
+      const outcome = await downloadURL(avatar.url, filePath, {
+        authorize: false,
+      });
+
+      // Asked for, and arrived, are different numbers: Slack has retired a
+      // third of the older URLs. Counting attempts would report 212 downloads
+      // for 141 files, which is the same lie as a wrapper logging OK for a run
+      // that did nothing.
+      if (outcome === "stored") {
+        stored++;
+      } else if (outcome === "refused") {
+        // Settled, not transient. Recording it stops 71 requests a night
+        // asking a question that has already been answered.
+        refused++;
+        userAvatars = markRefused(
+          userAvatars,
           userId,
           avatar.date,
-          extension,
+          new Date().toISOString(),
         );
-
-        if (fs.existsSync(filePath)) {
-          already++;
-          continue;
-        }
-
-        attempted++;
-        spinner.text = `Downloading past profile pictures (${attempted})`;
-        spinner.render();
-        await downloadURL(avatar.url, filePath, { authorize: false });
-
-        // Asked for, and arrived, are different numbers: Slack refuses a good
-        // share of the older avatar URLs now. Counting attempts would report
-        // 212 downloads for 141 files, which is the same lie as a wrapper
-        // logging OK for a run that did nothing.
-        if (fs.existsSync(filePath)) stored++;
+      } else {
+        failed++;
       }
     }
 
-    const refused = attempted - stored;
+    const skipped = known - pending.length;
+
     spinner.succeed(
-      `Past profile pictures: ${stored} downloaded, ${refused} refused by Slack, ${already} already here.`,
+      `Past profile pictures: ${stored} downloaded, ${refused} refused by Slack, ` +
+        `${failed} failed, ${already} already here, ${skipped} known-gone and not asked for.`,
+    );
+
+    // The refusals recorded above have to reach disk, or the next run asks
+    // again and learns the same thing.
+    await write(
+      USER_AVATARS_DATA_PATH,
+      JSON.stringify(userAvatars, undefined, 2),
     );
   }
 

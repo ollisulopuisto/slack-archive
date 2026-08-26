@@ -18,6 +18,15 @@ export interface UserAvatar {
   url: string;
   /** Slack timestamp of the earliest message that showed this picture. */
   seen: string;
+  /**
+   * ISO 8601 of when Slack refused to serve this picture.
+   *
+   * Slack has retired a third of the older avatar URLs in this archive and
+   * answers 403 for them. Without recording that, every run asks again and is
+   * refused again - 71 requests a night, for ever, to learn something already
+   * known. Delete the field to make a run try once more.
+   */
+  refused?: string;
 }
 
 export type UserAvatars = Record<string, Array<UserAvatar>>;
@@ -60,6 +69,41 @@ export function mineAvatars(message: ArchiveMessage): Array<AvatarSighting> {
   }
 
   return sightings;
+}
+
+/** The pictures still worth asking for: not on disk, and not already refused. */
+export function pendingAvatars(
+  history: UserAvatars,
+): Array<{ userId: string; avatar: UserAvatar }> {
+  const pending: Array<{ userId: string; avatar: UserAvatar }> = [];
+
+  for (const [userId, avatars] of Object.entries(history || {})) {
+    for (const avatar of avatars) {
+      if (!avatar.refused) pending.push({ userId, avatar });
+    }
+  }
+
+  return pending;
+}
+
+/** Record that Slack will not serve this one. Returns a new history. */
+export function markRefused(
+  history: UserAvatars,
+  userId: string,
+  date: string,
+  when: string,
+): UserAvatars {
+  const merged: UserAvatars = {};
+
+  for (const [id, avatars] of Object.entries(history || {})) {
+    merged[id] = avatars.map((avatar) =>
+      id === userId && avatar.date === date
+        ? { ...avatar, refused: when }
+        : { ...avatar },
+    );
+  }
+
+  return merged;
 }
 
 /**

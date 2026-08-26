@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.156] - 2026-08-26
+
+### Fixed
+- **Stop asking Slack for the avatars it has already refused.** A third of the
+  older profile-picture URLs in this archive are gone - Slack answers 403 - and
+  every run asked for all 71 again, was refused again, and reported the same
+  number. That is 71 requests a night to re-learn a settled answer.
+
+  A refusal is now recorded on the avatar itself and those are not requested
+  again. `downloadURL` distinguishes them from failures that might not repeat:
+  a 4xx is the server's settled answer, a 5xx or a timeout is not, so a network
+  blip does not permanently mark a picture as gone. Deleting the `refused`
+  field makes a run try once more.
+
+  The summary line says what happened to each: downloaded, refused, failed,
+  already here, and known-gone and not asked for.
+
 ## [v26.08.26.155] - 2026-08-26
 
 ### Added

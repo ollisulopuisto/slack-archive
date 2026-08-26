@@ -18,15 +18,24 @@ export interface DownloadUrlOptions {
   force?: boolean;
 }
 
+/**
+ * What happened, so a caller can tell "not there" from "will never be there".
+ *
+ * `refused` is the server declining - 403 and 404 on an avatar URL Slack has
+ * retired, and no amount of retrying changes it. `failed` is everything that
+ * might work next time: a timeout, a 5xx, a dropped connection.
+ */
+export type DownloadOutcome = "stored" | "skipped" | "refused" | "failed";
+
 export async function downloadURL(
   url: string,
   filePath: string,
   options: DownloadUrlOptions = {},
-) {
+): Promise<DownloadOutcome> {
   const authorize = options.authorize === undefined ? true : options.authorize;
 
   if (!options.force && fs.existsSync(filePath)) {
-    return;
+    return "skipped";
   }
 
   const { token } = config;
@@ -47,14 +56,21 @@ export async function downloadURL(
       console.warn(
         `Failed to download file ${url}: ${response.status} ${response.statusText}`,
       );
-      return;
+
+      // A 4xx is the server's settled answer. A 5xx might not be.
+      return response.status >= 400 && response.status < 500
+        ? "refused"
+        : "failed";
     }
 
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     fs.outputFileSync(filePath, buffer);
+
+    return "stored";
   } catch (error) {
     console.warn(`Failed to download file ${url}`, error);
+    return "failed";
   }
 }
 

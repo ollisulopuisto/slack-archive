@@ -94,7 +94,7 @@ export async function downloadEmoji(
   const extension = path.extname(url);
   const filePath = getEmojiFilePath(name, extension);
 
-  return downloadURL(url, filePath!);
+  await downloadURL(url, filePath!);
 }
 
 export function getEmojiAlias(name: string): string {
