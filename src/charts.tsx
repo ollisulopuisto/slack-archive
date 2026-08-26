@@ -135,9 +135,13 @@ export const Columns: React.FunctionComponent<ColumnsProps> = ({
             <title>
               {datum.title ||
                 (datum.estimate
-                  ? `${datum.label}: ${formatCount(datum.value)} archived, perhaps ${formatCount(
+                  ? `${datum.label}: ${formatCount(datum.value)} archived · ${formatCount(
+                      datum.estimate.estimate,
+                    )} estimated missing · perhaps ${formatCount(
                       datum.value + datum.estimate.estimate,
-                    )} in all`
+                    )} in all (${formatCount(
+                      datum.value + datum.estimate.low,
+                    )}-${formatCount(datum.value + datum.estimate.high)})`
                   : `${datum.label}: ${formatCount(datum.value)}`)}
             </title>
             {i % labelEvery === 0 ? (
@@ -249,10 +253,17 @@ export const Area: React.FunctionComponent<ColumnsProps> = ({
           band.push(`${i * step},${y(low)}`);
         }
 
+        const missing = data
+          .slice(run[0], run[run.length - 1] + 1)
+          .reduce((total, d) => total + (d.estimate?.estimate ?? 0), 0);
+
         return (
           <g key={`estimate-${run[0]}`}>
             <polygon className="viz-estimate-band" points={band.join(" ")} />
             <polyline className="viz-estimate" points={line.join(" ")} />
+            <title>
+              {`${data[run[0]].label} to ${data[run[run.length - 1]].label}: nothing archived · perhaps ${formatCount(missing)} messages`}
+            </title>
           </g>
         );
       })}
@@ -318,6 +329,17 @@ export const Figure: React.FunctionComponent<FigureProps> = ({
             <tr key={datum.label}>
               <td>{datum.label}</td>
               <td className="viz-bars-value">{formatCount(datum.value)}</td>
+              {/* The estimate belongs beside the count, not instead of it:
+                  what was archived, then what the missing days probably held. */}
+              {data.some((d) => d.estimate) ? (
+                <td className="viz-bars-value viz-estimated">
+                  {datum.estimate
+                    ? `+${formatCount(datum.estimate.estimate)} est. = ${formatCount(
+                        datum.value + datum.estimate.estimate,
+                      )}`
+                    : ""}
+                </td>
+              ) : null}
             </tr>
           ))}
         </tbody>

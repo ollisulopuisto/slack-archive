@@ -1568,3 +1568,9 @@ body.speculating .viz-tile[data-speculative] {
 body.speculating .viz-tile[data-speculative] .viz-tile-value {
   color: var(--viz-series);
 }
+
+/* The estimate column in a Numbers table, quieter than the counts beside it. */
+.viz-estimated {
+  color: var(--ink-muted);
+  font-style: italic;
+}

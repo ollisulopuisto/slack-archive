@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.179] - 2026-08-26
+
+### Changed
+- **The estimate is in the tooltip and in the numbers.** Hovering a year says
+  what was archived, what is estimated missing, the total that implies and the
+  range around it; hovering a gap on the month chart says how many messages
+  probably sat in it. The Numbers table beside every chart gains an estimate
+  column - the same information for anybody who would rather read than hover,
+  which includes anybody without a mouse.
+
 ## [v26.08.26.178] - 2026-08-26
 
 ### Added
