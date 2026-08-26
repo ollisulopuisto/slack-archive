@@ -63,6 +63,7 @@ import { reportTimings, timed } from "./timings.js";
 import { defaultWorkerCount, renderPagesInWorkers } from "./render-workers.js";
 import { ChannelPlan, planChannel, shareOutPages } from "./render-plan.js";
 import { pickStartChannel } from "./start-channel.js";
+import { groupByYear, MonthPage } from "./calendar-nav.js";
 import {
   emptyRenderContext,
   RenderContext,
@@ -427,11 +428,12 @@ interface MessagesPageProps {
   channel: Channel;
   index: number;
   chunksInfo: ChunksInfo;
+  months: Array<MonthPage>;
 }
 const MessagesPage: React.FunctionComponent<MessagesPageProps> = (props) => {
   const { gaps, slackArchiveData } = useRender();
 
-  const { channel, index, chunksInfo } = props;
+  const { channel, index, chunksInfo, months } = props;
   const messagesJs = fs.readFileSync(MESSAGES_JS_PATH, "utf8");
 
   // Newest message is first; the page reads oldest first. A reply sent with
@@ -479,7 +481,12 @@ const MessagesPage: React.FunctionComponent<MessagesPageProps> = (props) => {
   return (
     <HtmlPage meta={meta}>
       <div className="page" style={{ paddingLeft: 10 }}>
-        <Header index={index} chunksInfo={chunksInfo} channel={channel} />
+        <Header
+          index={index}
+          chunksInfo={chunksInfo}
+          channel={channel}
+          months={months}
+        />
         <div className="messages-list">{messages}</div>
         <script dangerouslySetInnerHTML={{ __html: messagesJs }} />
       </div>
@@ -496,7 +503,7 @@ const ChannelLink: React.FunctionComponent<ChannelLinkProps> = ({
   const { slackArchiveData, me, base } = useRender();
 
   let name = channel.name || channel.id;
-  let leadSymbol = <span># </span>;
+  let leadSymbol = <span className="lead">#</span>;
 
   const channelData = slackArchiveData.channels[channel.id!];
   if (channelData && channelData.messages === 0) {
@@ -570,6 +577,7 @@ export async function renderPages(
           messages={messages}
           index={page.index}
           chunksInfo={plan.chunksInfo}
+          months={plan.months}
         />,
         getHTMLFilePath(plan.channelId, page.index),
       );
@@ -853,6 +861,7 @@ const HtmlPage: React.FunctionComponent<HtmlPageProps> = (props) => {
 };
 
 interface HeaderProps {
+  months: Array<MonthPage>;
   index: number;
   chunksInfo: ChunksInfo;
   channel: Channel;
@@ -860,7 +869,7 @@ interface HeaderProps {
 const Header: React.FunctionComponent<HeaderProps> = (props) => {
   const { users, stats } = useRender();
 
-  const { channel, index, chunksInfo } = props;
+  const { channel, index, chunksInfo, months } = props;
   let created;
 
   if (!channel.is_im && !channel.is_mpim) {
@@ -893,83 +902,83 @@ const Header: React.FunctionComponent<HeaderProps> = (props) => {
         channelId={channel.id!}
         index={index}
         chunksInfo={chunksInfo}
+        months={months}
       />
     </div>
   );
 };
 
 interface PaginationProps {
+  months: Array<MonthPage>;
   index: number;
   chunksInfo: ChunksInfo;
   channelId: string;
 }
 const Pagination: React.FunctionComponent<PaginationProps> = (props) => {
-  const { index, channelId, chunksInfo } = props;
+  const { index, channelId, chunksInfo, months } = props;
   const length = chunksInfo.length;
 
   if (length === 1) {
     return null;
   }
 
-  const older =
-    index + 1 < length ? (
-      <span>
-        <a href={`${channelId}-${index + 1}.html`}>Older Messages</a>
-      </span>
-    ) : null;
-  const newer =
-    index > 0 ? (
-      <span>
-        <a href={`${channelId}-${index - 1}.html`}>Newer Messages </a>
-      </span>
-    ) : null;
-  const sep1 = older && newer ? " | " : null;
-  const sep2 = older || newer ? " | " : null;
-
-  const options: Array<JSX.Element> = [];
-  for (const [i, chunk] of chunksInfo.entries()) {
-    const text = `${i} - ${chunk.newest} to ${chunk.oldest}`;
-    const value = `${channelId}-${i}.html`;
-    options.push(
-      <option key={value} value={value}>
-        {text}
-      </option>,
-    );
-  }
+  const here = chunksInfo[index];
+  const years = groupByYear(months);
 
   return (
     <div className="pagination">
-      {newer}
-      {sep1}
-      {older}
-      {sep2}
-      <div className="jumper">
-        <select id="jumper" defaultValue={`${channelId}-${index}.html`}>
-          {options}
-        </select>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              document.getElementById("jumper").onchange = function () {
-                window.location.href = this.value;
-              }
-            `,
-          }}
-        />
-      </div>
+      <span className="pages">
+        {index > 0 ? (
+          <a href={`${channelId}-${index - 1}.html`} rel="prev">
+            ← Newer
+          </a>
+        ) : (
+          <span className="spent">← Newer</span>
+        )}
+        <span className="where">
+          {here ? `${here.newest} - ${here.oldest}` : `${index + 1}/${length}`}
+        </span>
+        {index + 1 < length ? (
+          <a href={`${channelId}-${index + 1}.html`} rel="next">
+            Older →
+          </a>
+        ) : (
+          <span className="spent">Older →</span>
+        )}
+      </span>
+
+      {/* Every page of the channel used to be one <select>, each option
+          labelled with the timestamps at its ends. At 714 pages that is a list
+          nobody can scan, and the thing a reader knows is "spring 2017", not a
+          page number. Months are what people remember. */}
+      {years.length > 0 ? (
+        <details className="calendar">
+          <summary>Jump to a month</summary>
+          <div className="calendar-years">
+            {years.map((year) => (
+              <div className="calendar-year" key={year.year}>
+                <span className="calendar-label">{year.year}</span>
+                <span className="calendar-months">
+                  {year.months.map((month) => (
+                    <a
+                      key={month.month}
+                      href={`${channelId}-${month.page}.html`}
+                      className={month.page === index ? "current" : undefined}
+                      title={month.month}
+                    >
+                      {month.label}
+                    </a>
+                  ))}
+                </span>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 };
 
-/**
- * Everyone the archive knows, and everything they have been called.
- *
- * Slack keeps no rename history, so this page is the only place the answer
- * exists. Dates are when a name was SEEN, not when it was adopted: a name mined
- * from a mention is dated by the message, one recovered from an older rendering
- * of these pages by when that page was written, which is coarser. The source is
- * shown for each so the difference is visible rather than implied.
- */
 const NamesPage: React.FunctionComponent = () => {
   const { users, userNames, botIds, profileIds } = useRender();
 
@@ -2065,37 +2074,13 @@ async function renderIndexPage() {
   return renderAndWrite(<IndexPage />, INDEX_PATH, "html/");
 }
 
-interface RenderMessagesPageOptions {
-  channel: Channel;
-  messages: Array<ArchiveMessage>;
-  chunkIndex: number;
-  chunksInfo: ChunksInfo;
-}
-
-function renderMessagesPage(options: RenderMessagesPageOptions, spinner: Ora) {
-  const { channel, messages, chunkIndex: index, chunksInfo } = options;
-  const page = (
-    <MessagesPage
-      channel={channel}
-      messages={messages}
-      index={index}
-      chunksInfo={chunksInfo}
-    />
-  );
-
-  const filePath = getHTMLFilePath(channel.id!, index);
-  spinner.text = `${channel.name || channel.id}: Writing ${index + 1}/${
-    chunksInfo.length
-  } ${filePath}`;
-  spinner.render();
-
-  // Update the search index. In messages, the youngest message is first.
-  if (messages.length > 0) {
-    recordPage(channel.id, messages[messages.length - 1]?.ts);
-  }
-
-  return renderAndWrite(page, filePath);
-}
+/*
+ * createHtmlForChannel and renderMessagesPage lived here: the channel-at-a-time
+ * render, replaced by renderPages, which works a page at a time so the biggest
+ * channel is not one worker's problem. Left as dead code they were a second
+ * path that nothing called and nothing tested - and the compiler only noticed
+ * them at all because a new prop was added to the page they rendered.
+ */
 
 async function renderAndWrite(
   page: JSX.Element,
@@ -2145,70 +2130,6 @@ export async function getChannelsToCreateFilesFor(
   return result;
 }
 
-async function createHtmlForChannel({
-  channel,
-  i,
-  total,
-}: {
-  channel: Channel;
-  i: number;
-  total: number;
-}) {
-  const messages = await getMessages(channel.id!, true);
-  const chunks = chunk(messages, MESSAGE_CHUNK);
-  const spinner = ora({
-    text: `Rendering HTML for ${i + 1}/${total} ${channel.name || channel.id}`,
-    // Several workers writing spinner frames to one terminal is illegible.
-    isEnabled: !process.env.SLACK_ARCHIVE_QUIET,
-  }).start();
-
-  // Calculate info about all chunks
-  const chunksInfo: ChunksInfo = [];
-  for (const iChunk of chunks) {
-    chunksInfo.push({
-      oldest: formatTimestamp(iChunk[iChunk.length - 1], "Pp"),
-      newest: formatTimestamp(iChunk[0], "Pp"),
-      count: iChunk.length,
-    });
-  }
-
-  if (chunks.length === 0) {
-    await renderMessagesPage(
-      {
-        channel,
-        messages: [],
-        chunkIndex: 0,
-        chunksInfo: chunksInfo,
-      },
-      spinner,
-    );
-  }
-
-  for (const [chunkI, chunk] of chunks.entries()) {
-    await renderMessagesPage(
-      {
-        channel,
-        messages: chunk,
-        chunkIndex: chunkI,
-        chunksInfo,
-      },
-      spinner,
-    );
-  }
-
-  spinner.succeed(
-    `Rendered HTML for ${i + 1}/${total} ${channel.name || channel.id}`,
-  );
-}
-
-/**
- * Everything the pages need, gathered before any of them is written.
- *
- * The order in here is the only order that matters, and it is stated once:
- * read the archive, count it, and only then can a page be rendered - because
- * counting is what knows which days are missing and whose profile pages exist,
- * and every page links to both.
- */
 async function buildRenderContext(
   channels: Array<Channel>,
 ): Promise<RenderContext> {

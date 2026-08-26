@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.175] - 2026-08-26
+
+### Added
+- **Dark mode**, from the system setting. Every colour in the stylesheet is a
+  token now and the dark scheme redefines the tokens rather than adding a
+  second set of rules, so the two cannot drift apart. Tests hold the line: no
+  token may be defined as itself, every token used must be defined, and the
+  dark block may only contain `:root`.
+- **A calendar instead of a dropdown.** Getting around #offtopic meant a
+  `<select>` with 714 options, each labelled "694 - 03/27/2017, 3:38 PM to
+  03/21/2017, 10:22 PM". Now: Newer/Older, where you are, and "Jump to a
+  month" - years as rows, months as chips, each landing on the page where that
+  month begins. It also shows the archive's gaps for free: a month with no
+  messages simply has no chip.
+
+### Changed
+- **The channel list is set like Slack's**: the `#` in its own column so names
+  align, rows indented under their section.
+- **The header folds down on a phone.** It was taking a third of the screen
+  before the first message: the creation line, the topic and the long page
+  range are hidden below 600px.
+
+### Fixed
+- **`--surface: var(--surface)`.** A find-and-replace turned an earlier token
+  block into self-references, which are guaranteed-invalid: the tokens became
+  undefined and everything that used them fell back to transparent. The only
+  symptom was a sticky header you could see through.
+- **`--text-muted` never existed.** Four rules used `var(--text-muted, #616061)`
+  and the fallback was doing all the work.
+- **Sidebar labels vanished in dark mode**: white text that had been written as
+  `#fff` became `var(--surface)`, which inverts. Ink that sits on the sidebar
+  or on an accent fill now says so.
+- Removed the channel-at-a-time render path, dead since page-level rendering
+  landed - about two hundred lines that nothing called and nothing tested.
+
 ## [v26.08.26.174] - 2026-08-26
 
 ### Added

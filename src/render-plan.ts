@@ -1,5 +1,6 @@
 import { ElementSpan } from "./big-json.js";
 import { ChunksInfo } from "./interfaces.js";
+import { MonthPage, monthsToPages } from "./calendar-nav.js";
 
 /**
  * Which pages exist, where their messages are in the file, and who renders
@@ -28,6 +29,8 @@ export interface ChannelPlan {
   channelId: string;
   chunksInfo: ChunksInfo;
   pages: Array<PagePlan>;
+  /** Every month this channel has messages in, and where that month starts. */
+  months: Array<MonthPage>;
 }
 
 export interface PlanOptions {
@@ -51,6 +54,7 @@ export function planChannel(
       channelId,
       chunksInfo,
       pages: [{ index: 0, span: { start: 0, end: 0 } }],
+      months: [],
     };
   }
 
@@ -70,7 +74,12 @@ export function planChannel(
     });
   }
 
-  return { channelId, chunksInfo, pages };
+  return {
+    channelId,
+    chunksInfo,
+    pages,
+    months: monthsToPages(messages as never, chunkSize),
+  };
 }
 
 /**
@@ -107,6 +116,7 @@ export function shareOutPages(
       bucket.set(plan.channelId, {
         channelId: plan.channelId,
         chunksInfo: plan.chunksInfo,
+        months: plan.months,
         pages: [page],
       });
     }

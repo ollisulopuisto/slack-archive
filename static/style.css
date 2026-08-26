@@ -75,6 +75,79 @@ select {
   }
 }
 
+/* ==========================================================================
+   Colour
+   --------------------------------------------------------------------------
+   Every colour in this file is a token, and the dark scheme redefines the
+   tokens rather than adding a second set of rules. A half-tokenised sheet is
+   how a page ends up with dark text on a dark background: one rule that kept
+   its literal, in a file where everything else moved.
+   ========================================================================== */
+
+:root {
+  color-scheme: light dark;
+
+  --sidebar: #39113e;
+  --sidebar-hover: #301034;
+  --sidebar-ink: #cdc3ce;
+  --sidebar-ink-strong: #ffffff;
+  --sidebar-ink-quiet: rgba(255, 255, 255, 0.55);
+  --sidebar-raised: rgba(255, 255, 255, 0.08);
+  --sidebar-raised-hover: rgba(255, 255, 255, 0.16);
+
+  --page: #ffffff;
+  --surface: #ffffff;
+  --surface-sunken: #faf9fa;
+  --surface-raised: #fafafa;
+  --ink: rgb(29, 28, 29);
+  --ink-strong: #1d1c1d;
+  --ink-muted: #616061;
+  --line: #e2e2e2;
+  --line-strong: #d5d0d6;
+  --link: rgb(18, 100, 163);
+  --accent: #39113e;
+
+  --on-accent: #ffffff;
+  --target: #fff8d4;
+  --warn-edge: #d97706;
+  --warn-surface: #fff7ed;
+  --warn-ink: #7c2d12;
+
+  --shadow: rgba(0, 0, 0, 0.25);
+  --scrim: rgba(0, 0, 0, 0.45);
+}
+
+/* The same archive at night. The sidebar stays the workspace's colour - it is
+   how you know where you are - and everything else inverts around it. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sidebar: #2b0d2f;
+    --sidebar-hover: #3a1440;
+    --sidebar-ink: #cdc3ce;
+
+    --page: #16151a;
+    --surface: #1d1b22;
+    --surface-sunken: #232029;
+    --surface-raised: #262330;
+    --ink: #e8e6ea;
+    --ink-strong: #f5f3f7;
+    --ink-muted: #a8a2ad;
+    --line: #322e3a;
+    --line-strong: #423c4c;
+    --link: #9ec5ff;
+    --accent: #c9a6d4;
+
+    --on-accent: #16151a;
+    --target: #3b3410;
+    --warn-edge: #b45309;
+    --warn-surface: #2a1c0d;
+    --warn-ink: #f5c99b;
+
+    --shadow: rgba(0, 0, 0, 0.6);
+    --scrim: rgba(0, 0, 0, 0.6);
+  }
+}
+
 @font-face {
   font-family: "Lato";
   src: url("fonts/Lato-Regular.ttf") format("truetype");
@@ -93,11 +166,12 @@ body,
 html {
   font-family: "Lato", sans-serif;
   font-size: 14px;
-  color: rgb(29, 28, 29);
+  color: var(--ink);
+  background: var(--page);
 }
 
 a {
-  color: rgb(18, 100, 163);
+  color: var(--link);
 }
 
 audio,
@@ -114,7 +188,7 @@ video {
   width: 36px;
   border-radius: 7px;
   margin-right: 10px;
-  background: #c1c1c1;
+  background: var(--line-strong);
 }
 
 .message-gutter {
@@ -124,8 +198,8 @@ video {
 }
 
 .message-gutter:target {
-  background-color: #fafafa;
-  border: 2px solid #39113e;
+  background-color: var(--surface-raised);
+  border: 2px solid var(--sidebar);
   padding: 10px;
   border-radius: 5px;
 }
@@ -146,34 +220,34 @@ video {
 .timestamp {
   font-weight: 200;
   font-size: 13px;
-  color: rgb(97, 96, 97);
+  color: var(--ink-muted);
 }
 
 .header {
   position: sticky;
-  background: #fff;
-  color: #616061;
+  background: var(--surface);
+  color: var(--ink-muted);
   top: 0;
   left: 0;
   padding: 10px;
   min-height: 70px;
-  border-bottom: 1px solid #e2e2e2;
+  border-bottom: 1px solid var(--line);
   box-sizing: border-box;
 }
 
 .header h1 {
   font-size: 16px;
-  color: #1d1c1d;
+  color: var(--ink-strong);
   display: inline-block;
 }
 
 .header a {
-  color: #616061;
+  color: var(--ink-muted);
 }
 
 .header a:active,
 .header a.current {
-  color: #000;
+  color: var(--ink-strong);
 }
 
 .header .created {
@@ -197,12 +271,12 @@ video {
   margin-right: 10px;
   margin-top: 10px;
   border-radius: 4px;
-  border: 1px solid #80808045;
+  border: 1px solid var(--line);
   outline: none;
 }
 
 .reaction {
-  background-color: #eaeaea;
+  background-color: var(--line);
   display: inline-block;
   border-radius: 10px;
   font-size: 0.7em;
@@ -232,9 +306,9 @@ video {
 }
 
 #channels {
-  background: #39113e;
+  background: var(--sidebar);
   width: 250px;
-  color: #cdc3ce;
+  color: var(--sidebar-ink);
   padding-top: 10px;
   overflow: scroll;
   padding-bottom: 20px;
@@ -252,7 +326,7 @@ video {
 
 #channels .section {
   font-weight: 800;
-  color: #fff;
+  color: var(--sidebar-ink-strong);
   margin-top: 10px;
 }
 
@@ -263,7 +337,7 @@ video {
 #channels a {
   padding: 5px;
   display: block;
-  color: #cdc3ce;
+  color: var(--sidebar-ink);
   text-decoration: none;
   padding-left: 20px;
   display: flex;
@@ -282,8 +356,8 @@ video {
 }
 
 #channels a:hover {
-  background: #301034;
-  color: #edeced;
+  background: var(--sidebar-hover);
+  color: var(--sidebar-ink-strong);
 }
 
 #messages {
@@ -306,8 +380,8 @@ video {
 
 #search li {
   padding: 10px;
-  border-bottom: 1px solid #e2e2e2;
-  background: hsl(0deg 0% 98%);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-sunken);
   border-radius: 5px;
   width: 100%;
   max-width: 800px;
@@ -340,7 +414,7 @@ video {
   width: 100%;
   padding: 10px;
   padding-right: 40px;
-  border: 1px solid #e2e2e2;
+  border: 1px solid var(--line);
   border-radius: 4px;
 }
 
@@ -351,7 +425,7 @@ video {
   border: none;
   cursor: pointer;
   font-size: 20px;
-  color: #616061;
+  color: var(--ink-muted);
 }
 
 .Filters {
@@ -363,7 +437,7 @@ video {
 
 .Filters select {
   padding: 5px 10px;
-  border: 1px solid #e2e2e2;
+  border: 1px solid var(--line);
   border-radius: 4px;
   background: white;
   min-width: 150px;
@@ -418,12 +492,12 @@ video {
    than being the light value inverted.
    --------------------------------------------------------------------------- */
 :root {
-  --viz-surface: #ffffff;
+  --viz-surface: var(--surface);
   --viz-series: #4a3aa7;
   --viz-series-soft: #4a3aa71f;
-  --viz-axis: #e2e2e2;
-  --viz-ink: #1d1c1d;
-  --viz-ink-muted: #616061;
+  --viz-axis: var(--line);
+  --viz-ink: var(--ink-strong);
+  --viz-ink-muted: var(--ink-muted);
 }
 
 /* No dark block on purpose. The rest of this archive is a light page with a
@@ -793,7 +867,7 @@ table.timeline td.timestamp {
 /* Custom emoji the archive never managed to download. The shortcode is what
    the person typed, and it beats an empty box. */
 .emoji-missing {
-  color: var(--text-muted, #616061);
+  color: var(--ink-muted);
   font-size: 0.9em;
 }
 
@@ -809,7 +883,7 @@ a.timestamp:focus-visible {
 }
 
 .message-gutter:target {
-  background: #fff8d4;
+  background: var(--target);
   scroll-margin-top: 1rem;
 }
 
@@ -818,9 +892,9 @@ a.timestamp:focus-visible {
 .gap-notice {
   margin: 0 0 1.5rem;
   padding: 0.75rem 1rem;
-  border-left: 4px solid #d97706;
-  background: #fff7ed;
-  color: #7c2d12;
+  border-left: 4px solid var(--warn-edge);
+  background: var(--warn-surface);
+  color: var(--warn-ink);
   line-height: 1.5;
   max-width: 60rem;
 }
@@ -833,10 +907,10 @@ a.timestamp:focus-visible {
 .gap-divider {
   margin: 1.5rem 0;
   padding: 0.5rem 0.75rem;
-  border-top: 1px dashed #d97706;
-  border-bottom: 1px dashed #d97706;
-  background: #fff7ed;
-  color: #7c2d12;
+  border-top: 1px dashed var(--warn-edge);
+  border-bottom: 1px dashed var(--warn-edge);
+  background: var(--warn-surface);
+  color: var(--warn-ink);
   font-size: 0.85rem;
   text-align: center;
 }
@@ -845,21 +919,21 @@ a.timestamp:focus-visible {
    written last night or abandoned in March. */
 .generated {
   padding: 0.75rem 1rem;
-  color: var(--text-muted, #616061);
+  color: var(--ink-muted);
   font-size: 0.8rem;
 }
 
 #index .generated {
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--sidebar-ink-quiet);
 }
 
 /* A file Slack itself no longer has. Better than a link that cannot work. */
 .file-gone {
   display: inline-block;
   padding: 0.25rem 0.5rem;
-  border: 1px dashed var(--text-muted, #616061);
+  border: 1px dashed var(--ink-muted);
   border-radius: 4px;
-  color: var(--text-muted, #616061);
+  color: var(--ink-muted);
   font-size: 0.85rem;
 }
 
@@ -871,18 +945,6 @@ a.timestamp:focus-visible {
    the screen and a conversation squeezed into what is left. People read Slack
    on phones; they will read this on phones.
    ========================================================================== */
-
-:root {
-  --sidebar: #39113e;
-  --sidebar-hover: #301034;
-  --sidebar-ink: #cdc3ce;
-  --ink: rgb(29, 28, 29);
-  --ink-muted: #616061;
-  --line: #e2e2e2;
-  --surface: #ffffff;
-  --surface-sunken: #faf9fa;
-  --accent: #39113e;
-}
 
 /* The sidebar keeps its own place while the page scrolls past it; the page
    scrolls, not a box inside it, so anchors and the back button behave. */
@@ -931,10 +993,10 @@ a.timestamp:focus-visible {
     padding: 8px 14px;
     border-radius: 999px;
     background: var(--sidebar);
-    color: #fff;
+    color: var(--sidebar-ink-strong);
     font-weight: 800;
     cursor: pointer;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 2px 10px var(--shadow);
   }
 
   #index > #channels {
@@ -948,7 +1010,7 @@ a.timestamp:focus-visible {
     padding-top: 56px;
     transform: translateX(-100%);
     transition: transform 0.18s ease-out;
-    box-shadow: 0 0 40px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 0 40px var(--shadow);
   }
 
   #index > .nav-toggle:checked ~ #channels {
@@ -960,11 +1022,11 @@ a.timestamp:focus-visible {
     position: fixed;
     inset: 0;
     z-index: 45;
-    background: rgba(0, 0, 0, 0.45);
+    background: var(--scrim);
   }
 
   .nav-toggle:focus-visible ~ .nav-open {
-    outline: 2px solid #fff;
+    outline: 2px solid var(--sidebar-ink-strong);
     outline-offset: 2px;
   }
 
@@ -1062,7 +1124,7 @@ table.timeline,
 .Search input {
   padding: 12px 40px 12px 14px;
   border-radius: 8px;
-  border: 1px solid #d5d0d6;
+  border: 1px solid var(--line-strong);
 }
 
 .Search input:focus-visible {
@@ -1078,7 +1140,7 @@ table.timeline,
 .Filters select {
   padding: 8px 10px;
   border-radius: 8px;
-  border: 1px solid #d5d0d6;
+  border: 1px solid var(--line-strong);
   background: var(--surface);
   max-width: 100%;
 }
@@ -1109,7 +1171,7 @@ table.timeline,
 #search a:hover li,
 #search a:focus-visible li {
   background: var(--surface-sunken);
-  border-color: #d6c9d8;
+  border-color: var(--line-strong);
 }
 
 /* The line that says where and when: quiet, and the same shape every time, so
@@ -1144,8 +1206,8 @@ table.timeline,
 .text blockquote {
   margin: 4px 0;
   padding: 2px 0 2px 12px;
-  border-left: 4px solid #d5d0d6;
-  color: #454245;
+  border-left: 4px solid var(--line-strong);
+  color: var(--ink-muted);
 }
 
 .text blockquote:first-child {
@@ -1162,15 +1224,15 @@ table.timeline,
   margin: 0 12px 12px;
   padding: 4px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--sidebar-raised);
   transition:
     background 0.15s ease-out,
     box-shadow 0.15s ease-out;
 }
 
 .channel-search:focus-within {
-  background: rgba(255, 255, 255, 0.16);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
+  background: var(--sidebar-raised-hover);
+  box-shadow: 0 0 0 2px var(--sidebar-raised-hover);
 }
 
 .channel-search input {
@@ -1180,12 +1242,12 @@ table.timeline,
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: #fff;
+  color: var(--sidebar-ink-strong);
   font-size: 13px;
 }
 
 .channel-search input::placeholder {
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--sidebar-ink-quiet);
 }
 
 .channel-search input:focus {
@@ -1195,7 +1257,7 @@ table.timeline,
 .channel-search button {
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--sidebar-ink);
   font-size: 18px;
   line-height: 1;
   padding: 4px 8px;
@@ -1205,8 +1267,8 @@ table.timeline,
 
 .channel-search button:hover,
 .channel-search button:focus-visible {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.12);
+  color: var(--sidebar-ink-strong);
+  background: var(--sidebar-raised);
 }
 
 /* The front page: what this is, before you pick a conversation. */
@@ -1228,7 +1290,7 @@ table.timeline,
    rather than at the end of whatever page it is attached to. */
 #channels .generated {
   padding: 16px 20px 24px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--sidebar-ink-quiet);
 }
 
 /* ==========================================================================
@@ -1300,5 +1362,134 @@ table.timeline,
   #names,
   #front {
     padding-top: 56px;
+  }
+}
+
+/* The channel list, the way Slack sets it: the # in its own column so the
+   names line up with each other rather than each starting wherever its own
+   hash ended, and the rows indented under the section they belong to. */
+#channels .section {
+  padding-left: 16px;
+}
+
+#channels a {
+  padding-left: 16px;
+  gap: 8px;
+  align-items: center;
+}
+
+#channels a .lead {
+  flex: 0 0 12px;
+  text-align: center;
+  opacity: 0.6;
+}
+
+#channels a > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ==========================================================================
+   Getting around a channel with ten years in it
+   ========================================================================== */
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  font-size: 13px;
+}
+
+.pagination .pages {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pagination .where {
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pagination .spent {
+  color: var(--ink-muted);
+  opacity: 0.5;
+}
+
+.calendar {
+  flex: 1 0 100%;
+}
+
+.calendar summary {
+  cursor: pointer;
+  color: var(--ink-muted);
+}
+
+.calendar-years {
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 8px 0 4px;
+}
+
+.calendar-year {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 2px 0;
+}
+
+.calendar-label {
+  flex: 0 0 3.2em;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-months {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+}
+
+.calendar-months a {
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-decoration: none;
+  color: var(--link);
+}
+
+.calendar-months a:hover,
+.calendar-months a:focus-visible {
+  background: var(--surface-sunken);
+}
+
+.calendar-months a.current {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* The header on a phone: the channel and where you are, and everything else
+   folded away. It was taking a third of the screen before a single message. */
+@media (max-width: 600px) {
+  .header {
+    gap: 2px;
+    padding: 56px 12px 8px;
+  }
+
+  .header .created,
+  .header .topic {
+    display: none;
+  }
+
+  .header h1 {
+    font-size: 16px;
+  }
+
+  .messages-list .timestamp {
+    font-size: 11px;
+  }
+
+  .pagination {
+    font-size: 12px;
   }
 }
