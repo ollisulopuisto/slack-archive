@@ -4,6 +4,7 @@ import {
   speculativeTotals,
   estimatesByYear,
   shareOfMissing,
+  shareOfRange,
 } from "./speculative.js";
 
 const estimates = {
@@ -58,5 +59,35 @@ describe("shareOfMissing()", () => {
   it("has nothing to share out when nothing is missing or nobody talked", () => {
     expect(shareOfMissing(250, 1000, 0)).toBe(0);
     expect(shareOfMissing(0, 0, 400)).toBe(0);
+  });
+});
+
+describe("a share of the missing days", () => {
+  const range = { estimate: 1000, low: 800, high: 1300 };
+
+  it("carries the interval the total was measured with", () => {
+    // A tenth of the archive is assumed to be a tenth of what is missing, so
+    // the low and high ends move with the total's, not with a made-up spread.
+    expect(shareOfRange(100, 1000, range)).toEqual({
+      estimate: 100,
+      low: 80,
+      high: 130,
+    });
+  });
+
+  it("keeps the range wide enough to be visibly uncertain", () => {
+    // The reason this exists: with low === high the number swaps and then sits
+    // there, and a page full of estimates reads as a page full of facts.
+    const share = shareOfRange(250, 1000, range)!;
+
+    expect(share.high).toBeGreaterThan(share.low);
+  });
+
+  it("is nothing at all when there is nothing to share out", () => {
+    expect(shareOfRange(0, 1000, range)).toBeUndefined();
+    expect(shareOfRange(100, 0, range)).toBeUndefined();
+    expect(
+      shareOfRange(1, 1000000, { estimate: 1, low: 0, high: 2 }),
+    ).toBeUndefined();
   });
 });

@@ -83,3 +83,31 @@ export function shareOfMissing(
 
   return Math.round(missing * (theirs / everyone));
 }
+
+/**
+ * Somebody's share of the missing days, with the interval carried through.
+ *
+ * The share itself is treated as exact - if you wrote a tenth of the archive,
+ * this assumes you wrote a tenth of what is missing - and the uncertainty
+ * comes entirely from the total, which is where it was actually measured. That
+ * UNDERSTATES the real spread, because the share is a guess too; it is the
+ * honest half of the uncertainty rather than an invented whole.
+ */
+export function shareOfRange(
+  theirs: number,
+  everyone: number,
+  range: { estimate: number; low: number; high: number },
+): { estimate: number; low: number; high: number } | undefined {
+  if (everyone <= 0 || theirs <= 0) return undefined;
+
+  const share = theirs / everyone;
+  const estimate = Math.round(range.estimate * share);
+
+  if (estimate <= 0) return undefined;
+
+  return {
+    estimate,
+    low: Math.round(range.low * share),
+    high: Math.round(range.high * share),
+  };
+}

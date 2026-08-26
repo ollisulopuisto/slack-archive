@@ -104,6 +104,7 @@ import { estimateMissingByMonth, MonthEstimate } from "./estimate.js";
 import {
   estimatesByYear,
   shareOfMissing,
+  shareOfRange,
   speculativeTotals,
 } from "./speculative.js";
 import { UserAvatars } from "./user-avatars.js";
@@ -1460,14 +1461,38 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
   );
   const archived = stats?.messages || 0;
   const rate = archived > 0 ? missingMessages / archived : 0;
+  // The interval the model gave the workspace, expressed as the same rate. The
+  // person's share of the missing days is treated as fixed; what moves is how
+  // much was missing at all, which is the part that was measured.
+  const spread = Object.values(estimates).reduce(
+    (range, month) => ({
+      low: range.low + month.low,
+      high: range.high + month.high,
+    }),
+    { low: 0, high: 0 },
+  );
+  const lowRate = archived > 0 ? spread.low / archived : 0;
+  const highRate = archived > 0 ? spread.high / archived : 0;
   const inflate = (value: number) =>
     rate > 0 ? formatCount(Math.round(value * (1 + rate))) : undefined;
+  /** The low and high ends of that same inflation, for a tile that wobbles. */
+  const inflateRange = (value: number) =>
+    rate > 0
+      ? {
+          low: Math.round(value * (1 + lowRate)),
+          high: Math.round(value * (1 + highRate)),
+        }
+      : {};
   /** The same thing as a chart estimate, for the bars. */
   const inflateBy = (value: number) => {
     const estimate = Math.round(value * rate);
 
     return estimate > 0
-      ? { estimate, low: estimate, high: estimate }
+      ? {
+          estimate,
+          low: Math.round(value * lowRate),
+          high: Math.round(value * highRate),
+        }
       : undefined;
   };
   const names = userNames[userId] || [];
@@ -1527,6 +1552,7 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
             label="Messages"
             value={formatCount(person.messages)}
             speculative={inflate(person.messages)}
+            {...inflateRange(person.messages)}
             speculativeHint="if the missing days were like the rest"
           />
           <Tile label="Names" value={formatCount(names.length)} />
@@ -1535,18 +1561,21 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
             label="Files"
             value={formatCount(person.files)}
             speculative={inflate(person.files)}
+            {...inflateRange(person.files)}
             speculativeHint="if the missing days were like the rest"
           />
           <Tile
             label="Reactions received"
             value={formatCount(person.reactionsReceived)}
             speculative={inflate(person.reactionsReceived)}
+            {...inflateRange(person.reactionsReceived)}
             speculativeHint="if the missing days were like the rest"
           />
           <Tile
             label="Reactions given"
             value={formatCount(person.reactionsGiven)}
             speculative={inflate(person.reactionsGiven)}
+            {...inflateRange(person.reactionsGiven)}
             speculativeHint="if the missing days were like the rest"
           />
           <Tile label="Active years" value={formatCount(activeYears)} />
@@ -1779,6 +1808,7 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
   );
   // The interval the seasonal model produced, kept so the page can show the
   // estimate as a range rather than as a number that happens to move.
+  const reactionRate = data.messages > 0 ? data.reactions / data.messages : 0;
   const speculativeRange = Object.values(estimates).reduce(
     (range, month) => ({
       low: range.low + month.low,
@@ -1787,23 +1817,25 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
     { low: 0, high: 0 },
   );
 
-  /** Somebody's share of the missing days, as an estimate a bar can carry. */
+  /** Somebody's share of the missing days, with the measured interval carried
+   * through so the number can be shown as the range it came from. */
   const missingFor = (
     theirs: number,
     everyone: number,
     of: "messages" | "reactions" = "messages",
   ) => {
-    const estimate = shareOfMissing(
-      theirs,
-      everyone,
+    const scale =
       of === "messages"
-        ? speculative.missingMessages
-        : speculative.missingReactions,
-    );
+        ? 1
+        : speculative.missingMessages > 0
+          ? speculative.missingReactions / speculative.missingMessages
+          : 0;
 
-    return estimate > 0
-      ? { estimate, low: estimate, high: estimate }
-      : undefined;
+    return shareOfRange(theirs, everyone, {
+      estimate: Math.round(speculative.missingMessages * (scale || 1)),
+      low: Math.round(speculativeRange.low * (scale || 1)),
+      high: Math.round(speculativeRange.high * (scale || 1)),
+    });
   };
   const allEmoji = Object.values(data.emojiStats).sort(
     (a, b) => b.count - a.count,
@@ -1851,6 +1883,12 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
             value={formatCount(data.reactions)}
             speculative={formatCount(speculative.reactions)}
             speculativeHint={`${formatCount(speculative.missingReactions)} estimated at the archive's own rate`}
+            low={
+              data.reactions + Math.round(speculativeRange.low * reactionRate)
+            }
+            high={
+              data.reactions + Math.round(speculativeRange.high * reactionRate)
+            }
           />
           <Tile
             label="Thread replies"
@@ -1925,6 +1963,13 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
               value={formatCount(data.reactions)}
               speculative={formatCount(speculative.reactions)}
               speculativeHint={`${formatCount(speculative.missingReactions)} estimated`}
+              low={
+                data.reactions + Math.round(speculativeRange.low * reactionRate)
+              }
+              high={
+                data.reactions +
+                Math.round(speculativeRange.high * reactionRate)
+              }
             />
             <Tile
               label="Custom emoji used"
@@ -2008,6 +2053,15 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
     { messages: channel.messages, reactions: channel.reactions || 0 },
     channelEstimates,
   );
+  const channelRange = Object.values(channelEstimates).reduce(
+    (range, month) => ({
+      low: range.low + month.low,
+      high: range.high + month.high,
+    }),
+    { low: 0, high: 0 },
+  );
+  const reactionRate =
+    channel.messages > 0 ? (channel.reactions || 0) / channel.messages : 0;
 
   // What this channel reacts with, in the shape the emoji rows want: the
   // count is this channel's, the rest of what is known about the emoji comes
@@ -2032,17 +2086,19 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
     .filter(({ userId }) => !stats?.byUser[userId]?.isBot)
     .sort((a, b) => b.count - a.count);
 
-  /** Somebody's share of what this channel is missing. */
-  const missingHere = (theirs: number) => {
-    const estimate = shareOfMissing(
-      theirs,
-      channel.messages,
-      speculative.missingMessages,
-    );
+  /** Somebody's share of what this channel is missing, carrying the channel's
+   * own interval so the number reads as the range it came from. */
+  const missingHere = (
+    theirs: number,
+    of: "messages" | "reactions" = "messages",
+  ) => {
+    const scale = of === "messages" ? 1 : reactionRate;
 
-    return estimate > 0
-      ? { estimate, low: estimate, high: estimate }
-      : undefined;
+    return shareOfRange(theirs, channel.messages, {
+      estimate: Math.round(speculative.missingMessages * scale),
+      low: Math.round(channelRange.low * scale),
+      high: Math.round(channelRange.high * scale),
+    });
   };
 
   return (
@@ -2062,6 +2118,8 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
             value={formatCount(channel.messages)}
             speculative={formatCount(speculative.messages)}
             speculativeHint={`${formatCount(speculative.missingMessages)} estimated`}
+            low={channel.messages + channelRange.low}
+            high={channel.messages + channelRange.high}
           />
           <Tile label="People who posted" value={formatCount(posters.length)} />
           <Tile
@@ -2069,6 +2127,14 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
             value={formatCount(channel.reactions || 0)}
             speculative={formatCount(speculative.reactions)}
             speculativeHint={`${formatCount(speculative.missingReactions)} estimated`}
+            low={
+              (channel.reactions || 0) +
+              Math.round(channelRange.low * reactionRate)
+            }
+            high={
+              (channel.reactions || 0) +
+              Math.round(channelRange.high * reactionRate)
+            }
           />
           {channel.members.length > 0 ? (
             <Tile
@@ -2244,12 +2310,29 @@ const BotsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
     (total, month) => total + month.estimate,
     0,
   );
+  const spread = Object.values(estimates).reduce(
+    (range, month) => ({
+      low: range.low + month.low,
+      high: range.high + month.high,
+    }),
+    { low: 0, high: 0 },
+  );
   const botShare = data.messages > 0 ? data.botMessages / data.messages : 0;
   const botsMissing = Math.round(missing * botShare);
+  const botRate = (n: number) =>
+    data.botMessages > 0 ? (n * botShare) / data.botMessages : 0;
   const inflateBot = (value: number) =>
     data.botMessages > 0 && botsMissing > 0
       ? formatCount(Math.round(value * (1 + botsMissing / data.botMessages)))
       : undefined;
+  /** The bots' share of the interval, so their tiles move like the rest. */
+  const inflateBotRange = (value: number) =>
+    data.botMessages > 0 && botsMissing > 0
+      ? {
+          low: Math.round(value * (1 + botRate(spread.low))),
+          high: Math.round(value * (1 + botRate(spread.high))),
+        }
+      : {};
   const bots = Object.values(data.byUser)
     .filter((account) => account.isBot && account.messages > 0)
     .sort((a, b) => b.messages - a.messages);
@@ -2289,6 +2372,7 @@ const BotsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
             label="Messages"
             value={formatCount(data.botMessages)}
             speculative={inflateBot(data.botMessages)}
+            {...inflateBotRange(data.botMessages)}
             speculativeHint={`${formatCount(botsMissing)} estimated for the missing days`}
           />
           <Tile label="Share of everything" value={`${share}%`} />
@@ -2313,12 +2397,8 @@ const BotsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
                       estimate: Math.round(
                         bot.messages * (botsMissing / data.botMessages),
                       ),
-                      low: Math.round(
-                        bot.messages * (botsMissing / data.botMessages),
-                      ),
-                      high: Math.round(
-                        bot.messages * (botsMissing / data.botMessages),
-                      ),
+                      low: Math.round(bot.messages * botRate(spread.low)),
+                      high: Math.round(bot.messages * botRate(spread.high)),
                     }
                   : undefined,
             }))}
