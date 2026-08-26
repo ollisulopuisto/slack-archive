@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.161] - 2026-08-26
+
+### Changed
+- **The gap notice says the messages are gone, because they are.** The
+  workspace keeps about 90 days of history: probing `conversations.history`
+  inside the gaps returns nothing, and - the part that makes the probe mean
+  something - control dates outside the gaps, where the archive does hold
+  messages, return them. So the 521 missing days are not a fetch waiting to
+  happen, and for everything older than about 90 days this archive is not a
+  copy of the workspace, it is the only one.
+
 ## [v26.08.26.160] - 2026-08-26
 
 ### Added

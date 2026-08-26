@@ -817,10 +817,10 @@ const GapNotice: React.FunctionComponent = () => {
           </span>
         </span>
       ))}
-      , because the archiver was not run. Whether Slack still holds those
-      messages depends on the workspace's retention, and this archive does not
-      have them: every number and chart on this page counts what was archived,
-      not what was said.
+      , because the archiver was not run. Slack does not have them either - the
+      workspace keeps about 90 days of history, so what was not archived at the
+      time is gone. Every number and chart on this page counts what was
+      archived, not what was said.
     </div>
   );
 };
@@ -830,7 +830,7 @@ const GapDivider: React.FunctionComponent<{ gap: Gap }> = ({ gap }) => (
   <div className="gap-divider" role="note">
     {formatCount(gap.days)} days missing from the archive here -{" "}
     {formatIsoDay(gap.from)} to {formatIsoDay(gap.to)}. Not silence: nothing was
-    archived then.
+    archived then, and Slack no longer has it.
   </div>
 );
 
