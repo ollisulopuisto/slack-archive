@@ -2,6 +2,7 @@ import fs from "fs-extra";
 import path from "path";
 
 import { UserNames } from "./user-names.js";
+import { UserStatuses } from "./user-status.js";
 // A default import, not `import { Database }`: the package is CommonJS, and
 // Node's named-export detection cannot see through its bundled output. The
 // named form typechecks and then throws "does not provide an export named
@@ -25,6 +26,8 @@ import { ChannelKind } from "./interfaces.js";
 // this archive is nothing but full-text search.
 
 export interface SearchDbChannel {
+  /** User ids in the conversation, when the archive has recorded them. */
+  members?: Array<string>;
   id: string;
   name: string;
   /**
@@ -132,6 +135,8 @@ export interface SearchDbInput {
   users: Record<string, string>;
   /** User id -> every name they have gone by, oldest first */
   names?: UserNames;
+  /** User id -> statuses they have had, oldest first */
+  statuses?: UserStatuses;
   channels: Array<SearchDbChannel>;
   loadMessages: (channelId: string) => Promise<Array<SearchDbMessage>>;
   /** Called before a channel is indexed, for progress reporting */
@@ -183,7 +188,15 @@ export function countMessages(db: SearchDatabase): number {
 
 export async function buildSearchDatabase(
   dbPath: string,
-  { users, names, channels, loadMessages, onChannel, pages }: SearchDbInput,
+  {
+    users,
+    names,
+    statuses,
+    channels,
+    loadMessages,
+    onChannel,
+    pages,
+  }: SearchDbInput,
 ): Promise<void> {
   // Start fresh rather than update in place: the archive is rebuilt wholesale,
   // and a fresh file cannot inherit rows for messages that have since gone.
@@ -218,6 +231,33 @@ export async function buildSearchDatabase(
     )`);
     db.exec("CREATE INDEX user_names_user_id ON user_names (user_id)");
     db.exec("CREATE INDEX user_names_nick ON user_names (nick)");
+
+    // What people's statuses said, and when they were seen saying it. Slack
+    // keeps no history, so this exists only from the run that first recorded
+    // it - and a reader searching for "kaljalla" should find the person as
+    // well as the messages.
+    db.exec(`CREATE TABLE user_statuses (
+      user_id TEXT,
+      text    TEXT,
+      emoji   TEXT,
+      first   TEXT,
+      last    TEXT
+    )`);
+    db.exec("CREATE INDEX user_statuses_user_id ON user_statuses (user_id)");
+
+    // Who was in each conversation. This is what per-conversation access needs
+    // - showing a private channel or a DM only to the people who were in it -
+    // and it is the one question an archive cannot answer retroactively.
+    db.exec(`CREATE TABLE channel_members (
+      channel_id TEXT,
+      user_id    TEXT
+    )`);
+    db.exec(
+      "CREATE INDEX channel_members_channel_id ON channel_members (channel_id)",
+    );
+    db.exec(
+      "CREATE INDEX channel_members_user_id ON channel_members (user_id)",
+    );
     db.exec(`CREATE TABLE messages (
       id TEXT PRIMARY KEY,
       channel_id TEXT,
@@ -340,6 +380,33 @@ export async function buildSearchDatabase(
       }
     }
     nameStmt.finalize();
+
+    const statusStmt = db.prepare(
+      `INSERT INTO user_statuses (user_id, text, emoji, first, last)
+       VALUES (?, ?, ?, ?, ?)`,
+    );
+    for (const [userId, userStatuses] of Object.entries(statuses || {})) {
+      for (const status of userStatuses) {
+        statusStmt.run([
+          userId,
+          status.text,
+          status.emoji,
+          status.first,
+          status.last,
+        ]);
+      }
+    }
+    statusStmt.finalize();
+
+    const memberStmt = db.prepare(
+      "INSERT INTO channel_members (channel_id, user_id) VALUES (?, ?)",
+    );
+    for (const channel of channels) {
+      for (const userId of channel.members || []) {
+        memberStmt.run([channel.id, userId]);
+      }
+    }
+    memberStmt.finalize();
 
     const channelStmt = db.prepare(
       "INSERT OR REPLACE INTO channels (id, name, kind, is_archived) VALUES (?, ?, ?, ?)",

@@ -336,7 +336,6 @@ describe("file attachments", () => {
   });
 });
 
-
 // Reactions are the richest thing the archive holds that the index did not.
 // One row per (message, emoji, reactor), because that single shape answers
 // every question anyone asks of them: what was reacted to most, who gets the
@@ -436,7 +435,6 @@ describe("reactions", () => {
   });
 });
 
-
 // A search result is only useful if you can go and read it in context. The
 // link needs a page number, and the page index has always lived in search.js
 // - a 110 MB file the bot has no business parsing to answer one question.
@@ -470,8 +468,8 @@ describe("page index", () => {
       return row ? row.page : null;
     };
 
-    expect(pageOf("1700000900.0001")).toBe(0);   // newer than page 0's oldest
-    expect(pageOf("1700000500.0001")).toBe(0);   // exactly page 0's oldest
+    expect(pageOf("1700000900.0001")).toBe(0); // newer than page 0's oldest
+    expect(pageOf("1700000500.0001")).toBe(0); // exactly page 0's oldest
     expect(pageOf("1700000300.0001")).toBe(1);
     expect(pageOf("1700000000.0001")).toBe(2);
     db.close();
@@ -493,7 +491,9 @@ describe("page index", () => {
 
   it("keeps channels apart", () => {
     const db = openSearchDatabase(dbPath);
-    const row = db.get("SELECT COUNT(*) AS n FROM pages WHERE channel_id = 'C2'") as { n: number };
+    const row = db.get(
+      "SELECT COUNT(*) AS n FROM pages WHERE channel_id = 'C2'",
+    ) as { n: number };
     expect(Number(row.n)).toBe(0);
     db.close();
   });
@@ -606,5 +606,77 @@ describe("user_names", () => {
     db.close();
 
     expect(Number(row.count)).toBe(0);
+  });
+});
+
+describe("statuses and membership", () => {
+  it("stores what a status said and when it was seen", async () => {
+    const dbPath = path.join(dir, "statuses.db");
+    await buildSearchDatabase(dbPath, {
+      users: { U1: "olli" },
+      statuses: {
+        U1: [
+          {
+            text: "kaljalla",
+            emoji: ":beer:",
+            first: "2026-08-26T08:00:00.000Z",
+            last: "2026-08-27T08:00:00.000Z",
+          },
+        ],
+      },
+      channels: [{ id: "C1", name: "offtopic", kind: "public" }],
+      loadMessages: async () => [{ t: "1.0", u: "U1", m: "moi" }],
+    });
+
+    const db = openSearchDatabase(dbPath);
+    const row = db.get(
+      "SELECT text, emoji, first, last FROM user_statuses WHERE user_id = 'U1'",
+    ) as any;
+    db.close();
+
+    expect(row.text).toBe("kaljalla");
+    expect(row.emoji).toBe(":beer:");
+    expect(row.last).toBe("2026-08-27T08:00:00.000Z");
+  });
+
+  // The question per-conversation access has to answer, and the one an archive
+  // cannot answer about the past: who was in this channel?
+  it("stores who was in a channel", async () => {
+    const dbPath = path.join(dir, "members.db");
+    await buildSearchDatabase(dbPath, {
+      users: { U1: "olli", U2: "aisa" },
+      channels: [
+        { id: "C1", name: "offtopic", kind: "public", members: ["U1", "U2"] },
+        { id: "C2", name: "salahommat", kind: "private", members: ["U1"] },
+      ],
+      loadMessages: async () => [{ t: "1.0", u: "U1", m: "moi" }],
+    });
+
+    const db = openSearchDatabase(dbPath);
+    const inPrivate = db.all(
+      "SELECT user_id FROM channel_members WHERE channel_id = 'C2'",
+    ) as unknown as Array<{ user_id: string }>;
+    const count = db.get("SELECT COUNT(*) AS n FROM channel_members") as any;
+    db.close();
+
+    expect(inPrivate.map((r) => r.user_id)).toEqual(["U1"]);
+    expect(Number(count.n)).toBe(3);
+  });
+
+  it("leaves the tables empty rather than absent when nothing was recorded", async () => {
+    const dbPath = path.join(dir, "no-extras.db");
+    await buildSearchDatabase(dbPath, {
+      users: { U1: "olli" },
+      channels: [{ id: "C1", name: "offtopic", kind: "public" }],
+      loadMessages: async () => [{ t: "1.0", u: "U1", m: "moi" }],
+    });
+
+    const db = openSearchDatabase(dbPath);
+    const s = db.get("SELECT COUNT(*) AS n FROM user_statuses") as any;
+    const m = db.get("SELECT COUNT(*) AS n FROM channel_members") as any;
+    db.close();
+
+    expect(Number(s.n)).toBe(0);
+    expect(Number(m.n)).toBe(0);
   });
 });

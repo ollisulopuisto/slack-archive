@@ -22,6 +22,7 @@ import {
   getMessages,
   getSearchFile,
   getUserNames,
+  getUserStatuses,
   getUsers,
 } from "./data-load.js";
 import { buildSearchDatabase } from "./search-db.js";
@@ -116,6 +117,7 @@ export async function createSearchDatabase(spinner: Ora) {
     // lose the page numbers every time the database is rebuilt on its own.
     pages: { ...(existingData.pages || {}), ...INDEX_OF_PAGES },
     names: await getUserNames(),
+    statuses: await getUserStatuses(),
     channels: searchable
       .filter((channel) => !!channel.id)
       .map((channel) => ({
@@ -123,6 +125,7 @@ export async function createSearchDatabase(spinner: Ora) {
         name: getChannelName(channel),
         kind: channelKind(channel),
         isArchived: !!channel.is_archived,
+        members: channel.members,
       })),
     onChannel: (channel) => {
       spinner.text = `Indexing database messages for channel ${channel.name}`;

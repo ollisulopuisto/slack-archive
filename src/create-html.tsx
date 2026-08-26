@@ -1225,7 +1225,14 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
 
         <div className="viz-tiles">
           <Tile label="Messages" value={formatCount(channel.messages)} />
-          <Tile label="People" value={formatCount(posters.length)} />
+          <Tile label="People who posted" value={formatCount(posters.length)} />
+          {channel.members.length > 0 ? (
+            <Tile
+              label="Members"
+              value={formatCount(channel.members.length)}
+              hint="as of the last run that could ask"
+            />
+          ) : null}
           <Tile
             label="Active years"
             value={formatCount(Object.keys(byYear).length)}
@@ -1241,6 +1248,34 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
         <Figure title="Hour of day" data={hourData(byHour)}>
           <Columns data={hourData(byHour)} labelEvery={2} />
         </Figure>
+
+        {channel.members.length > 0 ? (
+          <details className="drill">
+            <summary>
+              Members <span className="count">{channel.members.length}</span>
+            </summary>
+            <p className="viz-note">
+              Membership as it stands now. Slack cannot be asked who was in a
+              channel last year, so this begins with the first run that recorded
+              it.
+            </p>
+            <ul className="viz-bars">
+              {channel.members.map((userId) => (
+                <li key={userId}>
+                  <span className="viz-bars-label">
+                    <a href={`user-${userId}.html`}>
+                      {getName(userId, users) || userId}
+                    </a>
+                  </span>
+                  <span />
+                  <span className="viz-bars-value">
+                    {formatCount(channel.byUser[userId] || 0)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
 
         <details className="drill" open>
           <summary>

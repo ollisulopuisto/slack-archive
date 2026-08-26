@@ -45,6 +45,8 @@ export interface EmojiStats {
 export interface ChannelStats {
   id: string;
   name: string;
+  /** Who is in it, when a run has recorded membership. */
+  members: Array<string>;
   messages: number;
   first: string;
   last: string;
@@ -336,6 +338,7 @@ export function createStats({ customEmoji, bots }: StatsOptions = {}) {
         stats.byChannel[channel.id] = stats.byChannel[channel.id] || {
           id: channel.id,
           name: channel.name || channel.id,
+          members: (channel as Channel).members || [],
           messages: 0,
           first: "",
           last: "",

@@ -232,7 +232,9 @@ and its own login. This tool builds the index it reads: `data/search.db`.
 
 To run a bot of your own against an archive, that file is the whole interface -
 SQLite with `messages`, `messages_fts`, `channels`, `users`, `user_names`,
-`files`, `reactions` and `reaction_users`. Two things to know when copying one
+`user_statuses`, `channel_members`, `pages`, `files`, `reactions` and
+`reaction_users`. `pages` turns a message into a link to the rendered page;
+`channel_members` is what per-conversation access needs. Two things to know when copying one
 onto a running host:
 
 - **Mount the directory, not the file.** A container with the file bind-mounted

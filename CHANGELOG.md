@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.155] - 2026-08-26
+
+### Added
+- **The new data reaches the pages and the index**, rather than sitting in JSON
+  nothing reads.
+
+  Channel pages show membership - a count, and the members themselves with how
+  much each has posted there, linked to their profiles - under a note saying
+  what the number means: membership as it stands now, because Slack cannot be
+  asked who was in a channel last year.
+
+  The search index gains `user_statuses(user_id, text, emoji, first, last)` and
+  `channel_members(channel_id, user_id)`, indexed both ways. A bot can now find
+  the person whose status said "kaljalla", and - the one that matters - answer
+  who was in a conversation, which is what showing a private channel only to
+  its members requires.
+
 ## [v26.08.26.154] - 2026-08-26
 
 ### Added
