@@ -56,6 +56,13 @@ import {
   externalFileUrl,
 } from "./archived-files.js";
 import {
+  channelPageMeta,
+  channelStatsMeta,
+  indexMeta,
+  PageMeta,
+  profileMeta,
+} from "./page-meta.js";
+import {
   ArchiveLinkContext,
   archiveLinkContext,
   rewriteSlackLinks,
@@ -125,6 +132,8 @@ let userAvatars: UserAvatars = {};
 let userStatuses: UserStatuses = {};
 /** Accounts the workspace marks as bots: they have no profile page to link to. */
 let botIds: Set<string> = new Set();
+/** What this whole archive is called, for the pages that are about all of it. */
+let teamMeta: PageMeta = indexMeta(undefined);
 /** The channels this render publishes - nothing else may be linked to. */
 let publishedChannels: Set<string> = new Set();
 /** Where a Slack link in a message should point instead. */
@@ -448,8 +457,18 @@ const MessagesPage: React.FunctionComponent<MessagesPageProps> = (props) => {
     messages.push(<span key="empty">No messages were ever sent!</span>);
   }
 
+  const meta = channelPageMeta({
+    name: channel.name || channel.id || "",
+    first: oldestFirst[0]?.ts,
+    last: oldestFirst[oldestFirst.length - 1]?.ts,
+    index,
+    total: chunksInfo.length,
+    messages: props.messages.length,
+    team: slackArchiveData.auth?.team,
+  });
+
   return (
-    <HtmlPage>
+    <HtmlPage meta={meta}>
       <div style={{ paddingLeft: 10 }}>
         <Header index={index} chunksInfo={chunksInfo} channel={channel} />
         <div className="messages-list">{messages}</div>
@@ -558,7 +577,7 @@ const IndexPage: React.FunctionComponent<IndexPageProps> = (props) => {
     .map((channel) => <ChannelLink key={channel.id} channel={channel} />);
 
   return (
-    <HtmlPage>
+    <HtmlPage meta={teamMeta}>
       <div id="index">
         <div id="channels">
           <p className="section">Public Channels</p>
@@ -647,6 +666,7 @@ const IndexPage: React.FunctionComponent<IndexPageProps> = (props) => {
 
 interface HtmlPageProps {
   children?: React.ReactNode;
+  meta?: PageMeta;
 }
 const HtmlPage: React.FunctionComponent<HtmlPageProps> = (props) => {
   return (
@@ -655,7 +675,25 @@ const HtmlPage: React.FunctionComponent<HtmlPageProps> = (props) => {
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Slack</title>
+        <title>{props.meta?.title || teamMeta.title}</title>
+        {/* What a preview of a shared link reads. Slack's own crawler cannot
+            see these - the site answers it with a 401, which is the point of
+            the gate - but the bot unfurling on the workspace's behalf can, and
+            so can a browser tab, a bookmark and a history entry. */}
+        <meta
+          property="og:title"
+          content={props.meta?.title || teamMeta.title}
+        />
+        <meta
+          property="og:description"
+          content={props.meta?.description || teamMeta.description}
+        />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content={teamMeta.title} />
+        <meta
+          name="description"
+          content={props.meta?.description || teamMeta.description}
+        />
         <link rel="stylesheet" href={`${base}style.css`} />
       </head>
       <body>
@@ -787,7 +825,12 @@ const NamesPage: React.FunctionComponent = () => {
   const day = (iso: string) => iso.slice(0, 10);
 
   return (
-    <HtmlPage>
+    <HtmlPage
+      meta={{
+        title: "Names over the years",
+        description: `${people.length} people and every name they have gone by, recovered from the messages themselves.`,
+      }}
+    >
       <div id="names">
         <h1>Names over the years</h1>
         <p className="topic">
@@ -1122,7 +1165,16 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
   const activeYears = Object.keys(person.byYear).length;
 
   return (
-    <HtmlPage>
+    <HtmlPage
+      meta={profileMeta({
+        name: current || userId,
+        messages: person.messages,
+        names: names.length,
+        channels: person.channels.length,
+        first: person.first,
+        last: person.last,
+      })}
+    >
       <div id="profile">
         <div className="profile-head">
           <Avatar userId={userId} />
@@ -1385,7 +1437,14 @@ const StatsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
     .sort((a, b) => b.reactionsGiven - a.reactionsGiven);
 
   return (
-    <HtmlPage>
+    <HtmlPage
+      meta={{
+        title: `${teamMeta.title} · in numbers`,
+        description: `${formatCount(data.messages)} messages, ${formatCount(
+          Object.keys(data.byUser).length,
+        )} people, ${formatCount(Object.keys(data.byChannel).length)} channels.`,
+      }}
+    >
       <div id="stats">
         <h1>Ten years of it</h1>
         <p className="topic">
@@ -1533,7 +1592,7 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
   const years = yearData(byYear);
 
   return (
-    <HtmlPage>
+    <HtmlPage meta={channelStatsMeta(channel.name, channel.messages)}>
       <div id="stats">
         <h1>#{channel.name}</h1>
         <p className="topic">
@@ -1646,7 +1705,12 @@ const BotsPage: React.FunctionComponent<{ data: WorkspaceStats }> = ({
   );
 
   return (
-    <HtmlPage>
+    <HtmlPage
+      meta={{
+        title: "What the bots did",
+        description: `${formatCount(data.botMessages)} messages from bots and apps, ${share}% of everything in the archive.`,
+      }}
+    >
       <div id="stats">
         <h1>What the bots did</h1>
         <p className="topic">
@@ -1915,6 +1979,7 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
   userStatuses = await getUserStatuses();
   botIds = botUserIds(users);
   slackArchiveData = await getSlackArchiveData();
+  teamMeta = indexMeta(slackArchiveData.auth?.team);
   me = slackArchiveData.auth?.user_id
     ? users[slackArchiveData.auth?.user_id]
     : null;

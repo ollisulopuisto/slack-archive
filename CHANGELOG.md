@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.166] - 2026-08-26
+
+### Added
+- **Every page has its own name.** A thousand pages were all called `Slack` -
+  which is what a browser tab shows, what a bookmark keeps, what a history
+  entry says, and what any preview of a shared link would read. A channel page
+  is now `#offtopic · 12.4.2019 - 5.5.2019`, a profile is `tsippadai · in the
+  archive`, and each carries a one-line description of what is on it.
+- **Open Graph tags on every page**, saying the same thing. Slack's own crawler
+  cannot see them - the site answers it with 401, which is the entire point of
+  the gate - but a bot unfurling on the workspace's behalf can, and that is the
+  only way a link into a private archive should ever preview.
+
 ## [v26.08.26.165] - 2026-08-26
 
 ### Added
