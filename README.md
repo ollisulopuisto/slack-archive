@@ -102,6 +102,20 @@ around it. The timestamp on a message is that link. Older links of the form
 `index.html?c=<channel>&ts=<ts>` still work: the front page resolves them to
 the page that holds the message.
 
+Getting around a channel with ten years in it is a **calendar**: Newer/Older,
+where you are, and a "Jump to a month" grid of years and months, each landing
+on the page where that month begins. Months are what people remember; page 694
+is not. A month with no messages is drawn struck through rather than left out,
+so a quiet channel and a stretch the archive never got are not the same
+silence - hovering says which.
+
+The pages follow the **system colour scheme**. Every colour in the stylesheet
+is a token and the dark scheme redefines the tokens rather than restating the
+rules, so the two cannot drift; tests hold that line. On a phone the sidebar
+becomes a drawer behind a button - a checkbox, not a script, so it still works
+in a copy opened off a disk in ten years - and the channel header folds down to
+the name and the pager.
+
 The statistics pages carry a **drill-down**: click a year for its months, a month
 for its days, a day for its hours. Only one number per day and hour is stored -
 every level above is summed in the browser, so the levels cannot disagree with
@@ -112,6 +126,21 @@ Charts are inline SVG and the interaction is plain, non-module JavaScript,
 because these pages get opened straight off a disk over `file://` where a CDN
 script tag renders an empty box and a module script is blocked outright. Every
 chart also carries its numbers as a table.
+
+### What is missing, said out loud
+
+An archive is only as complete as its runs, and a run that never happened is
+indistinguishable from a day nobody spoke. `findGaps` looks for stretches the
+archive holds nothing for, in the middle of days it does, and every page that
+counts something says so: how many days, when, and that the numbers below are
+counts of what was archived rather than of what was said. A channel's message
+pages print the gap where it falls, between the last message before it and the
+first after.
+
+In the archive this was built for that is 521 days in five stretches - and the
+messages are not recoverable, because the workspace keeps about ninety days of
+history, so what was not archived at the time is gone. The wording on the pages
+says that plainly rather than implying a fetch is pending.
 
 ## What it recovers that Slack does not keep
 
@@ -135,6 +164,12 @@ this is the first day that will ever be recorded; everything before it is gone.
 The same is true of **channel membership**: `conversations.members` answers for
 today, and nothing in an archive says who was in a channel last year, so it is
 recorded onto `channels.json` on every run.
+
+Names are recorded as what they are: a **handle** is the @-name the account is
+known by, a **display name** is what everybody sees and what changes for a
+joke, and the real-name field is neither. They were one undifferentiated pile
+until it became obvious that `infosota`, `tsippadai` and `Jimmie Åkesson` were
+one person and three different fields.
 
 In one real ten-year archive that is 173 names for 32 people and 212 dated
 profile pictures for 13 of them. A message's author then shows _what they were
@@ -191,8 +226,31 @@ uploads nothing unless all of them pass; and then reads the web root over ssh
 to assert that `data/` holds `search.js` and nothing else. Every other check
 reads the tree it built. That last one reads what a browser could fetch.
 
-`--exclude-kinds`, `--work`, `--node`, `--repo` and `--dry-run` are there so
-nothing about one machine has to be baked in.
+`--exclude-kinds`, `--start-channel`, `--work`, `--node`, `--repo`,
+`--ssh-key`, `--known-hosts` and `--dry-run` are there so nothing about one
+machine has to be baked in. The work directory is claimed with `mkdir`, which
+is atomic, so a nightly run and a manual one cannot render into each other.
+
+The published image carries the script, along with bash, rsync and
+openssh-client, so the machine that holds the archive can publish without
+having node or this repository on it:
+
+```sh
+docker run --rm --user 1026:100 --entrypoint bash \
+  -v /path/to/slack-archive:/archive:ro \
+  -v /path/to/work:/work \
+  -v /path/to/publish-key:/keys/id_ed25519:ro \
+  -v /path/to/known_hosts:/keys/known_hosts:ro \
+  ghcr.io/ollisulopuisto/slack-archive:<tag> \
+  scripts/publish.sh --archive /archive --work /work \
+    --site user@host:/var/www/archive \
+    --ssh-key /keys/id_ed25519 --known-hosts /keys/known_hosts
+```
+
+The archive is mounted read-only, because a publish renders _from_ an archive
+and must never write to it. `--known-hosts` exists because a container running
+as a uid with no passwd entry has no home for ssh to keep host keys in, and the
+alternative - turning host checking off - is not an alternative.
 
 For the search index the same idea has its own flags, because an index is read
 by things other than a browser: `--search-exclude-kinds`,
