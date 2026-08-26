@@ -1230,3 +1230,75 @@ table.timeline,
   padding: 16px 20px 24px;
   color: rgba(255, 255, 255, 0.45);
 }
+
+/* ==========================================================================
+   The channel header, now that a page is a page
+   --------------------------------------------------------------------------
+   It floated two pieces of metadata to the right of an inline heading, which
+   worked in a wide frame and collapses into a paragraph of run-together
+   sentences anywhere else: "offtopic Created by Professor Plum on Wednesday
+   ... a workspace that has genuinely used Analprint scan Ten years of this
+   channel display name 10v PIKKIKSET...".
+   ========================================================================== */
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 16px;
+  z-index: 5;
+}
+
+.header h1 {
+  display: block;
+  font-size: 18px;
+}
+
+.header .created {
+  float: none;
+  font-size: 12px;
+}
+
+.header .topic {
+  margin: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+/* Nothing in a message may push the page sideways: not a long URL, not a
+   pasted table, not a word in German. */
+.text,
+.text p,
+.text blockquote {
+  overflow-wrap: anywhere;
+}
+
+.text pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.messages-list {
+  max-width: 100%;
+}
+
+@media (max-width: 860px) {
+  .header {
+    padding-top: 56px;
+  }
+
+  .page,
+  #stats,
+  #profile,
+  #names,
+  #front {
+    padding-top: 0;
+  }
+
+  #stats,
+  #profile,
+  #names,
+  #front {
+    padding-top: 56px;
+  }
+}

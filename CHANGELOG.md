@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.170] - 2026-08-26
+
+### Fixed
+- **The channel header read as one run-together sentence.** It floated two
+  pieces of metadata to the right of an inline heading, which works in a wide
+  frame and nowhere else: "offtopic Created by Professor Plum on Wednesday …
+  a workspace that has genuinely used "Analprint scan" as a Ten years of this
+  channel display name 10v PIKKIKSET PERJANTAINA". It is a stack now, and
+  nothing in a message can push the page sideways - not a long URL, not a
+  pasted table.
+
 ## [v26.08.26.169] - 2026-08-26
 
 ### Changed
