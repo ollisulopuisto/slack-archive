@@ -21,7 +21,13 @@ import {
   USER_STATUS_DATA_PATH,
 } from "./config.js";
 import { retry } from "./retry.js";
-import { readJsonArraySync, readSearchDataSync } from "./big-json.js";
+import {
+  ElementSpan,
+  readJsonArraySliceSync,
+  readJsonArraySync,
+  readJsonArrayWithSpansSync,
+  readSearchDataSync,
+} from "./big-json.js";
 
 async function getFile<T>(filePath: string, returnIfEmpty: T): Promise<T> {
   if (!fs.existsSync(filePath)) {
@@ -77,6 +83,82 @@ async function readMessagesFile(
 
   return retry({ name: `Loading messages from ${filePath}` }, () =>
     readJsonArraySync<ArchiveMessage>(filePath),
+  );
+}
+
+/**
+ * The messages of one channel, and where each of them sits in the file.
+ *
+ * The spans are what let the pages of this channel be rendered on different
+ * cores: a page is a run of elements, a run of elements is one byte range, and
+ * a worker can then read a megabyte instead of the whole file.
+ */
+export async function getMessagesWithSpans(
+  channelId: string,
+): Promise<{ messages: Array<ArchiveMessage>; spans: Array<ElementSpan> }> {
+  const filePath = getChannelDataFilePath(channelId);
+
+  if (!fs.existsSync(filePath)) {
+    return { messages: [], spans: [] };
+  }
+
+  const { items, spans } = await retry(
+    { name: `Loading messages and spans from ${filePath}` },
+    () => readJsonArrayWithSpansSync<ArchiveMessage>(filePath),
+  );
+
+  messagesCache[channelId] = items;
+
+  return { messages: items, spans };
+}
+
+/**
+ * Open channel files, kept between pages.
+ *
+ * A worker renders one page after another out of the same file, and opening it
+ * per page means 714 opens for one channel. On a local disk that is waste; on
+ * an SMB share it is 714 sessions, and Synology answers the eventual one with
+ * "Too many users" - which is what stopped the first run of this.
+ */
+const openFiles = new Map<string, number>();
+
+function openChannelFile(filePath: string): number {
+  const open = openFiles.get(filePath);
+
+  if (open !== undefined) return open;
+
+  const handle = fs.openSync(filePath, "r");
+  openFiles.set(filePath, handle);
+
+  return handle;
+}
+
+export function closeChannelFiles() {
+  for (const [filePath, handle] of openFiles) {
+    try {
+      fs.closeSync(handle);
+    } catch {
+      // Already gone: nothing to do, and nothing worth saying.
+    }
+    openFiles.delete(filePath);
+  }
+}
+
+/** One page's worth of messages, by the byte range the planner recorded. */
+export async function getMessageSlice(
+  channelId: string,
+  span: ElementSpan,
+): Promise<Array<ArchiveMessage>> {
+  const filePath = getChannelDataFilePath(channelId);
+
+  if (!fs.existsSync(filePath) || span.end <= span.start) {
+    return [];
+  }
+
+  return retry({ name: `Loading messages ${span.start}-${span.end}` }, () =>
+    readJsonArraySliceSync<ArchiveMessage>(filePath, span, {
+      file: openChannelFile(filePath),
+    }),
   );
 }
 

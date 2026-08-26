@@ -3,7 +3,7 @@ import { Worker } from "worker_threads";
 
 import { Channel } from "./interfaces.js";
 import { RenderContext } from "./render-context.js";
-import { SearchPageIndex } from "./interfaces.js";
+import { ChannelPlan } from "./render-plan.js";
 
 /**
  * The channel pages, rendered on more than one core.
@@ -19,11 +19,6 @@ import { SearchPageIndex } from "./interfaces.js";
  * about twenty seconds of CPU spread across the workers and buys back two
  * minutes of wall clock.
  */
-export interface RenderedElsewhere {
-  /** What each worker recorded about which page a timestamp landed on. */
-  pages: SearchPageIndex;
-}
-
 export function defaultWorkerCount(requested?: number): number {
   if (requested && requested > 0) return requested;
 
@@ -32,69 +27,32 @@ export function defaultWorkerCount(requested?: number): number {
   return Math.max(1, Math.min(8, (os.cpus()?.length || 2) - 1));
 }
 
-/**
- * Split the channels so each worker gets a similar amount of WORK, which is
- * messages, not channels. One channel here holds 713 510 messages and the
- * smallest holds 75; a round-robin by count would leave one worker rendering
- * for two minutes while nine sat idle.
- */
-export function shareOut(
-  channels: Array<Channel>,
-  weights: Record<string, number>,
-  workers: number,
-): Array<Array<Channel>> {
-  const buckets: Array<Array<Channel>> = Array.from(
-    { length: workers },
-    () => [],
-  );
-  const load = new Array(workers).fill(0);
-
-  const heaviestFirst = [...channels].sort(
-    (a, b) => (weights[b.id!] || 0) - (weights[a.id!] || 0),
-  );
-
-  for (const channel of heaviestFirst) {
-    const lightest = load.indexOf(Math.min(...load));
-    buckets[lightest].push(channel);
-    load[lightest] += (weights[channel.id!] || 0) + 1;
-  }
-
-  return buckets.filter((bucket) => bucket.length > 0);
-}
-
-export async function renderChannelsInWorkers(
+export async function renderPagesInWorkers(
   context: RenderContext,
-  buckets: Array<Array<Channel>>,
-): Promise<RenderedElsewhere> {
+  channels: Array<Channel>,
+  buckets: Array<Array<ChannelPlan>>,
+): Promise<void> {
   const workerUrl = new URL("./render-worker-entry.js", import.meta.url);
-  const pages: SearchPageIndex = {};
 
-  const runs = buckets.map(
-    (channels, i) =>
-      new Promise<void>((resolve, reject) => {
-        const worker = new Worker(workerUrl, {
-          // The same flags this process was given: the worker builds its own
-          // config from them, and --html-exclude-kinds decides what may be
-          // written at all.
-          argv: process.argv.slice(2),
-          workerData: { context, channels, worker: i },
-        });
+  await Promise.all(
+    buckets.map(
+      (plans, i) =>
+        new Promise<void>((resolve, reject) => {
+          const worker = new Worker(workerUrl, {
+            // The same flags this process was given: the worker builds its own
+            // config from them, and --html-exclude-kinds decides what may be
+            // written at all.
+            argv: process.argv.slice(2),
+            workerData: { context, channels, plans, worker: i },
+          });
 
-        worker.on("message", (message: SearchPageIndex) => {
-          for (const [channelId, timestamps] of Object.entries(message || {})) {
-            pages[channelId] = timestamps;
-          }
-        });
-        worker.on("error", reject);
-        worker.on("exit", (code) =>
-          code === 0
-            ? resolve()
-            : reject(new Error(`A render worker exited with ${code}`)),
-        );
-      }),
+          worker.on("error", reject);
+          worker.on("exit", (code) =>
+            code === 0
+              ? resolve()
+              : reject(new Error(`A render worker exited with ${code}`)),
+          );
+        }),
+    ),
   );
-
-  await Promise.all(runs);
-
-  return { pages };
 }

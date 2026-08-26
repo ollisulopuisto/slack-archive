@@ -181,6 +181,57 @@ export function readJsonArraySync<T>(
 }
 
 /**
+ * Read a JSON array AND where each element sits in the file.
+ *
+ * The spans are what let a page of messages be re-read later without parsing
+ * the other 712 643 in the file: elements of an array are contiguous, so a run
+ * of them is one byte range, and `[` + those bytes + `]` is valid JSON.
+ */
+export function readJsonArrayWithSpansSync<T>(filePath: string): {
+  items: Array<T>;
+  spans: Array<ElementSpan>;
+} {
+  const buffer = fs.readFileSync(filePath);
+  const spans = spanTopLevelArray(buffer, filePath);
+
+  return {
+    items: spans.map(
+      (span) => JSON.parse(buffer.toString("utf8", span.start, span.end)) as T,
+    ),
+    spans,
+  };
+}
+
+/**
+ * Read back one run of elements, by the byte range they occupy.
+ *
+ * This is the whole point of keeping the spans: a worker rendering page 431 of
+ * a channel reads about a megabyte and parses a thousand messages, instead of
+ * reading 367 MB and parsing 713 643 to reach the thousand it wants.
+ */
+export function readJsonArraySliceSync<T>(
+  filePath: string,
+  span: ElementSpan,
+  options: { file?: number } = {},
+): Array<T> {
+  if (span.end <= span.start) return [];
+
+  const length = span.end - span.start;
+  const buffer = Buffer.allocUnsafe(length);
+  // A caller rendering page after page out of one file keeps the handle; one
+  // that asks for a single slice does not have to care.
+  const file = options.file ?? fs.openSync(filePath, "r");
+
+  try {
+    fs.readSync(file, buffer, 0, length, span.start);
+  } finally {
+    if (options.file === undefined) fs.closeSync(file);
+  }
+
+  return JSON.parse(`[${buffer.toString("utf8")}]`) as Array<T>;
+}
+
+/**
  * Read `search.js` back. Anything unreadable is an empty search file, which is
  * what the callers already treated a missing file as.
  */
@@ -310,8 +361,23 @@ function splitTopLevelObject(
  * Every byte of a multi-byte UTF-8 character is >= 0x80, so no character can
  * masquerade as a brace, bracket, quote or comma: scanning bytes is safe.
  */
+/** Where one element of the array sits in the file, in bytes. */
+export interface ElementSpan {
+  start: number;
+  end: number;
+}
+
 function splitTopLevelArray(buffer: Buffer, filePath: string): Array<Buffer> {
-  const elements: Array<Buffer> = [];
+  return spanTopLevelArray(buffer, filePath).map((span) =>
+    buffer.subarray(span.start, span.end),
+  );
+}
+
+function spanTopLevelArray(
+  buffer: Buffer,
+  filePath: string,
+): Array<ElementSpan> {
+  const elements: Array<ElementSpan> = [];
   let i = skipWhitespace(buffer, 0);
 
   if (buffer[i] !== Byte.OpenBracket) {
@@ -350,7 +416,7 @@ function splitTopLevelArray(buffer: Buffer, filePath: string): Array<Buffer> {
 
     const start = i;
     i = endOfValue(buffer, i);
-    elements.push(buffer.subarray(start, i));
+    elements.push({ start, end: i });
     expectElement = false;
   }
 
