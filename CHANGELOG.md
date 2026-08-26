@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.26.184] - 2026-08-26
+
+### Fixed
+- **The publish script needed python, and the image it ships in does not have
+  it.** Staging and the six checks were shell heredocs calling `python3` -
+  which worked on the machine they were written on and could never have worked
+  in the container, where the first NAS run died at `python3: command not
+  found`. They are node now, in two files rather than heredocs:
+  `scripts/stage-public-channels.mjs` and `scripts/verify-publish.mjs`. The
+  image already has node; it is what renders the archive.
+
 ## [v26.08.26.183] - 2026-08-26
 
 ### Fixed

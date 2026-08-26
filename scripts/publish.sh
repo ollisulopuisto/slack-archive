@@ -117,32 +117,7 @@ done
 # layers of "don't show it" over a directory that still contains ten years of
 # Olli's direct messages, and the six checks below inspect the rendered HTML,
 # not this. A file that was never staged cannot be sent by a wrong rsync line.
-python3 - "$ARCHIVE" "$WORK/slack-archive/data" <<'STAGE'
-import json, os, sys
-
-archive, dest = sys.argv[1], sys.argv[2]
-channels = json.load(open(os.path.join(archive, "data", "channels.json")))
-
-def kind(c):
-    if c.get("is_im"): return "im"
-    if c.get("is_mpim"): return "mpim"
-    if c.get("is_private"): return "private"
-    return "public"
-
-staged = withheld = 0
-for c in channels:
-    cid = c.get("id")
-    if not cid: continue
-    source = os.path.join(archive, "data", f"{cid}.json")
-    if not os.path.exists(source): continue
-    if kind(c) != "public":
-        withheld += 1
-        continue
-    os.symlink(source, os.path.join(dest, f"{cid}.json"))
-    staged += 1
-
-print(f"  {staged} public channels staged, {withheld} withheld (im, mpim, private)")
-STAGE
+$NODE "$REPO/scripts/stage-public-channels.mjs" "$ARCHIVE" "$WORK/slack-archive/data"
 
 say "3/7  assets"
 # BEFORE the render, not after: the renderer checks whether an emoji file
@@ -174,78 +149,7 @@ cd "$WORK" && $NODE --max-old-space-size=12288 "$REPO/bin/slack-archive.js" \
 # stale index, built before an exclusion existed, ends up on the website.
 
 say "5/7  checks - nothing is uploaded unless all six pass"
-python3 - "$WORK/slack-archive" <<'PY'
-import json, glob, subprocess, sys, os
-D = sys.argv[1]
-chans = json.load(open(f"{D}/data/channels.json"))
-def kind(c):
-    if c.get("is_im"): return "im"
-    if c.get("is_mpim"): return "mpim"
-    if c.get("is_private"): return "private"
-    return "public"
-def pages_of(cid):
-    return glob.glob(f"{D}/html/{cid}-*.html") + glob.glob(f"{D}/html/channel-{cid}.html")
-
-fail = []
-# 1. nothing non-public rendered. By KIND, not by id prefix: Slack gives newer
-#    group DMs C-ids, so a prefix test misses fourteen of them here.
-bad = [c["id"] for c in chans if c.get("id") and kind(c) != "public" and pages_of(c["id"])]
-if bad: fail.append(f"non-public channels with pages: {bad[:5]}")
-# 2. nothing public missing. Catches a render that stopped halfway, which both
-#    leak checks would happily pass.
-missing = [c.get("name") for c in chans if c.get("id") and kind(c) == "public" and not pages_of(c["id"])]
-if missing: fail.append(f"public channels with no pages: {missing[:5]}")
-# 3. an independent check of the same question, by content rather than by id.
-grp = subprocess.run(["grep","-rl","Group messaging with",f"{D}/html"],
-                     capture_output=True, text=True).stdout.split()
-if grp: fail.append(f"'Group messaging with' in {len(grp)} files")
-# 4. search.js is built for BOTH the bot and the website, from one flag, so it
-#    contains whatever the bot may see - which now includes private channels by
-#    Olli's decision. The website may not. So it is filtered against the
-#    channels this SITE publishes, taken from channels.json by kind, never
-#    against search.js's own channel map: that map is the thing being checked.
-s = open(f"{D}/data/search.js", encoding="utf8").read()
-d = json.loads(s[s.index("{"):s.rindex("}")+1])
-public = {c["id"] for c in chans if c.get("id") and kind(c) == "public"}
-removed = {}
-for key in ("channels", "messages", "pages"):
-    v = d.get(key) or {}
-    stray = [k for k in v if k not in public]
-    if stray:
-        removed[key] = len(stray)
-        d[key] = {k: x for k, x in v.items() if k in public}
-if removed:
-    open(f"{D}/data/search.js", "w", encoding="utf8").write(
-        s[:s.index("{")] + json.dumps(d, ensure_ascii=False) + ";\n")
-    print(f"  search.js: removed non-public entries {removed}")
-
-# 5. the search page must be able to start. MiniSearch throws on a duplicate
-#    id, and one throw in componentDidMount is the whole search page - so a
-#    file that carries two rows with one timestamp is a broken site, not a
-#    slightly worse index. Checked here rather than trusted, because it was
-#    broken for weeks without anything saying so.
-dupes = {}
-for cid, msgs in (d.get("messages") or {}).items():
-    seen = set()
-    n = 0
-    for m in msgs:
-        t = m.get("t")
-        if t in seen: n += 1
-        seen.add(t)
-    if n: dupes[cid] = n
-if dupes:
-    fail.append(f"duplicate message ids in search.js: {sum(dupes.values())} in {len(dupes)} channels")
-
-# 6. no run-state or dotfiles in a published tree.
-dots = [os.path.basename(p) for p in glob.glob(f"{D}/.*") if os.path.isfile(p)]
-if dots: fail.append(f"dotfiles: {dots}")
-
-if fail:
-    print("\n  REFUSING TO PUBLISH:")
-    for f in fail: print(f"    - {f}")
-    sys.exit(1)
-print(f"  all six pass - {len(glob.glob(f'{D}/html/*.html'))} pages")
-PY
+$NODE "$REPO/scripts/verify-publish.mjs" "$WORK/slack-archive"
 
 if [ "$DRY_RUN" = "1" ]; then
   say "dry run - nothing uploaded. The tree is in $WORK/slack-archive"
