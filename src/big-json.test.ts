@@ -10,6 +10,8 @@ import {
   readSearchDataSync,
   writeJsonArraySync,
   writeSearchDataSync,
+  readJsonArrayWithSpansSync,
+  readJsonArraySliceSync,
 } from "./big-json.js";
 
 let dir: string;
@@ -296,5 +298,48 @@ describe("readSearchDataSync", () => {
     expect(() =>
       readSearchDataSync(file("search.js"), { maxStringLength: 1 }),
     ).toThrow(/object/i);
+  });
+});
+
+describe("reading one page out of a big file", () => {
+  it("gives back exactly what a full parse gives, for the same elements", () => {
+    const file = path.join(dir, "spans.json");
+    const items = Array.from({ length: 250 }, (_, i) => ({
+      ts: `${1600000000 + i}.000100`,
+      text: `message ${i} with "quotes", [brackets] and {braces}`,
+      nested: { list: [1, 2, { deep: `üñïçøde ${i}` }] },
+    }));
+
+    writeJsonArraySync(file, items);
+
+    const { items: all, spans } =
+      readJsonArrayWithSpansSync<(typeof items)[0]>(file);
+
+    expect(all).toEqual(items);
+    expect(spans).toHaveLength(items.length);
+
+    // The page a worker would be asked for: elements 100..149.
+    const page = readJsonArraySliceSync<(typeof items)[0]>(file, {
+      start: spans[100].start,
+      end: spans[149].end,
+    });
+
+    expect(page).toEqual(items.slice(100, 150));
+  });
+
+  it("reads a single element as well as a run of them", () => {
+    const file = path.join(dir, "one-span.json");
+    writeJsonArraySync(file, [{ a: 1 }, { b: 2 }, { c: 3 }]);
+
+    const { spans } = readJsonArrayWithSpansSync(file);
+
+    expect(readJsonArraySliceSync(file, spans[1])).toEqual([{ b: 2 }]);
+  });
+
+  it("has nothing to read from an empty range", () => {
+    const file = path.join(dir, "empty-span.json");
+    writeJsonArraySync(file, []);
+
+    expect(readJsonArraySliceSync(file, { start: 0, end: 0 })).toEqual([]);
   });
 });

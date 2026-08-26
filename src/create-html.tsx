@@ -12,7 +12,10 @@ import slackMarkdown from "slack-markdown";
 
 import {
   clearMessagesCache,
+  closeChannelFiles,
   getChannels,
+  getMessagesWithSpans,
+  getMessageSlice,
   getMessages,
   getUsers,
   getUserNames,
@@ -54,12 +57,10 @@ import { write } from "./data-write.js";
 import { getSlackArchiveData } from "./archive-data.js";
 import { getEmojiRef, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
 import { splitQuotes } from "./blockquotes.js";
+import { withoutBroadcastCopies } from "./broadcasts.js";
 import { reportTimings, timed } from "./timings.js";
-import {
-  defaultWorkerCount,
-  renderChannelsInWorkers,
-  shareOut,
-} from "./render-workers.js";
+import { defaultWorkerCount, renderPagesInWorkers } from "./render-workers.js";
+import { ChannelPlan, planChannel, shareOutPages } from "./render-plan.js";
 import {
   emptyRenderContext,
   RenderContext,
@@ -133,6 +134,9 @@ let render: RenderContext = emptyRenderContext();
 
 /** File id -> "<channelId>/<name on disk>", collected while counting. */
 const fileIndex: Record<string, string> = {};
+
+/** Which pages each channel has, and where their messages are in the file. */
+let channelPlans: Array<ChannelPlan> = [];
 
 /**
  * The channels this site publishes. Not rendering beats gating: a page that
@@ -428,8 +432,10 @@ const MessagesPage: React.FunctionComponent<MessagesPageProps> = (props) => {
   const { channel, index, chunksInfo } = props;
   const messagesJs = fs.readFileSync(MESSAGES_JS_PATH, "utf8");
 
-  // Newest message is first; the page reads oldest first.
-  const oldestFirst = [...props.messages].reverse();
+  // Newest message is first; the page reads oldest first. A reply sent with
+  // "also send to channel" arrives twice - once here, once inside its parent -
+  // and is shown in the thread.
+  const oldestFirst = [...withoutBroadcastCopies(props.messages)].reverse();
   const messages: Array<React.ReactNode> = [];
 
   for (const [i, message] of oldestFirst.entries()) {
@@ -525,18 +531,55 @@ export function setRenderContext(context: RenderContext) {
 }
 
 /**
- * One process's share of the channel pages. The parent renders everything
- * else, because everything else is seconds.
+ * The pages this process was given, whichever process that is.
+ *
+ * A page reads only its own messages - the planner recorded the byte range
+ * they occupy - so the biggest channel in the archive is no longer one
+ * worker's problem.
  */
-export async function renderChannelPages(channels: Array<Channel>) {
-  for (const [i, channel] of channels.entries()) {
-    if (!channel.id) {
-      console.warn(`Can't create HTML for channel: No id found`, channel);
+export async function renderPages(
+  channels: Array<Channel>,
+  plans: Array<ChannelPlan>,
+) {
+  const byId = new Map(channels.map((channel) => [channel.id!, channel]));
+  const total = plans.reduce((n, plan) => n + plan.pages.length, 0);
+  const spinner = ora({
+    text: `Rendering ${total} pages`,
+    // Several workers writing spinner frames to one terminal is illegible.
+    isEnabled: !process.env.SLACK_ARCHIVE_QUIET,
+  }).start();
+
+  let done = 0;
+
+  for (const plan of plans) {
+    const channel = byId.get(plan.channelId);
+
+    if (!channel) {
+      console.warn(`Can't render pages for unknown channel ${plan.channelId}`);
       continue;
     }
 
-    await createHtmlForChannel({ channel, i, total: channels.length });
+    for (const page of plan.pages) {
+      const messages = await getMessageSlice(plan.channelId, page.span);
+
+      await renderAndWrite(
+        <MessagesPage
+          channel={channel}
+          messages={messages}
+          index={page.index}
+          chunksInfo={plan.chunksInfo}
+        />,
+        getHTMLFilePath(plan.channelId, page.index),
+      );
+
+      done++;
+      spinner.text = `Rendering pages: ${done}/${total}`;
+      spinner.render();
+    }
   }
+
+  closeChannelFiles();
+  spinner.succeed(`Rendered ${done} pages`);
 }
 
 /**
@@ -1926,7 +1969,9 @@ async function countEverything(channels: Array<Channel>): Promise<{
   stats: WorkspaceStats;
   gaps: Array<Gap>;
   profileIds: Set<string>;
+  plans: Array<ChannelPlan>;
 }> {
+  const plans: Array<ChannelPlan> = [];
   const spinner = ora("Counting ten years of messages...").start();
   // Everything in emojis.json is one the workspace made itself; everything else
   // in a reaction is Slack's.
@@ -1940,9 +1985,16 @@ async function countEverything(channels: Array<Channel>): Promise<{
     spinner.text = `Counting ${channel.name || channel.id}`;
     spinner.render();
 
-    const messages = await getMessages(channel.id, true);
+    const { messages, spans } = await getMessagesWithSpans(channel.id);
     accumulator.addChannel(channel, messages);
     indexFiles(channel.id, messages);
+
+    plans.push(
+      planChannel(channel.id, messages, spans, {
+        chunkSize: MESSAGE_CHUNK,
+        formatTimestamp: (message) => formatTimestamp(message as Message, "Pp"),
+      }),
+    );
   }
 
   const stats = accumulator.result();
@@ -1958,6 +2010,7 @@ async function countEverything(channels: Array<Channel>): Promise<{
     // Every page that shows a number says which days are absent from it.
     gaps: findGaps(dailyTotals(stats.byDayHour)),
     profileIds: profilePageIds(stats.byUser),
+    plans,
   };
 }
 
@@ -2172,9 +2225,10 @@ async function buildRenderContext(
       : null,
   };
 
-  // Reads every message, so it also collects the files, which the links in
-  // those messages need.
-  const counted = await countEverything(channels);
+  // Reads every message, so it also collects the files that the links in those
+  // messages need, and plans the pages.
+  const { plans, ...counted } = await countEverything(channels);
+  channelPlans = plans;
 
   return {
     ...render,
@@ -2210,36 +2264,34 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
   await timed("names page", () => renderNamesPage());
 
   await timed("channel pages", async () => {
+    // The permalink index, recorded here rather than by whoever renders the
+    // page. It is derived from the plan, so it is in page order and complete
+    // whether one process renders or nine do - and a worker reporting it back
+    // was one more thing that could arrive out of order.
+    for (const plan of channelPlans) {
+      for (const page of plan.pages) {
+        if (page.oldestTs) recordPage(plan.channelId, page.oldestTs);
+      }
+    }
+
     const workers = defaultWorkerCount(RENDER_WORKERS);
 
     if (workers < 2) {
-      await renderChannelPages(channels);
+      await renderPages(channels, channelPlans);
       return;
     }
 
     // The parent has just parsed every message to count them, and is about to
-    // hand the rendering to processes that will read what they need for
-    // themselves. Holding 1.5 GB of messages it will not look at again, while
-    // eight workers allocate their own, is how this runs out of memory.
+    // hand the rendering to processes that read only the pages they were
+    // given. Holding 1.5 GB of messages nobody will look at again, while eight
+    // workers allocate their own, is how this runs out of memory.
     clearMessagesCache();
 
-    const weights: Record<string, number> = {};
-    for (const [id, channelStats] of Object.entries(render.stats!.byChannel)) {
-      weights[id] = channelStats.messages;
-    }
+    const buckets = shareOutPages(channelPlans, workers);
+    const pages = channelPlans.reduce((n, plan) => n + plan.pages.length, 0);
+    console.log(`\n Rendering ${pages} pages on ${buckets.length} cores`);
 
-    const buckets = shareOut(channels, weights, workers);
-    console.log(
-      `\n Rendering ${channels.length} channels on ${buckets.length} cores`,
-    );
-
-    const { pages } = await renderChannelsInWorkers(render, buckets);
-
-    // The page index is what the workers learned that this process needs: a
-    // permalink cannot find its message without it.
-    for (const [channelId, timestamps] of Object.entries(pages)) {
-      for (const ts of timestamps) recordPage(channelId, ts);
-    }
+    await renderPagesInWorkers(render, channels, buckets);
   });
 
   await timed("front page", async () => {

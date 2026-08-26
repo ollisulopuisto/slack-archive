@@ -22,6 +22,7 @@
 #   --exclude-kinds LIST  channel kinds never rendered (default: im,mpim,private)
 #   --work PATH           scratch directory (default: $TMPDIR/archive-publish)
 #   --node CMD            how to run node (default: node)
+#   --ssh-key PATH        identity for rsync and the web-root check
 #   --repo PATH           this repository (default: the parent of this script)
 #   --dry-run             render and check, upload nothing
 #
@@ -34,6 +35,7 @@ SITE=""
 EXCLUDE_KINDS="im,mpim,private"
 WORK="${TMPDIR:-/tmp}/archive-publish"
 NODE="node"
+SSH_KEY=""
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DRY_RUN=0
 
@@ -45,6 +47,7 @@ while [ $# -gt 0 ]; do
     --work) WORK="$2"; shift 2 ;;
     --node) NODE="$2"; shift 2 ;;
     --repo) REPO="$2"; shift 2 ;;
+    --ssh-key) SSH_KEY="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
@@ -124,7 +127,14 @@ cp -R "$ARCHIVE/html/avatars" "$ARCHIVE/html/emojis" "$WORK/slack-archive/html/"
 }
 
 say "4/7  rendering (public channels only)"
-cd "$REPO" && npm run compile >/dev/null 2>&1
+# Inside the image the compile has already happened and tsc is pruned away;
+# on a developer machine it has not. Compile when there is something to compile
+# with, and say so when there is not, rather than failing on a missing binary.
+if [ -x "$REPO/node_modules/.bin/tsc" ]; then
+  (cd "$REPO" && npm run compile >/dev/null 2>&1)
+else
+  echo "  using the prebuilt lib/ (no compiler here)"
+fi
 cd "$WORK" && $NODE --max-old-space-size=12288 "$REPO/bin/slack-archive.js" \
   --no-slack-connect --no-backup --force-html-generation \
   --html-exclude-kinds "$EXCLUDE_KINDS" 2>&1 | grep -E "Not rendering|Search|Rendered in|Finished in|All done" || true
@@ -216,15 +226,19 @@ say "6/7  publishing"
 # --exclude data/*: the message JSON is symlinks to 1.5 GB and the site does
 # not need it. --exclude html/files: 41 GB of attachments live on the Hetzner
 # box and are proxied at that path.
-rsync -rlt --delete --no-owner --no-group \
+RSH="ssh -o BatchMode=yes"
+[ -n "$SSH_KEY" ] && RSH="$RSH -i $SSH_KEY"
+
+rsync -rlt --delete --no-owner --no-group -e "$RSH" \
   --exclude='data/*' --exclude='html/files' \
   "$WORK/slack-archive/" "$SITE/"
-rsync -rlt --no-owner --no-group "$WORK/slack-archive/data/search.js" "$SITE/data/"
+rsync -rlt --no-owner --no-group -e "$RSH" \
+  "$WORK/slack-archive/data/search.js" "$SITE/data/"
 
 # macOS ships openrsync, which ACCEPTS --chmod and silently ignores it, so the
 # files arrive with this shell's umask - 700, which nginx's workers cannot read.
 # Fixing it on the far side is the only reliable way.
-ssh -o BatchMode=yes "${SITE%%:*}" "chmod -R a+rX '${SITE#*:}'
+$RSH "${SITE%%:*}" "chmod -R a+rX '${SITE#*:}'
   echo \"  pages: \$(ls '${SITE#*:}'/html/*.html | wc -l)\"
   echo \"  unreadable: \$(find '${SITE#*:}' -type f ! -perm -o=r | wc -l)\"
   echo \"  size: \$(du -sh '${SITE#*:}' | cut -f1)\""
@@ -233,7 +247,7 @@ ssh -o BatchMode=yes "${SITE%%:*}" "chmod -R a+rX '${SITE#*:}'
 # line reads the tree we built; this one reads the web root, which is the thing
 # somebody could fetch. data/ may hold search.js and nothing else.
 say "7/7  reading the web root itself"
-stray=$(ssh -o BatchMode=yes "${SITE%%:*}" "ls '${SITE#*:}'/data | grep -v '^search.js$' || true")
+stray=$($RSH "${SITE%%:*}" "ls '${SITE#*:}'/data | grep -v '^search.js$' || true")
 if [ -n "$stray" ]; then
   echo "  WEB ROOT HOLDS FILES IT SHOULD NOT:"
   echo "$stray" | sed 's/^/    /'
@@ -242,7 +256,7 @@ if [ -n "$stray" ]; then
 fi
 echo "  data/: search.js only"
 
-dms=$(ssh -o BatchMode=yes "${SITE%%:*}" "ls '${SITE#*:}'/html | grep -cE '^D[A-Z0-9]+-|^G[A-Z0-9]+-' || true")
+dms=$($RSH "${SITE%%:*}" "ls '${SITE#*:}'/html | grep -cE '^D[A-Z0-9]+-|^G[A-Z0-9]+-' || true")
 if [ "$dms" != "0" ]; then
   echo "  WEB ROOT HOLDS $dms DIRECT-MESSAGE PAGES"; exit 1
 fi
