@@ -53,63 +53,98 @@ if (groupNamed.length) {
   fail.push(`'Group messaging with' in ${groupNamed.length} files`);
 }
 
-// 4. search.js is built for BOTH the bot and the website, from one flag, so it
-//    holds whatever the bot may see - which includes private channels by
-//    Olli's decision. The website may not. It is filtered against the channels
-//    this SITE publishes, taken from channels.json by kind, never against
-//    search.js's own channel map: that map is the thing being checked.
-const raw = read("data/search.js");
-const data = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
+// 4. the search index the site serves is a DATABASE now, and the browser reads
+//    it directly - so anything in it is published, including the names of
+//    channels it holds no messages for. It is checked against the channels
+//    this SITE publishes, taken from channels.json by kind, never against the
+//    database's own idea of what is public: that is the thing being checked.
+//
+//    A binary artefact is not edited in place here the way search.js was. If
+//    this fails, the render was told the wrong exclusions and the fix is to
+//    build it again, not to carve rows out of a file nobody can eyeball.
 const publicIds = new Set(
   channels.filter((c) => c.id && kind(c) === "public").map((c) => c.id),
 );
-const removed = {};
+const dbPath = path.join(dir, "data/search.db");
 
-for (const key of ["channels", "messages", "pages"]) {
-  const held = data[key] || {};
-  const stray = Object.keys(held).filter((id) => !publicIds.has(id));
+if (!fs.existsSync(dbPath)) {
+  fail.push("no data/search.db: the site's search page has nothing to read");
+} else {
+  const { openSearchDatabase } = await import("../lib/search-db.js");
+  const db = openSearchDatabase(dbPath);
 
-  if (stray.length) {
-    removed[key] = stray.length;
-    for (const id of stray) delete held[id];
+  try {
+    const strayChannels = db
+      .all("select id, name from channels")
+      .filter((row) => !publicIds.has(row.id));
+
+    if (strayChannels.length) {
+      fail.push(
+        `non-public channels in search.db: ${strayChannels
+          .slice(0, 5)
+          .map((row) => row.name || row.id)
+          .join(", ")}`,
+      );
+    }
+
+    const strayMessages = db.all(
+      `select channel_id, count(*) n from messages
+        where channel_id not in (select id from channels) group by channel_id`,
+    );
+
+    if (strayMessages.length) {
+      fail.push(
+        `messages in search.db from channels it does not list: ${strayMessages
+          .map((row) => `${row.channel_id} (${row.n})`)
+          .join(", ")}`,
+      );
+    }
+
+    // 5. the index has to be able to answer. An empty full-text table is a
+    //    search page that opens, accepts a query and finds nothing, forever -
+    //    which looks like an archive with nothing in it rather than a broken
+    //    build.
+    const [{ n: messages }] = db.all("select count(*) n from messages");
+    const [{ n: indexed }] = db.all("select count(*) n from messages_fts");
+
+    if (messages === 0) fail.push("search.db holds no messages");
+    if (indexed !== messages) {
+      fail.push(
+        `search.db full-text index is incomplete: ${indexed} rows for ${messages} messages`,
+      );
+    }
+
+    // The browser fetches whole pages over HTTP range requests, so the page
+    // size is part of the interface: at 4096 every read drags in four times
+    // what it needs.
+    const [{ page_size: pageSize }] = db.all("pragma page_size");
+    if (pageSize !== 1024) {
+      fail.push(`search.db page size is ${pageSize}, not 1024`);
+    }
+
+    const [{ n: pages }] = db.all("select count(*) n from pages");
+    if (pages === 0) {
+      fail.push(
+        "search.db has no page index, so every result would link to page 0",
+      );
+    }
+  } finally {
+    db.close();
   }
 }
 
-if (Object.keys(removed).length) {
-  fs.writeFileSync(
-    path.join(dir, "data/search.js"),
-    raw.slice(0, raw.indexOf("{")) + JSON.stringify(data) + ";\n",
-  );
-  console.log(
-    `  search.js: removed non-public entries ${JSON.stringify(removed)}`,
-  );
-}
+// 5b. nothing in the rendered HTML still carries a template placeholder. One
+//     shipped for weeks: the front page's redirect for old permalinks sent
+//     readers to /${base}C123-4.html, and every link pasted before the archive
+//     had per-page URLs 404ed.
+const unexpanded = html
+  .filter((name) => name.endsWith(".html"))
+  .filter((name) => read(path.join("html", name)).includes("${base}"))
+  .slice(0, 5);
 
-// 5. the search page must be able to start. MiniSearch throws on a duplicate
-//    id, and one throw in componentDidMount is the whole search page - a file
-//    carrying two rows with one timestamp is a broken site, not a slightly
-//    worse index. It was broken for weeks without anything saying so.
-let duplicates = 0;
-let channelsWithDuplicates = 0;
-
-for (const messages of Object.values(data.messages || {})) {
-  const seen = new Set();
-  let here = 0;
-
-  for (const message of messages) {
-    if (seen.has(message.t)) here++;
-    seen.add(message.t);
-  }
-
-  if (here) {
-    duplicates += here;
-    channelsWithDuplicates++;
-  }
-}
-
-if (duplicates) {
+if (unexpanded.length || read("index.html").includes("${base}")) {
   fail.push(
-    `duplicate message ids in search.js: ${duplicates} in ${channelsWithDuplicates} channels`,
+    `unexpanded \${base} in ${unexpanded.length ? unexpanded.join(", ") : "index.html"}`,
   );
 }
 

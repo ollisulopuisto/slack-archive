@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -10,12 +10,28 @@
     <!-- react -->
     <!-- react-dom -->
     <!-- babel -->
+    <!-- sql-httpvfs -->
+    <!-- search-sql -->
     <!-- minisearch -->
     <!-- search-query-logic -->
+    <!-- search-indexes -->
   </head>
 
   <body>
-    <script type="text/babel" data-type="module">
+    <!-- Only JSX is compiled here. The rest of this file is left as written,
+         so async/await reaches the browser as async/await rather than through
+         a 2016 transform that would need a regenerator runtime to land. -->
+    <script type="text/babel" data-presets="react">
+      // How much of the database one page-load may pull down before it gives
+      // up. Every query it can answer reads a few hundred kilobytes; anything
+      // approaching this means a query fell back to scanning, and a phone on
+      // cellular should be told rather than billed.
+      const MAX_BYTES = 64 * 1024 * 1024;
+
+      // Big enough that one request covers several pages of the database,
+      // small enough that a query is not a download.
+      const CHUNK = 4096;
+
       class App extends React.PureComponent {
         constructor(props) {
           super(props);
@@ -24,16 +40,15 @@
           this.handleSearchClear = this.handleSearchClear.bind(this);
           this.handleChannelChange = this.handleChannelChange.bind(this);
           this.handleUserChange = this.handleUserChange.bind(this);
-          this.searchMessages = this.searchMessages.bind(this);
-          this.loadSearchData = this.loadSearchData.bind(this);
-          this.loadSearchDataWhenReady =
-            this.loadSearchDataWhenReady.bind(this);
 
           this.searchInputRef = React.createRef();
+          // Queries are answered over the network now, so they come back out
+          // of order. Only the newest one is allowed to render.
+          this.queryId = 0;
+          this.pending = null;
 
-          // A search box lives in the sidebar of every page, and hands the
-          // query over here: index.html's frame loads search.html?q=... The
-          // 124 MB index cannot be in every page, but the box can.
+          // A search box lives in the sidebar of every page and hands the
+          // query over here: search.html?q=...
           const query = new URLSearchParams(window.location.search).get("q");
 
           this.state = {
@@ -42,112 +57,286 @@
             selectedChannel: "",
             selectedUser: "",
             ready: false,
-            miniSearch: null,
+            searching: false,
+            error: null,
+            channels: {},
+            users: {},
           };
         }
 
         componentDidMount() {
-          this.loadSearchDataWhenReady();
-        }
+          const built = window.SEARCH_INDEXES || { db: true, js: false };
+          // ?index=js or ?index=db forces one of them, which is how you find
+          // out whether a slow search is the index or the archive.
+          const forced = new URLSearchParams(window.location.search).get(
+            "index",
+          );
 
-        loadSearchDataWhenReady() {
-          if (window.search_data) {
-            this.loadSearchData();
+          if (forced === "js" && built.js) return this.loadJsIndex("asked for");
+          if (forced === "db" && built.db) return this.openDatabase();
+
+          // A database read over range requests cannot be read from file://:
+          // there are no range requests there, and a worker loaded from file://
+          // is refused. So an archive opened as a folder of files uses the
+          // JavaScript index, if it was built - and an archive served over
+          // HTTP uses the database, which is what makes it work on a phone.
+          if (built.db && window.location.protocol !== "file:") {
+            this.openDatabase();
+          } else if (built.js) {
+            this.loadJsIndex(
+              built.db
+                ? "opened from a folder rather than served, so the database index cannot be read"
+                : null,
+            );
           } else {
-            setTimeout(() => {
-              this.loadSearchDataWhenReady();
-            }, 100);
+            this.setState({
+              error:
+                "this archive was built with --search-index db, and a database index needs to be served over HTTP rather than opened as a file",
+            });
           }
         }
 
-        loadSearchData() {
-          const { messages } = window.search_data;
+        /**
+         * The whole corpus in one script tag, indexed here in the browser.
+         *
+         * What every archive did until the database arrived, kept because it
+         * is the only thing that works from file:// - and it is exactly why
+         * the search page died on a phone, so it is no longer what a served
+         * archive uses.
+         */
+        loadJsIndex(reason) {
+          if (reason) console.info(`Using the JavaScript index: ${reason}`);
 
-          console.time(`Loading minisearch`);
+          if (!window.search_data) {
+            setTimeout(() => this.loadJsIndex(null), 100);
+            return;
+          }
+
+          const { messages, channels, users, pages } = window.search_data;
           const allMessages = [];
-          const miniSearch = new MiniSearch({
-            idField: "id",
-            fields: ["m"], // fields to index for full-text search
-            storeFields: ["t", "u", "m", "c"], // fields to return with search results
-          });
 
           for (const channel in messages) {
             for (const message of messages[channel]) {
-              allMessages.push({ ...message, c: channel, id: `${channel}-${message.t}` });
+              allMessages.push(
+                Object.assign({}, message, {
+                  c: channel,
+                  id: `${channel}-${message.t}`,
+                }),
+              );
             }
           }
 
+          const miniSearch = new MiniSearch({
+            idField: "id",
+            fields: ["m"],
+            storeFields: ["t", "u", "m", "c", "p"],
+          });
           miniSearch.addAll(allMessages);
-          console.timeEnd(`Loading minisearch`);
 
-          // Run whatever arrived in the URL, now that there is something to
-          // run it against.
-          this.setState({ ready: true, miniSearch }, () => {
+          this.miniSearch = miniSearch;
+          this.pages = pages;
+          this.setState({ ready: true, channels, users }, () => {
             if (this.state.searchValue) this.updateResults();
           });
         }
 
+        /** The same rows the database returns, from the JavaScript index. */
+        searchJsIndex(text, channel, user) {
+          const { cleanQuery, phrases } = parseSearchQuery(text);
+          const options = { combineWith: "AND", prefix: true };
+          const filter = getSearchFilter({ channel, user });
+
+          if (filter) options.filter = filter;
+
+          let results;
+          if (cleanQuery) {
+            results = this.miniSearch.search(cleanQuery, options);
+          } else if (channel || user) {
+            results = this.miniSearch.search(MiniSearch.wildcard, options);
+          } else {
+            results = [];
+          }
+
+          return filterResultsByPhrases(results, phrases)
+            .slice(0, 50)
+            .map((result) => {
+              // The page index holds top-level timestamps only, so a reply is
+              // found by its parent's - the same rule the database applies in
+              // SQL, spelled out here.
+              const channelPages = this.pages[result.c] || null;
+              const lookup = result.p || result.t;
+              const index = channelPages
+                ? channelPages.findIndex((pageTs) => pageTs < lookup)
+                : -1;
+
+              return {
+                id: result.id,
+                c: result.c,
+                u: result.u,
+                t: result.t,
+                p: result.p,
+                m_text: result.m,
+                page: index < 0 ? 0 : index,
+              };
+            });
+        }
+
+        async openDatabase() {
+          try {
+            const worker = await createDbWorker(
+              [
+                {
+                  from: "inline",
+                  config: {
+                    serverMode: "full",
+                    url: new URL("data/search.db", document.baseURI).href,
+                    requestChunkSize: CHUNK,
+                  },
+                },
+              ],
+              // Absolute, because the worker resolves the wasm against its
+              // OWN location and would otherwise ask for html/html/...
+              new URL("html/sqlite.worker.js", document.baseURI).href,
+              new URL("html/sql-wasm.wasm", document.baseURI).href,
+              MAX_BYTES,
+            );
+
+            // Two small tables, read once: everything else is read a few
+            // pages at a time, when a query asks for it.
+            const channelRows = await worker.db.query(
+              "select id, name from channels order by name",
+            );
+            const userRows = await worker.db.query(
+              "select id, name from users order by name",
+            );
+
+            const channels = {};
+            for (const row of channelRows) channels[row.id] = row.name;
+            const users = {};
+            for (const row of userRows) users[row.id] = row.name;
+
+            this.worker = worker;
+            this.setState({ ready: true, channels, users }, () => {
+              if (this.state.searchValue) this.updateResults();
+            });
+          } catch (error) {
+            console.error("could not open the search database", error);
+
+            // A server that does not answer range requests, or a database that
+            // was never uploaded. If the whole-corpus index is here, it still
+            // answers - slowly, but it answers.
+            if ((window.SEARCH_INDEXES || {}).js) {
+              this.loadJsIndex("the database could not be opened");
+              return;
+            }
+
+            this.setState({ error: String((error && error.message) || error) });
+          }
+        }
+
         handleSearchChange({ target: { value } }) {
           this.setState({ searchValue: value }, () => {
-            this.updateResults();
+            // Typing is not a query. Each keystroke would otherwise be its own
+            // set of range requests, and the answer to a half-typed word is
+            // never the one anybody wanted.
+            clearTimeout(this.pending);
+            this.pending = setTimeout(() => this.updateResults(), 250);
           });
         }
 
         handleChannelChange({ target: { value } }) {
-          this.setState({ selectedChannel: value }, () => {
-            this.updateResults();
-          });
+          this.setState({ selectedChannel: value }, () => this.updateResults());
         }
 
         handleUserChange({ target: { value } }) {
-          this.setState({ selectedUser: value }, () => {
-            this.updateResults();
-          });
+          this.setState({ selectedUser: value }, () => this.updateResults());
         }
 
         handleSearchClear() {
-          this.setState({ searchValue: "", matchingMessages: [], selectedChannel: "", selectedUser: "" });
+          clearTimeout(this.pending);
+          this.queryId++;
+          this.setState({
+            searchValue: "",
+            matchingMessages: [],
+            selectedChannel: "",
+            selectedUser: "",
+            searching: false,
+          });
         }
 
-        updateResults() {
-          const { searchValue } = this.state;
-          const trimmedSearchValue = searchValue.trim();
-          const matchingMessages =
-            trimmedSearchValue.length > 1
-              ? this.searchMessages(searchValue)
-              : [];
-          this.setState({ matchingMessages });
-        }
+        async updateResults() {
+          const { searchValue, selectedChannel, selectedUser } = this.state;
+          const text = searchValue.trim();
+          const query = buildSearchSql({
+            query: text.length > 1 ? text : "",
+            channel: selectedChannel,
+            user: selectedUser,
+          });
 
-        searchMessages(query) {
-          const { miniSearch, selectedChannel, selectedUser } = this.state;
-          
-          const { cleanQuery, phrases } = parseSearchQuery(query);
-          
-          const searchOptions = {
-            combineWith: 'AND',
-            prefix: true,
-          };
-          
-          const filter = getSearchFilter({ channel: selectedChannel, user: selectedUser });
-          if (filter) {
-            searchOptions.filter = filter;
+          if (!query || (!this.worker && !this.miniSearch)) {
+            this.setState({ matchingMessages: [], searching: false });
+            return;
           }
-          
-          let results;
-          if (cleanQuery) {
-            results = miniSearch.search(cleanQuery, searchOptions);
-          } else if (selectedChannel || selectedUser) {
-            results = miniSearch.search(MiniSearch.wildcard, searchOptions);
-          } else {
-            results = [];
+
+          const id = ++this.queryId;
+          this.setState({ searching: true });
+
+          try {
+            const rows = this.worker
+              ? await this.worker.db.query(query.sql, query.params)
+              : this.searchJsIndex(
+                  text.length > 1 ? text : "",
+                  selectedChannel,
+                  selectedUser,
+                );
+
+            // A slower earlier query must not overwrite a faster later one.
+            if (id !== this.queryId) return;
+
+            this.setState({ matchingMessages: rows, searching: false });
+          } catch (error) {
+            if (id !== this.queryId) return;
+
+            console.error("search failed", error);
+            this.setState({
+              matchingMessages: [],
+              searching: false,
+              error: String((error && error.message) || error),
+            });
           }
-          
-          return filterResultsByPhrases(results, phrases).slice(0, 50);
         }
 
         render() {
-          const { matchingMessages, searchValue, selectedChannel, selectedUser, ready } = this.state;
+          const {
+            matchingMessages,
+            searchValue,
+            selectedChannel,
+            selectedUser,
+            ready,
+            searching,
+            error,
+            channels,
+            users,
+          } = this.state;
+
+          if (error) {
+            return (
+              <div className="App">
+                <article className="main">
+                  <p className="search-error">
+                    The search database could not be read: {error}
+                  </p>
+                  <p>
+                    Every message is still on the channel pages; only the search
+                    box needs it.
+                  </p>
+                </article>
+              </div>
+            );
+          }
+
+          const asked = searchValue || selectedChannel || selectedUser;
+
           return (
             <div className="App">
               <article className="main">
@@ -161,14 +350,26 @@
                     selectedChannel={selectedChannel}
                     selectedUser={selectedUser}
                     searchInputRef={this.searchInputRef}
+                    channels={channels}
+                    users={users}
                   />
                 ) : (
-                  "Loading"
+                  <p>Opening the search index…</p>
                 )}
-                {matchingMessages && matchingMessages.length > 0 ? (
-                  <MessagesList messages={matchingMessages} />
+                {matchingMessages.length > 0 ? (
+                  <MessagesList
+                    messages={matchingMessages}
+                    channels={channels}
+                    users={users}
+                  />
                 ) : (
-                  <p>{searchValue || selectedChannel || selectedUser ? "No matches found." : "Start typing to search messages."}</p>
+                  <p>
+                    {searching
+                      ? "Searching…"
+                      : asked
+                        ? "No matches found."
+                        : "Start typing to search messages."}
+                  </p>
                 )}
               </article>
             </div>
@@ -176,72 +377,48 @@
         }
       }
 
-      const MessagesList = ({ messages }) => (
+      const MessagesList = ({ messages, channels, users }) => (
         <ul className="MessagesList">
-          {messages.map(({ id, t, ...props }) => (
-            <Message {...props} t={t} key={id || t} />
+          {messages.map((message) => (
+            <Message
+              key={message.id}
+              message={message}
+              channels={channels}
+              users={users}
+            />
           ))}
         </ul>
       );
 
-      const Message = ({ m, u, t, c, p }) => {
-        // Let's find the page
-        const { pages } = window.search_data;
-        // Returns the index of the first timestamp that's
-        // smaller than the timestamp we passed in.
-        const channelPages = pages[c] ? pages[c] : null;
-        let href;
+      const Message = ({ message, channels, users }) => {
+        // The page a result is on comes from the database, which knows the
+        // page ranges - and knows that a thread reply is rendered inside its
+        // parent's block, so it is the parent's page that holds it.
+        const page = message.page === null ? 0 : message.page;
+        const href = `html/${message.c}-${page}.html#${message.t}`;
 
-        if (channelPages) {
-          // The PAGE comes from the parent on a thread reply, because the page
-          // index holds top-level timestamps only - a reply's own timestamp
-          // lands on whatever page range contains it, which is the parent's
-          // page until a thread runs on past the messages below it.
-          //
-          // The ANCHOR stays the reply's own timestamp: replies are rendered
-          // inside the parent's block, each with its own id, so that id is on
-          // the page either way.
-          const pageTsForLookup = p || t;
-          const index = channelPages.findIndex((pageTs) => pageTs < pageTsForLookup);
-          const page = `${c}-${index < 0 ? 0 : index}`;
-          // Every page has its own URL now, so a result links to the page and
-          // the message on it rather than to a frameset and a query string.
-          href = `html/${page}.html#${t}`;
-        }
-
-        const message = (
-          <li className="Message">
-            <p>
-              <Channel id={c} /> - <Timestamp timestamp={t} />
-            </p>
-            <p>
-              <User id={u} /> {m}
-            </p>
-          </li>
+        return (
+          <a href={href} target="_blank">
+            <li className="Message">
+              <p>
+                <span className="Channel">#{channels[message.c]}</span> -{" "}
+                <Timestamp timestamp={message.t} />
+              </p>
+              <p>
+                <strong>@{users[message.u] || message.u}: </strong>
+                {message.m_text}
+              </p>
+            </li>
+          </a>
         );
-
-        if (href) {
-          return (
-            <a href={href} target="_blank">
-              {message}
-            </a>
-          );
-        } else {
-          return message;
-        }
       };
-
-      const User = ({ id }) => (
-        <strong>@{window.search_data.users[id]}: </strong>
-      );
-
-      const Channel = ({ id }) => (
-        <span className="Channel">#{window.search_data.channels[id]}</span>
-      );
 
       const Timestamp = ({ timestamp }) => {
         const splitTs = timestamp.split(".") || [];
-        const jsTs = parseInt(`${splitTs[0]}${splitTs[1].slice(0, 3)}`, 10);
+        const jsTs = parseInt(
+          `${splitTs[0]}${(splitTs[1] || "000").slice(0, 3)}`,
+          10,
+        );
         const date = new Date(jsTs);
 
         return (
@@ -267,14 +444,15 @@
         selectedChannel,
         selectedUser,
         searchInputRef,
+        channels,
+        users,
       }) => {
-        const { channels, users } = window.search_data;
-        
-        const sortedChannels = Object.entries(channels)
-          .sort((a, b) => a[1].localeCompare(b[1]));
-          
-        const sortedUsers = Object.entries(users)
-          .sort((a, b) => a[1].localeCompare(b[1]));
+        const sortedChannels = Object.entries(channels).sort((a, b) =>
+          a[1].localeCompare(b[1]),
+        );
+        const sortedUsers = Object.entries(users).sort((a, b) =>
+          a[1].localeCompare(b[1]),
+        );
 
         return (
           <div className="SearchBox">
@@ -290,10 +468,7 @@
                 autoCapitalize="none"
                 spellCheck="false"
               />
-              <button
-                className="clear"
-                onClick={onSearchClear}
-              >
+              <button className="clear" onClick={onSearchClear}>
                 &times;
               </button>
             </div>
@@ -301,13 +476,17 @@
               <select value={selectedChannel} onChange={onChannelChange}>
                 <option value="">All Channels</option>
                 {sortedChannels.map(([id, name]) => (
-                  <option key={id} value={id}>#{name}</option>
+                  <option key={id} value={id}>
+                    #{name}
+                  </option>
                 ))}
               </select>
               <select value={selectedUser} onChange={onUserChange}>
                 <option value="">All Users</option>
                 {sortedUsers.map(([id, name]) => (
-                  <option key={id} value={id}>@{name}</option>
+                  <option key={id} value={id}>
+                    @{name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -317,22 +496,21 @@
 
       ReactDOM.render(
         React.createElement(App),
-        document.getElementById("search")
+        document.getElementById("search"),
       );
     </script>
     <div id="index">
       <!-- sidebar -->
       <main id="messages">
         <div id="search">
-          Loading and indexing messages, please wait. If you have a large
-          number of messages, this might take a minute.
+          Opening the search index…
           <p>
             <!-- Size -->
           </p>
         </div>
       </main>
     </div>
-    <script defer src="data/search.js" type="text/javascript"></script>
+    <!-- search-data -->
     <script defer src="html/sidebar.js"></script>
   </body>
 </html>

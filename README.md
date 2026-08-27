@@ -275,6 +275,26 @@ because it deletes things and so is worth testing: newest `keep` survive, the
 pinned tag survives whatever its age, and untagged layers are left to
 `docker image prune --filter dangling=true` rather than named to `rmi`.
 
+The search page reads a SQLite database over HTTP range requests: the browser
+fetches the few kilobytes of index and rows a query touches instead of the whole
+corpus. Before this it shipped every message as one 100 MB `<script>` and built
+the index on the main thread, which desktops survived and mobile Safari did not
+- the tab was killed before the first query, on the same WiFi that served the
+pages fine.
+
+That needs a server, so it is not the only index. `--search-index db|js|both`
+decides which are built, and `both` is the default:
+
+- `db` - the database. A few hundred kilobytes per query, works on a phone,
+  needs HTTP because `file://` has neither range requests nor a same-origin
+  worker. `scripts/publish.sh` passes this, since the site is served.
+- `js` - the single JavaScript file, which is the only thing that works in an
+  archive somebody unzips and double-clicks.
+
+The page picks whichever of them it was given and can use where it is opened,
+preferring the database when served; `?index=js` or `?index=db` forces one,
+which is how you find out whether a slow search is the index or the archive.
+
 For the search index the same idea has its own flags, because an index is read
 by things other than a browser: `--search-exclude-kinds`,
 `--search-exclude-users`, and bots which are excluded by default

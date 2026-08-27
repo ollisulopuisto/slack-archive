@@ -206,6 +206,14 @@ export async function buildSearchDatabase(
   const db = openSearchDatabase(dbPath);
 
   try {
+    // Before any table exists, because after one does this is ignored.
+    //
+    // The browser reads this file over HTTP range requests, a few pages at a
+    // time, so the page size decides how much of the corpus a phone downloads
+    // to answer one query. At the 4096-byte default every read drags in four
+    // times what it needs; 1024 is what sql.js-httpvfs asks for.
+    db.exec("PRAGMA page_size = 1024");
+
     // kind and is_archived exist so a reader can withhold what it should not
     // show. The archive holds private channels and direct messages next to
     // public ones, and without the type in the row there is no way to tell
@@ -278,6 +286,19 @@ export async function buildSearchDatabase(
     )`);
     db.exec(
       "CREATE VIRTUAL TABLE messages_fts USING fts5(id UNINDEXED, message)",
+    );
+
+    // The two questions the search page asks without any text to match on:
+    // everything in this channel, everything this person said. Unindexed they
+    // are full scans - a second on this machine, and over range requests a
+    // download of the whole corpus, which is what the range requests exist to
+    // avoid. The timestamp is in the index because those searches are ordered
+    // newest first and an index that ends at the filter still leaves a sort.
+    db.exec(
+      "CREATE INDEX messages_channel_ts ON messages (channel_id, timestamp DESC)",
+    );
+    db.exec(
+      "CREATE INDEX messages_user_ts ON messages (user_id, timestamp DESC)",
     );
 
     // Attachments in their own table, tied to the message that carried them.

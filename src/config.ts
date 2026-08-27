@@ -215,6 +215,45 @@ export const START_CHANNEL = getCliParameter("--start-channel") || "";
  * depending on who published last.
  */
 export const TIMEZONE = getCliParameter("--timezone") || "";
+
+/**
+ * Which search index the archive builds: `db`, `js` or `both`.
+ *
+ * There are two, because they answer different situations and neither covers
+ * the other.
+ *
+ * The database is read by the browser over HTTP range requests - a few
+ * hundred kilobytes per query instead of the whole corpus - which is the only
+ * way the search page works on a phone. It needs a server: `file://` has no
+ * range requests and no same-origin worker, so a database index is unusable
+ * in an archive somebody unzips and double-clicks.
+ *
+ * The JavaScript index is one `<script>` tag holding every message, which is
+ * exactly why it works from a folder of files and exactly why it kills mobile
+ * Safari at a hundred megabytes.
+ *
+ * Both, by default: an archive should still be a folder that works on its own,
+ * and the publish passes `--search-index db` because the site is served.
+ */
+export function searchIndexes(value: string) {
+  const setting = (value || "both").trim().toLowerCase();
+
+  if (setting !== "db" && setting !== "js" && setting !== "both") {
+    throw new Error(
+      `--search-index ${value}: expected db, js or both. ` +
+        `db is read over the network, js is one file that works from file://.`,
+    );
+  }
+
+  return {
+    db: setting === "db" || setting === "both",
+    js: setting === "js" || setting === "both",
+  };
+}
+
+export const SEARCH_INDEX = searchIndexes(
+  getCliParameter("--search-index") || "",
+);
 export const BASE_DIR = process.cwd();
 export const OUT_DIR = path.join(BASE_DIR, "slack-archive");
 export const TOKEN_FILE = path.join(OUT_DIR, ".token");

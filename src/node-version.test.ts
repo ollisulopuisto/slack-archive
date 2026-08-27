@@ -5,7 +5,9 @@ import semver from "semver";
 import { fileURLToPath } from "url";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const version = fs.readFileSync(path.join(root, ".node-version"), "utf8").trim();
+const version = fs
+  .readFileSync(path.join(root, ".node-version"), "utf8")
+  .trim();
 const lock = fs.readJsonSync(path.join(root, "package-lock.json"));
 
 describe(".node-version", () => {

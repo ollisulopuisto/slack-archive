@@ -744,3 +744,42 @@ describe("what kind of name and status", () => {
     db.close();
   });
 });
+
+// The browser reads this file over HTTP range requests now, a few pages at a
+// time, so the shape of the file is part of its interface.
+describe("what makes the database readable over the network", () => {
+  it("is written in small pages", () => {
+    // A range request fetches whole pages. At the 4096-byte default, every
+    // read drags in four times the data it needs; 1024 is what sql.js-httpvfs
+    // asks for and what keeps a phone's search to a few hundred kilobytes.
+    const db = openSearchDatabase(dbPath);
+
+    expect(db.all("pragma page_size")).toEqual([{ page_size: 1024 }]);
+    db.close();
+  });
+
+  it("can find one person's messages without reading the whole table", () => {
+    // Without these, "everything alice said" is a full scan - a second locally
+    // and a download of the entire corpus over range requests, which is the
+    // thing this whole change exists to stop.
+    const db = openSearchDatabase(dbPath);
+    const plan = db.all(
+      "explain query plan select * from messages where user_id = ? order by timestamp desc",
+      ["U1"],
+    ) as Array<{ detail: string }>;
+
+    expect(plan.map((row) => row.detail).join(" ")).toMatch(/using index/i);
+    db.close();
+  });
+
+  it("can find one channel's messages the same way", () => {
+    const db = openSearchDatabase(dbPath);
+    const plan = db.all(
+      "explain query plan select * from messages where channel_id = ? order by timestamp desc",
+      ["C1"],
+    ) as Array<{ detail: string }>;
+
+    expect(plan.map((row) => row.detail).join(" ")).toMatch(/using index/i);
+    db.close();
+  });
+});

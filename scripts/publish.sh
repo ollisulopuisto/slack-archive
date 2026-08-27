@@ -186,6 +186,8 @@ if ! $NODE ${NODE_MEMORY:+--max-old-space-size=$NODE_MEMORY} \
   "$REPO/bin/slack-archive.js" \
   --no-slack-connect --no-backup --force-html-generation \
   --html-exclude-kinds "$EXCLUDE_KINDS" \
+  --search-exclude-kinds "$EXCLUDE_KINDS" \
+  --search-index db \
   ${START_CHANNEL:+--start-channel "$START_CHANNEL"} \
   ${RENDER_WORKERS:+--render-workers "$RENDER_WORKERS"} \
   ${EXCLUDE_USER_FILES:+--exclude-user-files "$EXCLUDE_USER_FILES"} \
@@ -202,9 +204,15 @@ fi
 
 grep -E "Not rendering|Search|Rendered in|Finished in|All done" "$RENDER_LOG" || true
 
-# search.html and data/search.js are written by the render above, from the same
-# --html-exclude-kinds the pages used. Shipping the NAS's copy instead is how a
+# search.html and data/search.db are written by the render above, from the same
+# exclusions the pages used - and --search-exclude-kinds is passed as well as
+# --html-exclude-kinds, because the database carries channel NAMES even for
+# channels it holds no messages for. Shipping the NAS's copy instead is how a
 # stale index, built before an exclusion existed, ends up on the website.
+#
+# --search-index db: the site is served over HTTPS, so the browser reads the
+# database a few kilobytes at a time. The 100 MB JavaScript index is what made
+# the search page unusable on a phone, and it is not built here at all.
 
 say "5/7  checks - nothing is uploaded unless all six pass"
 $NODE "$REPO/scripts/verify-publish.mjs" "$WORK/slack-archive"
@@ -228,8 +236,10 @@ RSH="ssh -o BatchMode=yes"
 rsync -rlt --delete --no-owner --no-group -e "$RSH" \
   --exclude='data/*' --exclude='html/files' \
   "$WORK/slack-archive/" "$SITE/"
+# The one file in data/ the site serves. It must arrive whole: a half-written
+# database is a search page that opens and then throws on the first query.
 rsync -rlt --no-owner --no-group -e "$RSH" \
-  "$WORK/slack-archive/data/search.js" "$SITE/data/"
+  "$WORK/slack-archive/data/search.db" "$SITE/data/"
 
 # macOS ships openrsync, which ACCEPTS --chmod and silently ignores it, so the
 # files arrive with this shell's umask - 700, which nginx's workers cannot read.
@@ -241,16 +251,16 @@ $RSH "${SITE%%:*}" "chmod -R a+rX '${SITE#*:}'
 
 # What is actually THERE, not what we meant to send. Every check above this
 # line reads the tree we built; this one reads the web root, which is the thing
-# somebody could fetch. data/ may hold search.js and nothing else.
+# somebody could fetch. data/ may hold search.db and nothing else.
 say "7/7  reading the web root itself"
-stray=$($RSH "${SITE%%:*}" "ls '${SITE#*:}'/data | grep -v '^search.js$' || true")
+stray=$($RSH "${SITE%%:*}" "ls '${SITE#*:}'/data | grep -v '^search.db$' || true")
 if [ -n "$stray" ]; then
   echo "  WEB ROOT HOLDS FILES IT SHOULD NOT:"
   echo "$stray" | sed 's/^/    /'
   echo "  Remove them and find out how they got there before telling anybody the site is fine."
   exit 1
 fi
-echo "  data/: search.js only"
+echo "  data/: search.db only"
 
 dms=$($RSH "${SITE%%:*}" "ls '${SITE#*:}'/html | grep -cE '^D[A-Z0-9]+-|^G[A-Z0-9]+-' || true")
 if [ "$dms" != "0" ]; then

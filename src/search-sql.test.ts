@@ -1,0 +1,94 @@
+import { describe, expect, it } from "vitest";
+
+import { buildSearchSql, toMatchExpression } from "./search-sql.js";
+
+describe("the FTS match expression", () => {
+  it("ands the words together and matches on prefix", () => {
+    // What the old client-side index did: every word must appear, and a word
+    // may be the start of a longer one, so "kokou" finds "kokouspullaa".
+    expect(toMatchExpression("kokous pulla")).toBe('"kokous"* AND "pulla"*');
+  });
+
+  it("keeps a quoted phrase as a phrase", () => {
+    expect(toMatchExpression('"iso juttu" kokous')).toBe(
+      '"iso juttu" AND "kokous"*',
+    );
+  });
+
+  it("quotes what would otherwise be FTS syntax", () => {
+    // A colon, a hyphen or a bracket is an operator to FTS5 and a normal
+    // character to a person typing a search. Quoting every term means the
+    // query is read the way it was typed.
+    expect(toMatchExpression("foo:bar -baz (x)")).toBe(
+      '"foo:bar"* AND "-baz"* AND "(x)"*',
+    );
+  });
+
+  it("survives a quote inside a term", () => {
+    // Doubling is how a quote is escaped inside an FTS5 string; getting this
+    // wrong is a syntax error thrown at the person searching.
+    expect(toMatchExpression('sano "hei" nyt')).toBe(
+      '"hei" AND "sano"* AND "nyt"*',
+    );
+    expect(toMatchExpression('it"s')).toBe('"it""s"*');
+  });
+
+  it("is nothing at all when there is nothing to match on", () => {
+    expect(toMatchExpression("   ")).toBeUndefined();
+    expect(toMatchExpression('""')).toBeUndefined();
+  });
+});
+
+describe("the search query", () => {
+  it("searches the text when there is text", () => {
+    const { sql, params } = buildSearchSql({ query: "kokous" })!;
+
+    expect(sql).toContain("messages_fts match ?");
+    expect(sql).toContain("order by rank");
+    expect(params[0]).toBe('"kokous"*');
+  });
+
+  it("filters by channel and by person", () => {
+    const { sql, params } = buildSearchSql({
+      query: "kokous",
+      channel: "C1",
+      user: "U1",
+    })!;
+
+    expect(sql).toContain("m.channel_id = ?");
+    expect(sql).toContain("m.user_id = ?");
+    expect(params).toEqual(['"kokous"*', "C1", "U1", 50]);
+  });
+
+  it("lists newest first when only the filters are set", () => {
+    // The old page called this the wildcard search: no text, just "everything
+    // this person said". Relevance means nothing without a query, so it is
+    // ordered by time instead.
+    const { sql, params } = buildSearchSql({ query: "", user: "U1" })!;
+
+    expect(sql).not.toContain("messages_fts");
+    expect(sql).toContain("order by m.timestamp desc");
+    expect(params).toEqual(["U1", 50]);
+  });
+
+  it("is nothing at all with neither text nor filter", () => {
+    expect(buildSearchSql({ query: "" })).toBeUndefined();
+  });
+
+  it("finds the page a result is on, and a reply's parent's page", () => {
+    // The page index holds top-level timestamps only, so a reply's own
+    // timestamp would land on whatever page range contains it rather than on
+    // the page its thread is rendered in.
+    const { sql } = buildSearchSql({ query: "kokous" })!;
+
+    expect(sql).toContain("min(p.page)");
+    expect(sql).toContain("coalesce(m.parent_timestamp, m.timestamp)");
+  });
+
+  it("asks for one page of results and no more", () => {
+    const { sql, params } = buildSearchSql({ query: "kokous", limit: 25 })!;
+
+    expect(sql).toContain("limit ?");
+    expect(params[params.length - 1]).toBe(25);
+  });
+});

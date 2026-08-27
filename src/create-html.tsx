@@ -59,6 +59,7 @@ import { write } from "./data-write.js";
 import { getSlackArchiveData } from "./archive-data.js";
 import { getEmojiRef, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
 import { renderEmojiInHtml } from "./emoji-text.js";
+import { selfHealingRedirect } from "./self-heal.js";
 import { splitQuotes } from "./blockquotes.js";
 import { withoutBroadcastCopies } from "./broadcasts.js";
 import { reportTimings, timed } from "./timings.js";
@@ -834,42 +835,7 @@ const IndexPage: React.FunctionComponent = () => {
             generates them. They land here and get sent on. */}
         <script src={`${base}pages.js`} />
         <script
-          dangerouslySetInnerHTML={{
-            __html: `
-            var params = new URLSearchParams(window.location.search);
-            var channelValue = params.get("c");
-            var tsValue = params.get("ts");
-
-            if (channelValue) {
-              var channel = decodeURIComponent(channelValue);
-              var pages = window.ARCHIVE_PAGES || {};
-
-              // A permalink names the channel and the moment, not the page
-              // number - a page number is an accident of how the archive was
-              // chunked, and it changes as the channel grows.
-              if (!/-\d+$/.test(channel)) {
-                var boundaries = pages[channel];
-                var page = 0;
-
-                if (boundaries && tsValue) {
-                  page = boundaries.findIndex(function (start) {
-                    return start < tsValue;
-                  });
-                  if (page < 0) page = boundaries.length - 1;
-                }
-
-                channel = channel + '-' + Math.max(0, page);
-              }
-
-              // Marked, so a page that still cannot find the message sends
-              // nobody back here: one hop, then an honest landing.
-              window.location.replace(
-                "${"${base}"}" + channel + '.html?resolved=1' +
-                  (tsValue ? '#' + tsValue : '')
-              );
-            }
-            `,
-          }}
+          dangerouslySetInnerHTML={{ __html: selfHealingRedirect(base) }}
         />
       </div>
     </HtmlPage>

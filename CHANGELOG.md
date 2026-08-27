@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.27.196] - 2026-08-27
+
+### Changed
+- **Search reads a database over the network instead of downloading the
+  archive.** The page shipped every message as one 100 MB `<script>` and built
+  a MiniSearch index on the main thread. A desktop survives that; an iPhone on
+  the same WiFi does not - Safari kills the tab before the first query, which
+  is what "search times out on my phone" turned out to mean. It now queries the
+  SQLite index that already existed, over HTTP range requests: **364 KB fetched
+  to open the index and run two searches**, against a database of any size. The
+  full-text search, the channel and person filters, the ordering by relevance
+  and the link to the exact message on the exact page all still work, and the
+  query the page sends is a tested module rather than a string in an HTML file.
+- **`--search-index db|js|both`, defaulting to `both`.** The database needs a
+  server: `file://` has no range requests and refuses a same-origin worker, so
+  a database-only archive is one that cannot be unzipped and opened, and that
+  is the property this project is built on. So both are built by default, the
+  page uses the database when it is served and the JavaScript index when it is
+  not - and falls back to it if the database will not open at all, which is
+  what a server without range requests looks like. The publish passes
+  `--search-index db`, because the site is served and read on phones.
+
+### Fixed
+- **Old permalinks landed on `/${base}C123-4.html` and 404ed.** The front page
+  turns a link written before the archive had per-page URLs into the page that
+  holds the message - it worked out the right page and then redirected to a URL
+  with the literal characters `${base}` in it, because the interpolation was
+  escaped in the template that generates it. Every permalink pasted around
+  Slack, and every one the bot generates, hit that. The script that does it is
+  a tested function now, and the publish refuses to upload a tree with an
+  unexpanded placeholder in any page.
+
 ## [v26.08.27.195] - 2026-08-27
 
 ### Fixed

@@ -17,6 +17,8 @@ import {
   SEARCH_PATH,
   SEARCH_TEMPLATE_PATH,
   SIDEBAR_PATH,
+  HTML_DIR,
+  SEARCH_INDEX,
 } from "./config.js";
 import { SearchFile, SearchMessage, SearchPageIndex } from "./interfaces.js";
 import {
@@ -83,9 +85,17 @@ export async function createSearch() {
   const spinner = ora(`Creating search file...`).start();
   spinner.render();
 
-  await timed("search file", () => createSearchFile(spinner));
+  // The page is built either way and picks whichever index it was given; what
+  // this decides is which ones exist to pick from. See --search-index.
+  if (SEARCH_INDEX.js) {
+    await timed("search file", () => createSearchFile(spinner));
+  }
+
   await timed("search page", async () => createSearchHTML());
-  await timed("search database", () => createSearchDatabase(spinner));
+
+  if (SEARCH_INDEX.db) {
+    await timed("search database", () => createSearchDatabase(spinner));
+  }
 
   spinner.succeed(`Search file created`);
   console.log(`\n ${reportTimings("Finished")}`);
@@ -285,20 +295,57 @@ async function createSearchHTML() {
     `<!-- babel -->`,
     getScript(`babel-standalone@6.26.0/babel.min.js`),
   );
+  // What the page may use, decided here and read there: an index that was
+  // not built is not a fallback the page can quietly try.
   template = template.replace(
-    `<!-- minisearch -->`,
-    getScript("minisearch@7.2.0/dist/umd/index.min.js"),
+    "<!-- search-indexes -->",
+    `<script>window.SEARCH_INDEXES = ${JSON.stringify(SEARCH_INDEX)};</script>`,
   );
 
+  if (SEARCH_INDEX.db) {
+    // Copied out of node_modules rather than fetched from a CDN, because a
+    // Worker must be same-origin: a cross-origin worker script is refused by
+    // the browser, and the page is nothing without it.
+    copySqliteRuntime();
+
+    template = template.replace(
+      `<!-- sql-httpvfs -->`,
+      `<script src="html/sql-httpvfs.js"></script>`,
+    );
+  }
+
+  if (SEARCH_INDEX.js) {
+    template = template.replace(
+      `<!-- minisearch -->`,
+      getScript("minisearch@7.2.0/dist/umd/index.min.js"),
+    );
+
+    const sharedQueryLogicJs = fs
+      .readFileSync(path.join(__dirname, "./search-query.js"), "utf8")
+      .replace(/export /g, "");
+
+    template = template.replace(
+      "<!-- search-query-logic -->",
+      `<script type="text/javascript">${sharedQueryLogicJs}</script>`,
+    );
+
+    template = template.replace(
+      "<!-- search-data -->",
+      `<script defer src="data/search.js" type="text/javascript"></script>`,
+    );
+  }
+
   // Read the compiled JS (types already stripped by tsc), then remove
-  // `export` keywords so the functions are globals in the browser.
-  const sharedQueryLogicJs = fs
-    .readFileSync(path.join(__dirname, "./search-query.js"), "utf8")
+  // `export` keywords so the functions are globals in the browser. The page
+  // and this process therefore run the same query builder, and it is tested
+  // here rather than in a browser.
+  const searchSqlJs = fs
+    .readFileSync(path.join(__dirname, "./search-sql.js"), "utf8")
     .replace(/export /g, "");
 
   template = template.replace(
-    "<!-- search-query-logic -->",
-    `<script type="text/javascript">${sharedQueryLogicJs}</script>`,
+    "<!-- search-sql -->",
+    `<script type="text/javascript">${searchSqlJs}</script>`,
   );
 
   template = template.replace(`<!-- Size -->`, getSize());
@@ -321,8 +368,53 @@ async function createSearchHTML() {
 }
 
 function getSize() {
-  const mb = fs.statSync(SEARCH_DATA_PATH).size / 1048576; //MB
-  return `Loading ${Math.round(mb)}MB of data`;
+  // What the reader's browser will actually fetch. With the database that is
+  // a few hundred kilobytes per query, whatever the file weighs; with the
+  // JavaScript index it is the whole thing, which is what the old page meant
+  // when it said "Loading 124MB of data" and meant it literally.
+  const size = (file: string) =>
+    fs.existsSync(file) ? Math.round(fs.statSync(file).size / 1048576) : 0;
+
+  if (SEARCH_INDEX.db) {
+    return `Reading a ${size(SEARCH_DB_PATH)}MB index a few kilobytes at a time`;
+  }
+
+  return `Loading ${size(SEARCH_DATA_PATH)}MB of data`;
+}
+
+/**
+ * The three files the browser needs to read a database over the network.
+ *
+ * They sit beside the pages rather than on a CDN because the worker has to be
+ * same-origin, and because an archive that is published behind a login should
+ * not need a third party to be up in order to be searchable.
+ */
+function copySqliteRuntime() {
+  const dist = path.join(
+    __dirname,
+    "..",
+    "node_modules",
+    "sql.js-httpvfs",
+    "dist",
+  );
+  const files: Array<[string, string]> = [
+    ["index.js", "sql-httpvfs.js"],
+    ["sqlite.worker.js", "sqlite.worker.js"],
+    ["sql-wasm.wasm", "sql-wasm.wasm"],
+  ];
+
+  for (const [from, to] of files) {
+    const source = path.join(dist, from);
+
+    if (!fs.existsSync(source)) {
+      throw new Error(
+        `Cannot build the search page: ${source} is missing. ` +
+          `sql.js-httpvfs is what reads the index in the browser.`,
+      );
+    }
+
+    fs.copySync(source, path.join(HTML_DIR, to));
+  }
 }
 
 function getScript(script: string) {

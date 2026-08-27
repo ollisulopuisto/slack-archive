@@ -22,7 +22,7 @@ ARCHIVE="$ROOT/$WORKSPACE/slack-archive"
 
 # Pinned deliberately. `latest` would mean the nightly run silently changes
 # what it is running; this way an upgrade is a one-line edit made on purpose.
-IMAGE="ghcr.io/ollisulopuisto/slack-archive:26.08.27.195"
+IMAGE="ghcr.io/ollisulopuisto/slack-archive:26.08.27.196"
 
 # Where the search index is shipped after a successful run. The key lives under
 # /root because the DSM task runs as root and because /volume2 is shared over
