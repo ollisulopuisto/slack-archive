@@ -5,7 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
-## [v26.08.27.197] - 2026-08-27
+## [v26.08.27.198] - 2026-08-27
+
+### Fixed
+- **`scripts/nas-archive.sh` would have taken private channels out of the
+  BOT's search index.** The copy that runs on the NAS excludes `im,mpim` from
+  the archive run and `im,mpim,private` from the publish, deliberately and with
+  a comment saying so: no private channels on the website at all, but private
+  channels ARE searchable through the Slack bot by people who are members. The
+  version brought into this repo had `private` in both, which would have
+  emptied the bot's index of them silently - search would simply have stopped
+  finding things that were still archived. The mismatch and the reason for it
+  are now in this file too.
+- **And it would have lost three things the box's copy had grown**: the
+  heartbeat that stops the NAS sleeping through a forty-minute render, the
+  docker lookup that makes a manual `sudo sh nas-archive.sh` work at all when a
+  nightly run has failed, and the exit traps that put one line in the log
+  however the script dies - written after a run that produced no output at all
+  and looked exactly like a machine that never woke up. Ported, with the
+  incidents they record.
 
 ### Added
 - **Search by date range, beside the channel and person filters.** Two pickers,

@@ -22,7 +22,7 @@ ARCHIVE="$ROOT/$WORKSPACE/slack-archive"
 
 # Pinned deliberately. `latest` would mean the nightly run silently changes
 # what it is running; this way an upgrade is a one-line edit made on purpose.
-IMAGE="ghcr.io/ollisulopuisto/slack-archive:26.08.27.197"
+IMAGE="ghcr.io/ollisulopuisto/slack-archive:26.08.27.198"
 
 # Where the search index is shipped after a successful run. The key lives under
 # /root because the DSM task runs as root and because /volume2 is shared over
@@ -43,6 +43,14 @@ EXCLUDE_USER_FILES="historia,backlog"
 # republishes ten years of messages three hours earlier than they happened.
 TIMEZONE="Europe/Helsinki"
 
+# The NAS sleeps when nothing is asking it to stay awake, and a render is
+# forty minutes of CPU that Home Assistant cannot see. This pings a webhook
+# every four minutes so the machine is not shut down mid-run.
+#
+#   Create it once:  echo 'http://HOST:8123/api/webhook/ID' > /root/.nas-heartbeat-url
+HEARTBEAT_URL_FILE="/root/.nas-heartbeat-url"
+HEARTBEAT_PID=""
+
 LOG="$ROOT/logs/$WORKSPACE.log"
 LOCK="$ROOT/logs/$WORKSPACE.lock"
 
@@ -50,6 +58,87 @@ mkdir -p "$ROOT/logs"
 
 log() {
   echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"
+}
+
+heartbeat_start() {
+  if [ ! -f "$HEARTBEAT_URL_FILE" ]; then
+    log "HEARTBEAT SKIP: no $HEARTBEAT_URL_FILE - the NAS may shut down mid-render"
+    return 0
+  fi
+
+  url=$(cat "$HEARTBEAT_URL_FILE")
+  if [ -z "$url" ]; then
+    log "HEARTBEAT SKIP: $HEARTBEAT_URL_FILE is empty"
+    return 0
+  fi
+
+  # Prove it reaches HA before relying on it, rather than discovering at
+  # shutdown that every ping had been failing quietly.
+  if ! curl -sf -m 10 -X POST -H 'Content-Type: application/json' \
+      -d '{"client":"nas-archive.sh"}' "$url" >/dev/null 2>&1
+  then
+    log "HEARTBEAT SKIP: webhook unreachable - the NAS may shut down mid-render"
+    return 0
+  fi
+
+  while :; do
+    sleep 240
+    curl -sf -m 10 -X POST -H 'Content-Type: application/json' \
+      -d '{"client":"nas-archive.sh"}' "$url" >/dev/null 2>&1 \
+      || log "HEARTBEAT: ping failed"
+  done &
+  HEARTBEAT_PID=$!
+  log "HEARTBEAT started (pid $HEARTBEAT_PID)"
+}
+
+heartbeat_stop() {
+  [ -n "$HEARTBEAT_PID" ] || return 0
+  kill "$HEARTBEAT_PID" 2>/dev/null || true
+  HEARTBEAT_PID=""
+}
+
+# Docker is found rather than assumed to be on PATH.
+#
+# DSM's Task Scheduler runs with root's full environment and finds `docker`;
+# `sudo sh nas-archive.sh` does not - and a manual run is exactly how this
+# script gets used when a nightly run has failed and somebody is fixing it.
+# Synology keeps the binary inside the package rather than anywhere standard.
+find_docker() {
+  for candidate in \
+    /usr/local/bin/docker \
+    /var/packages/ContainerManager/target/usr/bin/docker \
+    /var/packages/Docker/target/usr/bin/docker \
+    /usr/bin/docker
+  do
+    [ -x "$candidate" ] && { echo "$candidate"; return 0; }
+  done
+  command -v docker 2>/dev/null && return 0
+  return 1
+}
+
+# One line in the log however this script dies.
+#
+# The 04:00 run on 2026-08-26 produced NOTHING: no START, no FAIL, no output at
+# all - a function called above its own definition ended the run at exit 127
+# before the first log call, and Task Scheduler discards stderr unless a save
+# folder is configured. A silent failure looked identical to a machine that
+# never woke up. This trap is the difference between that and a line naming the
+# status, and it is set AFTER the functions it calls are defined, which is the
+# bug it exists to report.
+on_exit() {
+  _status=$?
+  heartbeat_stop
+  [ "$_status" -eq 0 ] || log "DIED: exit $_status"
+}
+
+# A signal handler that RETURNS lets the script carry on, which once turned
+# this trap into an accidental shield: a run survived two rounds of `kill
+# -TERM` and had to be killed with -9 while its container was already gone.
+# Clean up, then die like a program that was told to stop.
+on_signal() {
+  log "DIED: signal, stopping"
+  heartbeat_stop
+  exit 143
 }
 
 if [ ! -d "$ARCHIVE" ]; then
@@ -82,7 +171,15 @@ fi
 # starts, so the name is folded to ASCII rather than passed through.
 CONTAINER_NAME=$(printf '%s' "slack-archive-$WORKSPACE" | tr -c 'a-zA-Z0-9_.-' '_')
 
-log "START $IMAGE"
+# Resolved once, before anything uses it, so a missing binary fails here with a
+# logged reason instead of at the line that does the work.
+DOCKER=$(find_docker) || { log "FAIL: docker not found"; exit 1; }
+
+trap on_exit EXIT
+trap on_signal INT TERM
+
+log "START $IMAGE (docker: $DOCKER)"
+heartbeat_start
 
 # Every run copies the whole data directory to data_backup_<timestamp> - 1.5 GB
 # a night - and nothing in the tool reclaims it on a schedule like this. When
@@ -108,7 +205,7 @@ sweep_backups() {
 # it runs from here rather than on a schedule of its own because a separate
 # timer drifts out of step with the thing it is cleaning up after.
 prune_images() {
-  "$(dirname "$0")/prune-images.sh" "$IMAGE" 3 2>&1 | while read -r line; do
+  DOCKER="$DOCKER" "$(dirname "$0")/prune-images.sh" "$IMAGE" 3 2>&1 | while read -r line; do
     log "$line"
   done
 }
@@ -161,7 +258,7 @@ publish_site() {
   mkdir -p "$PUBLISH_DIR/publish-work"
   log "PUBLISH START"
 
-  if docker run --rm \
+  if "$DOCKER" run --rm \
       --name "${CONTAINER_NAME}_publish" \
       --user 1026:100 \
       --group-add 101 \
@@ -189,6 +286,24 @@ publish_site() {
   fi
 }
 
+# THE TWO EXCLUDE FLAGS DIFFER ON PURPOSE. DO NOT "FIX" THE MISMATCH.
+#
+#   the publish, the website:  --exclude-kinds        im,mpim,private
+#   the archive run, the bot:  --search-exclude-kinds im,mpim
+#
+# The website excludes private everywhere; the bot's index does not. Two
+# indexes are built, on purpose, because one file cannot answer to both rules.
+#
+# Olli's rule, 2026-08-26: no private channels in the HTML archive at all, not
+# even behind the login - but private channels ARE searchable through the Slack
+# bot, for people who are members of the channel. Different audiences,
+# different media, different exclusions. DMs and group DMs stay out of both.
+#
+# The bot enforces membership itself, from the channel_members rows that enter
+# search.db from image .155 onward. Setting `private` here would take private
+# channels out of the bot's index silently, and nothing would report it: search
+# would simply stop finding things that are still archived.
+#
 # --user keeps file ownership as dst:users, and --group-add 101 is what makes
 # the mount readable at all. The archive tree carries a Synology ACL whose only
 # entry is `group:administrators:allow:rwx...`, and a Synology ACL overrides the
@@ -196,7 +311,7 @@ publish_site() {
 # even traverse it. Without this the container could not read .token, and the
 # archiver did what it does when there is no token: prompted, and exited having
 # archived nothing, while the wrapper logged OK.
-if docker run --rm \
+if "$DOCKER" run --rm \
     --name "$CONTAINER_NAME" \
     --user 1026:100 \
     --group-add 101 \
@@ -207,8 +322,9 @@ if docker run --rm \
     "$IMAGE" \
     node bin/slack-archive.js --automatic \
       --timezone "$TIMEZONE" \
-      --search-exclude-kinds im,mpim,private \
-      --search-exclude-users historia,backlog >> "$LOG" 2>&1
+      --search-exclude-kinds im,mpim \
+      --search-exclude-users historia,backlog \
+      --exclude-user-files "$EXCLUDE_USER_FILES" >> "$LOG" 2>&1
 then
   sweep_backups
   log "OK ($(df -h /volume2 | awk 'NR==2 {print $4}') free on /volume2)"
