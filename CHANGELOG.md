@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.27.195] - 2026-08-27
+
+### Fixed
+- **Custom emoji render inside messages, not only in reactions.** The same
+  emoji was a picture under a message and the literal `:handshake-3d:` inside
+  it, which reads as though the archive failed to fetch something it had on
+  disk all along. Standard emoji were already handled - slack-markdown turns
+  `:tada:` into the character - so this was only ever the workspace's own.
+  The substitution runs on the HTML after markdown, and only between tags: a
+  link whose URL contains a colon pair is a URL, not an emoji, and `<code>`
+  and `<pre>` are quoted for a reason. A shortcode nothing was downloaded for
+  is left as typed, because the text still says what was meant. And `12:30:45`
+  is a time, not `:30:` - the digits either side are what say so.
+
 ## [v26.08.27.194] - 2026-08-27
 
 ### Changed

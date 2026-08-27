@@ -864,6 +864,18 @@ table.timeline td.timestamp {
   outline-offset: 2px;
 }
 
+/* A custom emoji typed into a message, rather than used as a reaction. Sized
+   in em so it grows with the text it sits in - a 128px source at its natural
+   size would be a picture with a sentence around it. The small lift is what
+   puts it on the same optical line as the letters beside it. */
+.text img.emoji {
+  height: 1.35em;
+  width: auto;
+  max-width: 4em;
+  vertical-align: -0.25em;
+  display: inline-block;
+}
+
 /* Custom emoji the archive never managed to download. The shortcode is what
    the person typed, and it beats an empty box. */
 .emoji-missing {

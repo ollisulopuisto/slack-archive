@@ -58,6 +58,7 @@ import { getPageIndex, recordPage } from "./search.js";
 import { write } from "./data-write.js";
 import { getSlackArchiveData } from "./archive-data.js";
 import { getEmojiRef, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
+import { renderEmojiInHtml } from "./emoji-text.js";
 import { splitQuotes } from "./blockquotes.js";
 import { withoutBroadcastCopies } from "./broadcasts.js";
 import { reportTimings, timed } from "./timings.js";
@@ -358,7 +359,7 @@ interface MessageProps {
   children?: React.ReactNode;
 }
 const Message: React.FunctionComponent<MessageProps> = (props) => {
-  const { users, userNames, linkContext, profileIds } = useRender();
+  const { users, userNames, linkContext, profileIds, base } = useRender();
 
   const { message, channelId } = props;
   const username = getName(message.user, users);
@@ -428,12 +429,15 @@ const Message: React.FunctionComponent<MessageProps> = (props) => {
         <br />
         <div className="text">
           {splitQuotes(message.text).map((block, i) => {
-            const html = rewriteSlackLinks(
-              slackMarkdown.toHTML(block.text, {
-                escapeHTML: false,
-                slackCallbacks,
-              }),
-              linkContext,
+            const html = renderEmojiInHtml(
+              rewriteSlackLinks(
+                slackMarkdown.toHTML(block.text, {
+                  escapeHTML: false,
+                  slackCallbacks,
+                }),
+                linkContext,
+              ),
+              base,
             );
 
             return block.quote ? (
