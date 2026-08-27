@@ -238,8 +238,19 @@ rsync -rlt --delete --no-owner --no-group -e "$RSH" \
   "$WORK/slack-archive/" "$SITE/"
 # The one file in data/ the site serves. It must arrive whole: a half-written
 # database is a search page that opens and then throws on the first query.
-rsync -rlt --no-owner --no-group -e "$RSH" \
+#
+# -z because a SQLite file of ten years of chat is mostly text and compresses
+# to a fraction over the wire; --partial so an upload that drops halfway
+# resumes rather than starting again.
+rsync -rlt -z --partial --no-owner --no-group -e "$RSH" \
   "$WORK/slack-archive/data/search.db" "$SITE/data/"
+
+# The index this replaced. `--exclude data/*` protects that directory from the
+# --delete above, which is what keeps the message JSON off the web root - and
+# it also means the 100 MB JavaScript index would sit there forever, served to
+# anybody who asked for it. Named explicitly rather than swept: the check below
+# still refuses anything else that turns up in there.
+$RSH "${SITE%%:*}" "rm -f '${SITE#*:}/data/search.js'"
 
 # macOS ships openrsync, which ACCEPTS --chmod and silently ignores it, so the
 # files arrive with this shell's umask - 700, which nginx's workers cannot read.
