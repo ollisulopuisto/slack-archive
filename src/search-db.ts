@@ -301,6 +301,11 @@ export async function buildSearchDatabase(
       "CREATE INDEX messages_user_ts ON messages (user_id, timestamp DESC)",
     );
 
+    // And the third question, which has neither a channel nor a person in it:
+    // what was said between these two dates. The other two indexes cannot
+    // answer it - they are keyed on the column that is not being filtered.
+    db.exec("CREATE INDEX messages_ts ON messages (timestamp DESC)");
+
     // Attachments in their own table, tied to the message that carried them.
     // Channel kind reaches a file through its message, so the one gate that
     // withholds direct messages withholds their attachments too. A second

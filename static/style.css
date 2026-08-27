@@ -1149,12 +1149,31 @@ table.timeline,
   justify-content: flex-start;
 }
 
-.Filters select {
+.Filters select,
+.Filters input[type="date"] {
   padding: 8px 10px;
   border-radius: 8px;
   border: 1px solid var(--line-strong);
   background: var(--surface);
+  color: var(--ink);
   max-width: 100%;
+  font: inherit;
+}
+
+/* "From" and "To" beside their pickers. A bare date box says nothing about
+   which end of the range it is, and two of them side by side say less. */
+.DateFilter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+/* Safari paints the picker's own indicator dark on dark; this is the one
+   place the archive has to say which scheme its inputs are drawn in. */
+.Filters input[type="date"] {
+  color-scheme: light dark;
 }
 
 #search ul {
@@ -1208,8 +1227,19 @@ table.timeline,
     flex-direction: column;
   }
 
-  .Filters select {
+  .Filters select,
+  .Filters .DateFilter {
     width: 100%;
+  }
+
+  /* The label keeps its width and the picker takes the rest, so the two rows
+     line up rather than each finding its own edge. */
+  .DateFilter span {
+    min-width: 3em;
+  }
+
+  .DateFilter input[type="date"] {
+    flex: 1;
   }
 }
 

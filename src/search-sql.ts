@@ -17,6 +17,10 @@ export interface SearchRequest {
   query: string;
   channel?: string;
   user?: string;
+  /** Epoch seconds; messages at or after this moment. */
+  after?: number;
+  /** Epoch seconds; messages strictly before this moment. */
+  before?: number;
   limit?: number;
 }
 
@@ -61,6 +65,16 @@ export function toMatchExpression(query: string): string | undefined {
   return terms.length > 0 ? terms.join(" AND ") : undefined;
 }
 
+/**
+ * An epoch second as the archive writes it: ten digits, no fraction.
+ *
+ * Padded because the comparison is lexicographic - a nine-digit bound would
+ * sort above every real timestamp and quietly match nothing.
+ */
+function bound(seconds: number) {
+  return String(Math.floor(seconds)).padStart(10, "0");
+}
+
 /** Which page of the archive a message is rendered on. */
 const PAGE_OF_MESSAGE = `(select min(p.page) from pages p
        where p.channel_id = m.channel_id
@@ -78,12 +92,12 @@ const COLUMNS = `m.id id, m.channel_id c, m.user_id u, m.timestamp t,
  * page's wildcard search meant.
  */
 export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
-  const { channel, user, limit = 50 } = request;
+  const { channel, user, after, before, limit = 50 } = request;
   const match = toMatchExpression(request.query || "");
   const params: Array<string | number> = [];
   const where: string[] = [];
 
-  if (!match && !channel && !user) {
+  if (!match && !channel && !user && !after && !before) {
     return undefined;
   }
 
@@ -103,6 +117,21 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
   if (user) {
     where.push("m.user_id = ?");
     params.push(user);
+  }
+
+  // Compared as TEXT, deliberately. A Slack timestamp is ten digits, a dot and
+  // six more, so the string order and the numeric order are the same thing -
+  // and the index is on the text column, which `cast(timestamp as real)` would
+  // walk straight past. Over range requests, a scan is a download of the whole
+  // corpus, which is the one thing this page exists to avoid.
+  if (after) {
+    where.push("m.timestamp >= ?");
+    params.push(bound(after));
+  }
+
+  if (before) {
+    where.push("m.timestamp < ?");
+    params.push(bound(before));
   }
 
   params.push(limit);

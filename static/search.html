@@ -32,6 +32,25 @@
       // small enough that a query is not a download.
       const CHUNK = 4096;
 
+      /**
+       * A date from a picker as epoch seconds, in the reader's own timezone.
+       *
+       * `new Date("2025-01-01")` is midnight UTC, which is the previous evening
+       * in Helsinki - a message sent at 01:30 would fall outside a range that
+       * visibly includes its day. Constructed from the parts instead, which is
+       * local by definition.
+       */
+      function startOfDay(value, addDays = 0) {
+        if (!value) return undefined;
+
+        const [year, month, day] = value.split("-").map(Number);
+        if (!year || !month || !day) return undefined;
+
+        return Math.floor(
+          new Date(year, month - 1, day + addDays).getTime() / 1000,
+        );
+      }
+
       class App extends React.PureComponent {
         constructor(props) {
           super(props);
@@ -40,6 +59,8 @@
           this.handleSearchClear = this.handleSearchClear.bind(this);
           this.handleChannelChange = this.handleChannelChange.bind(this);
           this.handleUserChange = this.handleUserChange.bind(this);
+          this.handleFromChange = this.handleFromChange.bind(this);
+          this.handleToChange = this.handleToChange.bind(this);
 
           this.searchInputRef = React.createRef();
           // Queries are answered over the network now, so they come back out
@@ -56,6 +77,8 @@
             searchValue: query || "",
             selectedChannel: "",
             selectedUser: "",
+            fromDate: "",
+            toDate: "",
             ready: false,
             searching: false,
             error: null,
@@ -141,7 +164,7 @@
         }
 
         /** The same rows the database returns, from the JavaScript index. */
-        searchJsIndex(text, channel, user) {
+        searchJsIndex(text, channel, user, after, before) {
           const { cleanQuery, phrases } = parseSearchQuery(text);
           const options = { combineWith: "AND", prefix: true };
           const filter = getSearchFilter({ channel, user });
@@ -151,10 +174,23 @@
           let results;
           if (cleanQuery) {
             results = this.miniSearch.search(cleanQuery, options);
-          } else if (channel || user) {
+          } else if (channel || user || after || before) {
             results = this.miniSearch.search(MiniSearch.wildcard, options);
           } else {
             results = [];
+          }
+
+          // The dates are applied AFTER the index, not inside it: MiniSearch
+          // holds no timestamps to filter on. Slicing to fifty happens after
+          // this, or a narrow range would come back empty because the first
+          // fifty hits all fell outside it.
+          if (after || before) {
+            results = results.filter((result) => {
+              const seconds = Number(result.t);
+              if (after && seconds < after) return false;
+              if (before && seconds >= before) return false;
+              return true;
+            });
           }
 
           return filterResultsByPhrases(results, phrases)
@@ -252,6 +288,14 @@
           this.setState({ selectedUser: value }, () => this.updateResults());
         }
 
+        handleFromChange({ target: { value } }) {
+          this.setState({ fromDate: value }, () => this.updateResults());
+        }
+
+        handleToChange({ target: { value } }) {
+          this.setState({ toDate: value }, () => this.updateResults());
+        }
+
         handleSearchClear() {
           clearTimeout(this.pending);
           this.queryId++;
@@ -260,17 +304,33 @@
             matchingMessages: [],
             selectedChannel: "",
             selectedUser: "",
+            fromDate: "",
+            toDate: "",
             searching: false,
           });
         }
 
         async updateResults() {
-          const { searchValue, selectedChannel, selectedUser } = this.state;
+          const {
+            searchValue,
+            selectedChannel,
+            selectedUser,
+            fromDate,
+            toDate,
+          } = this.state;
           const text = searchValue.trim();
+          // A date is a day on somebody's calendar, and which day it is depends
+          // on the clock. These are read in the reader's own timezone, which is
+          // the one the timestamps beside the results are printed in - anything
+          // else would put a message on a different day than the page shows it.
+          const after = startOfDay(fromDate);
+          const before = startOfDay(toDate, 1);
           const query = buildSearchSql({
             query: text.length > 1 ? text : "",
             channel: selectedChannel,
             user: selectedUser,
+            after,
+            before,
           });
 
           if (!query || (!this.worker && !this.miniSearch)) {
@@ -288,6 +348,8 @@
                   text.length > 1 ? text : "",
                   selectedChannel,
                   selectedUser,
+                  after,
+                  before,
                 );
 
             // A slower earlier query must not overwrite a faster later one.
@@ -312,6 +374,8 @@
             searchValue,
             selectedChannel,
             selectedUser,
+            fromDate,
+            toDate,
             ready,
             searching,
             error,
@@ -335,7 +399,12 @@
             );
           }
 
-          const asked = searchValue || selectedChannel || selectedUser;
+          const asked =
+            searchValue ||
+            selectedChannel ||
+            selectedUser ||
+            fromDate ||
+            toDate;
 
           return (
             <div className="App">
@@ -345,10 +414,14 @@
                     onChange={this.handleSearchChange}
                     onChannelChange={this.handleChannelChange}
                     onUserChange={this.handleUserChange}
+                    onFromChange={this.handleFromChange}
+                    onToChange={this.handleToChange}
                     onSearchClear={this.handleSearchClear}
                     value={searchValue}
                     selectedChannel={selectedChannel}
                     selectedUser={selectedUser}
+                    fromDate={fromDate}
+                    toDate={toDate}
                     searchInputRef={this.searchInputRef}
                     channels={channels}
                     users={users}
@@ -439,10 +512,14 @@
         onChange,
         onChannelChange,
         onUserChange,
+        onFromChange,
+        onToChange,
         onSearchClear,
         value,
         selectedChannel,
         selectedUser,
+        fromDate,
+        toDate,
         searchInputRef,
         channels,
         users,
@@ -489,6 +566,14 @@
                   </option>
                 ))}
               </select>
+              <label className="DateFilter">
+                <span>From</span>
+                <input type="date" value={fromDate} onChange={onFromChange} />
+              </label>
+              <label className="DateFilter">
+                <span>To</span>
+                <input type="date" value={toDate} onChange={onToChange} />
+              </label>
             </div>
           </div>
         );

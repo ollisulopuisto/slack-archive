@@ -783,3 +783,20 @@ describe("what makes the database readable over the network", () => {
     db.close();
   });
 });
+
+describe("searching by date alone", () => {
+  it("uses an index rather than reading every message", () => {
+    // "What was said that week", with no channel and nobody named. Without an
+    // index on the timestamp this walks the whole table - which over HTTP
+    // range requests means downloading the archive to answer one question.
+    const db = openSearchDatabase(dbPath);
+    const plan = db.all(
+      `explain query plan select * from messages
+        where timestamp >= ? and timestamp < ? order by timestamp desc`,
+      ["1700000000", "1700000600"],
+    ) as Array<{ detail: string }>;
+
+    expect(plan.map((row) => row.detail).join(" ")).toMatch(/using index/i);
+    db.close();
+  });
+});

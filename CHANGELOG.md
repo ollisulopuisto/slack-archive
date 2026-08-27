@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.27.197] - 2026-08-27
+
+### Added
+- **Search by date range, beside the channel and person filters.** Two pickers,
+  either end optional, and a range on its own is a search: "what was said that
+  week" was not a question the page could ask before. The dates are read in the
+  reader's own timezone - the same clock the timestamps beside the results are
+  printed on - because `new Date("2025-01-01")` is midnight UTC, which is the
+  previous evening here, and a message sent at 01:30 would fall outside a range
+  that visibly includes its day.
+- The bounds are compared as TEXT, which is what lets the index answer them. A
+  Slack timestamp is ten digits, a dot and six more, so string order and
+  numeric order are the same thing - while `cast(timestamp as real) >= ?` reads
+  correctly and then scans the whole table, which over range requests means
+  downloading the corpus to answer one question. There is a third index for the
+  case with neither channel nor person in it.
+- Both search engines take the dates: the database applies them in SQL, and the
+  JavaScript index filters after the search, since MiniSearch holds no
+  timestamps to filter on. Verified in a browser to return identical results.
+
 ## [v26.08.27.196] - 2026-08-27
 
 ### Changed
