@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.28.199] - 2026-08-28
+
+### Fixed
+- **Custom emoji in search results were shortcodes.** Searching for `:nuclear`
+  returned a wall of `:nuclear-huutonaurut: :nuclear-huutonaurut:` where the
+  channel pages show the picture - the same message rendered two different ways
+  by the same archive, and the search page's version reads as though something
+  had failed to load. It had not: the file was on disk all along. Results are
+  raw message text out of the index, and the page printed it verbatim, which is
+  all it had ever known how to do. Standard shortcodes were literal there too,
+  so `:tada:` never became a party popper either.
+
+  The rendered pages do this work when they are built, with the emoji
+  directory and the emoji datasource at hand; the search page runs in somebody
+  else's browser and has neither. So it is now handed both as data - `src/emoji-render.ts`
+  splits a line into text and the emoji in it and is shared by both sides, and
+  `html/emoji.js` says which shortcodes this archive can draw: every standard
+  one as the character it means, every custom one this archive actually
+  downloaded as the file it lives in. A shortcode with nothing behind it is
+  still left exactly as typed, which is what the pages do and better than an
+  empty box. A clock is still a clock: `12:30:45` contains `:30:` and stays a
+  time.
+
 ## [v26.08.27.198] - 2026-08-27
 
 ### Fixed

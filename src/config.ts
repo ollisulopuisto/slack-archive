@@ -278,6 +278,15 @@ export const PAGES_INDEX_PATH = path.join(HTML_DIR, "pages.js");
  * open.
  */
 export const SIDEBAR_PATH = path.join(DATA_DIR, "sidebar.html");
+/**
+ * Every shortcode this archive can turn into an emoji, for the search page.
+ *
+ * Beside the pages rather than in data/ because it is one of them: the search
+ * page loads it in the reader's browser, the same way it loads the sidebar's
+ * script. It says which emoji exist, and nothing about who said what.
+ */
+export const EMOJI_INDEX_PATH = path.join(HTML_DIR, "emoji.js");
+
 export const STATS_PATH = path.join(HTML_DIR, "stats.html");
 export const BOTS_PATH = path.join(HTML_DIR, "bots.html");
 
