@@ -15,6 +15,8 @@
     <!-- minisearch -->
     <!-- search-query-logic -->
     <!-- search-indexes -->
+    <!-- emoji-index -->
+    <!-- emoji-render -->
   </head>
 
   <body>
@@ -479,10 +481,43 @@
               </p>
               <p>
                 <strong>@{users[message.u] || message.u}: </strong>
-                {message.m_text}
+                <EmojiText text={message.m_text} />
               </p>
             </li>
           </a>
+        );
+      };
+
+      /**
+       * A result with its emoji shown as emoji.
+       *
+       * What comes out of either index is the raw message text, shortcodes and
+       * all - so this page was the one place in the archive where a custom
+       * emoji stayed `:nuclear-huutonaurut:`, which reads as though a picture
+       * had failed to load rather than never been asked for.
+       *
+       * The splitting is the module the rendered pages use, inlined above; the
+       * emoji it knows about are in html/emoji.js. Neither being there is
+       * survivable: the text is then printed exactly as it was typed, which is
+       * what this page did before.
+       */
+      const EmojiText = ({ text }) => {
+        if (typeof splitEmoji !== "function") return text || null;
+
+        return splitEmoji(text || "", window.ARCHIVE_EMOJI || {}).map(
+          (part, index) =>
+            part.kind === "image" ? (
+              <img
+                key={index}
+                className="emoji"
+                src={`html/${part.ref}`}
+                alt={`:${part.name}:`}
+                title={`:${part.name}:`}
+                loading="lazy"
+              />
+            ) : (
+              <React.Fragment key={index}>{part.text}</React.Fragment>
+            ),
         );
       };
 

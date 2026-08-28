@@ -867,8 +867,12 @@ table.timeline td.timestamp {
 /* A custom emoji typed into a message, rather than used as a reaction. Sized
    in em so it grows with the text it sits in - a 128px source at its natural
    size would be a picture with a sentence around it. The small lift is what
-   puts it on the same optical line as the letters beside it. */
-.text img.emoji {
+   puts it on the same optical line as the letters beside it.
+
+   The search results are the same emoji in the same sentences, so they are
+   sized here rather than left to find their own size a thousand lines down. */
+.text img.emoji,
+#search li img.emoji {
   height: 1.35em;
   width: auto;
   max-width: 4em;

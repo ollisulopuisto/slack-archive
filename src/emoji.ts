@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 
 import { EMOJIS_DIR, NO_SLACK_CONNECT } from "./config.js";
 import { downloadURL } from "./download-files.js";
+import { EmojiIndex } from "./emoji-render.js";
 import { ArchiveMessage, Emojis } from "./interfaces.js";
 import { getWebClient } from "./web-client.js";
 
@@ -69,6 +70,65 @@ export function getEmojiUnicode(name: string) {
       return String.fromCodePoint(parseInt(code, 16));
     })
     .join("");
+}
+
+/**
+ * Everything the browser needs to turn a shortcode into an emoji.
+ *
+ * The rendered pages do this here, with the emoji directory and the emoji
+ * datasource both on disk. The search page cannot: it is a template, it runs
+ * in somebody's browser and it prints the raw message text out of the index.
+ * So it is handed the same two facts as data - every standard shortcode and
+ * the character it means, and every custom emoji this archive actually
+ * downloaded and the file it lives in.
+ *
+ * The custom half is read from the emoji directory rather than from
+ * emojis.json, for the same reason getEmojiRef is: what matters is which
+ * pictures are on disk to point at, not which ones the workspace has.
+ */
+export function getEmojiIndex(): EmojiIndex {
+  return {
+    unicode: getUnicodeEmojiChars(),
+    custom: getDownloadedEmoji(),
+  };
+}
+
+/** Every standard shortcode, mapped to the character it means. */
+function getUnicodeEmojiChars(): Record<string, string> {
+  const chars: Record<string, string> = {};
+
+  for (const name of Object.keys(getUnicodeEmoji())) {
+    chars[name] = getEmojiUnicode(name);
+  }
+
+  return chars;
+}
+
+/**
+ * Every custom emoji on disk, mapped the way the pages refer to it.
+ *
+ * An emoji the workspace has but this archive never downloaded is not in here,
+ * and that is the point: a name with no file behind it would render as a
+ * broken image, where the shortcode at least still says what was meant.
+ */
+function getDownloadedEmoji(): Record<string, string> {
+  if (!fs.existsSync(EMOJIS_DIR)) {
+    return {};
+  }
+
+  const extensions = new Set([".png", ".jpg", ".gif"]);
+  const refs: Record<string, string> = {};
+
+  for (const file of fs.readdirSync(EMOJIS_DIR)) {
+    const extension = path.extname(file).toLowerCase();
+
+    if (!extensions.has(extension)) continue;
+
+    refs[path.basename(file, path.extname(file)).toLowerCase()] =
+      `emojis/${file}`;
+  }
+
+  return refs;
 }
 
 export async function downloadEmojiList(): Promise<Emojis> {

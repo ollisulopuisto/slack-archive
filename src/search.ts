@@ -8,6 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import {
   NO_SEARCH,
+  EMOJI_INDEX_PATH,
   HTML_EXCLUDE_KINDS,
   SEARCH_EXCLUDE_KINDS,
   SEARCH_EXCLUDE_USERS,
@@ -29,6 +30,7 @@ import {
   getUserStatuses,
   getUsers,
 } from "./data-load.js";
+import { getEmojiIndex } from "./emoji.js";
 import { buildSearchDatabase } from "./search-db.js";
 import {
   botUserIds,
@@ -335,6 +337,25 @@ async function createSearchHTML() {
     );
   }
 
+  writeEmojiIndex();
+
+  template = template.replace(
+    "<!-- emoji-index -->",
+    `<script type="text/javascript" src="html/emoji.js"></script>`,
+  );
+
+  // The same splitting the rendered pages do, running in the browser this
+  // time. Inlined rather than fetched, because it is a few lines and the page
+  // has to have it before the first result is drawn.
+  const emojiRenderJs = fs
+    .readFileSync(path.join(__dirname, "./emoji-render.js"), "utf8")
+    .replace(/export /g, "");
+
+  template = template.replace(
+    "<!-- emoji-render -->",
+    `<script type="text/javascript">${emojiRenderJs}</script>`,
+  );
+
   // Read the compiled JS (types already stripped by tsc), then remove
   // `export` keywords so the functions are globals in the browser. The page
   // and this process therefore run the same query builder, and it is tested
@@ -365,6 +386,24 @@ async function createSearchHTML() {
   }
 
   fs.outputFileSync(SEARCH_PATH, template);
+}
+
+/**
+ * What the search page needs to show an emoji rather than its shortcode.
+ *
+ * The results are raw message text: whatever somebody typed, shortcodes and
+ * all. Every other page in the archive turns those into emoji at render time,
+ * so the search page was the one place where a custom emoji stayed
+ * `:nuclear-huutonaurut:` - which reads as though the archive had failed to
+ * fetch a picture it in fact has on disk.
+ */
+function writeEmojiIndex() {
+  const index = getEmojiIndex();
+
+  fs.outputFileSync(
+    EMOJI_INDEX_PATH,
+    `window.ARCHIVE_EMOJI = ${JSON.stringify(index)};\n`,
+  );
 }
 
 function getSize() {

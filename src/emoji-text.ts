@@ -1,14 +1,15 @@
 import { getEmojiRef, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
+import { shortcodePattern } from "./emoji-render.js";
 
 /**
- * A shortcode as Slack writes one: `:tada:`, `:handshake-3d:`, `:+1:`.
+ * A shortcode as Slack writes one, defined once in emoji-render.ts and used
+ * here and by the search page, which does the same job in the browser. Two
+ * copies of this regex would be two ideas of what an emoji is.
  *
- * The lookarounds are what keep a clock from becoming an emoji. `12:30:45`
- * contains `:30:`, which is the right shape and the wrong thing entirely; the
- * digits either side are the only evidence that it is a time, so a shortcode
- * is one only when it is not glued to a word or a number.
+ * Shared safely because `replace` with a global regex starts at the beginning
+ * and leaves lastIndex where it found it.
  */
-const SHORTCODE = /(?<![\w:])(:([a-z0-9_+'-]+):)(?![\w:])/gi;
+const SHORTCODE = shortcodePattern();
 
 /** Tags whose contents are quoted text and must be left exactly as typed. */
 const VERBATIM = /^<\/?(code|pre)\b/i;
