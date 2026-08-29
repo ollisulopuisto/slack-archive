@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
+## [v26.08.29.200] - 2026-08-29
+
+### Added
+- **Search keyword highlighting, result count summary, thread reply badges, URL synchronization, and keyboard shortcuts.**
+  - Matched search terms and quoted phrases are highlighted in message results with `<mark>` tags without breaking custom emoji rendering.
+  - Result count feedback summary is displayed above search results ("Found X messages" / "Showing top 50 messages" / "No matches found.").
+  - Search filters and query parameters (`q`, `channel`, `user`, `from`, `to`, `sort`) synchronize with the browser address bar via `history.replaceState` and are parsed on initial load for shareable, bookmarkable deep links with browser history support.
+  - Thread replies carry a visible `↳ Thread reply` badge so readers immediately see context.
+  - Added `/` keyboard shortcut to quickly focus the search input, and `Escape` to blur.
+
 ## [v26.08.28.199] - 2026-08-28
 
 ### Fixed
