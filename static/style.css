@@ -1209,6 +1209,71 @@ table.timeline,
   border-color: var(--line-strong);
 }
 
+.SearchShortcut {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink-muted);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.SearchSummary {
+  max-width: 900px;
+  margin: 12px auto;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.SearchSummary.empty {
+  text-align: center;
+  padding: 36px 0;
+  font-size: 15px;
+}
+
+.MessageMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.ThreadBadge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--surface-sunken);
+  color: var(--ink-muted);
+  border: 1px solid var(--line);
+}
+
+mark.search-highlight,
+#search mark {
+  background-color: var(--target);
+  color: inherit;
+  padding: 1px 3px;
+  border-radius: 3px;
+}
+
+
 /* The line that says where and when: quiet, and the same shape every time, so
    a column of them can be skimmed rather than read. */
 #search li p:first-child {

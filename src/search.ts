@@ -322,20 +322,20 @@ async function createSearchHTML() {
       getScript("minisearch@7.2.0/dist/umd/index.min.js"),
     );
 
-    const sharedQueryLogicJs = fs
-      .readFileSync(path.join(__dirname, "./search-query.js"), "utf8")
-      .replace(/export /g, "");
-
-    template = template.replace(
-      "<!-- search-query-logic -->",
-      `<script type="text/javascript">${sharedQueryLogicJs}</script>`,
-    );
-
     template = template.replace(
       "<!-- search-data -->",
       `<script defer src="data/search.js" type="text/javascript"></script>`,
     );
   }
+
+  const sharedQueryLogicJs = fs
+    .readFileSync(path.join(__dirname, "./search-query.js"), "utf8")
+    .replace(/export /g, "");
+
+  template = template.replace(
+    "<!-- search-query-logic -->",
+    `<script type="text/javascript">${sharedQueryLogicJs}</script>`,
+  );
 
   writeEmojiIndex();
 

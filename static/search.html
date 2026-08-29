@@ -63,6 +63,9 @@
           this.handleUserChange = this.handleUserChange.bind(this);
           this.handleFromChange = this.handleFromChange.bind(this);
           this.handleToChange = this.handleToChange.bind(this);
+          this.handleSortChange = this.handleSortChange.bind(this);
+          this.handleKeyDown = this.handleKeyDown.bind(this);
+          this.handlePopState = this.handlePopState.bind(this);
 
           this.searchInputRef = React.createRef();
           // Queries are answered over the network now, so they come back out
@@ -72,15 +75,28 @@
 
           // A search box lives in the sidebar of every page and hands the
           // query over here: search.html?q=...
-          const query = new URLSearchParams(window.location.search).get("q");
+          const searchParams = new URLSearchParams(window.location.search);
+          const query = searchParams.get("q") || "";
+          const channelParam = searchParams.get("channel") || "";
+          const userParam = searchParams.get("user") || "";
+          const fromParam = searchParams.get("from") || "";
+          const toParam = searchParams.get("to") || "";
+          const sortParam = searchParams.get("sort");
+          const initialSort =
+            sortParam === "oldest" ||
+            sortParam === "newest" ||
+            sortParam === "score"
+              ? sortParam
+              : "score";
 
           this.state = {
             matchingMessages: [],
-            searchValue: query || "",
-            selectedChannel: "",
-            selectedUser: "",
-            fromDate: "",
-            toDate: "",
+            searchValue: query,
+            selectedChannel: channelParam,
+            selectedUser: userParam,
+            fromDate: fromParam,
+            toDate: toParam,
+            selectedSort: initialSort,
             ready: false,
             searching: false,
             error: null,
@@ -90,6 +106,9 @@
         }
 
         componentDidMount() {
+          window.addEventListener("keydown", this.handleKeyDown);
+          window.addEventListener("popstate", this.handlePopState);
+
           const built = window.SEARCH_INDEXES || { db: true, js: false };
           // ?index=js or ?index=db forces one of them, which is how you find
           // out whether a slow search is the index or the archive.
@@ -119,6 +138,112 @@
                 "this archive was built with --search-index db, and a database index needs to be served over HTTP rather than opened as a file",
             });
           }
+        }
+
+        componentWillUnmount() {
+          window.removeEventListener("keydown", this.handleKeyDown);
+          window.removeEventListener("popstate", this.handlePopState);
+        }
+
+        handleKeyDown(event) {
+          const target = event.target || document.activeElement;
+          const tagName = target && target.tagName;
+          const isInputFocused =
+            tagName === "INPUT" ||
+            tagName === "TEXTAREA" ||
+            tagName === "SELECT" ||
+            (target && target.isContentEditable);
+
+          if (event.key === "/" && !isInputFocused) {
+            event.preventDefault();
+            if (this.searchInputRef && this.searchInputRef.current) {
+              this.searchInputRef.current.focus();
+              this.searchInputRef.current.select();
+            }
+          } else if (event.key === "Escape") {
+            if (
+              this.searchInputRef &&
+              this.searchInputRef.current &&
+              document.activeElement === this.searchInputRef.current
+            ) {
+              this.searchInputRef.current.blur();
+            }
+          }
+        }
+
+        handlePopState() {
+          const searchParams = new URLSearchParams(window.location.search);
+          const searchValue = searchParams.get("q") || "";
+          const selectedChannel = searchParams.get("channel") || "";
+          const selectedUser = searchParams.get("user") || "";
+          const fromDate = searchParams.get("from") || "";
+          const toDate = searchParams.get("to") || "";
+          const sortParam = searchParams.get("sort");
+          const selectedSort =
+            sortParam === "oldest" ||
+            sortParam === "newest" ||
+            sortParam === "score"
+              ? sortParam
+              : "score";
+
+          this.setState(
+            {
+              searchValue,
+              selectedChannel,
+              selectedUser,
+              fromDate,
+              toDate,
+              selectedSort,
+            },
+            () => this.updateResults(),
+          );
+        }
+
+        syncUrl() {
+          if (typeof window === "undefined" || !window.history) return;
+          const {
+            searchValue,
+            selectedChannel,
+            selectedUser,
+            fromDate,
+            toDate,
+            selectedSort,
+          } = this.state;
+
+          const params = new URLSearchParams();
+          const forced = new URLSearchParams(window.location.search).get("index");
+          if (forced) params.set("index", forced);
+
+          const q = searchValue.trim();
+          if (q) params.set("q", q);
+          if (selectedChannel) params.set("channel", selectedChannel);
+          if (selectedUser) params.set("user", selectedUser);
+          if (fromDate) params.set("from", fromDate);
+          if (toDate) params.set("to", toDate);
+          if (selectedSort && selectedSort !== "score") params.set("sort", selectedSort);
+
+          const qs = params.toString();
+          const newUrl = qs
+            ? `${window.location.pathname}?${qs}`
+            : window.location.pathname;
+          window.history.replaceState(null, "", newUrl);
+        }
+
+        hasSearchCriteria() {
+          const {
+            searchValue,
+            selectedChannel,
+            selectedUser,
+            fromDate,
+            toDate,
+          } = this.state;
+          return Boolean(
+            (searchValue && searchValue.trim().length > 1) ||
+              selectedChannel ||
+              selectedUser ||
+              fromDate ||
+              toDate,
+          );
         }
 
         /**
@@ -161,12 +286,12 @@
           this.miniSearch = miniSearch;
           this.pages = pages;
           this.setState({ ready: true, channels, users }, () => {
-            if (this.state.searchValue) this.updateResults();
+            if (this.hasSearchCriteria()) this.updateResults();
           });
         }
 
         /** The same rows the database returns, from the JavaScript index. */
-        searchJsIndex(text, channel, user, after, before) {
+        searchJsIndex(text, channel, user, after, before, sort) {
           const { cleanQuery, phrases } = parseSearchQuery(text);
           const options = { combineWith: "AND", prefix: true };
           const filter = getSearchFilter({ channel, user });
@@ -195,28 +320,39 @@
             });
           }
 
-          return filterResultsByPhrases(results, phrases)
-            .slice(0, 50)
-            .map((result) => {
-              // The page index holds top-level timestamps only, so a reply is
-              // found by its parent's - the same rule the database applies in
-              // SQL, spelled out here.
-              const channelPages = this.pages[result.c] || null;
-              const lookup = result.p || result.t;
-              const index = channelPages
-                ? channelPages.findIndex((pageTs) => pageTs < lookup)
-                : -1;
+          results = filterResultsByPhrases(results, phrases);
+          if (typeof sortSearchResults === "function") {
+            results = sortSearchResults(results, sort, !!cleanQuery);
+          } else {
+            if (sort === "newest") {
+              results.sort((a, b) => (b.t < a.t ? -1 : b.t > a.t ? 1 : 0));
+            } else if (sort === "oldest") {
+              results.sort((a, b) => (a.t < b.t ? -1 : a.t > b.t ? 1 : 0));
+            } else if (!cleanQuery) {
+              results.sort((a, b) => (b.t < a.t ? -1 : b.t > a.t ? 1 : 0));
+            }
+          }
 
-              return {
-                id: result.id,
-                c: result.c,
-                u: result.u,
-                t: result.t,
-                p: result.p,
-                m_text: result.m,
-                page: index < 0 ? 0 : index,
-              };
-            });
+          return results.slice(0, 50).map((result) => {
+            // The page index holds top-level timestamps only, so a reply is
+            // found by its parent's - the same rule the database applies in
+            // SQL, spelled out here.
+            const channelPages = this.pages[result.c] || null;
+            const lookup = result.p || result.t;
+            const index = channelPages
+              ? channelPages.findIndex((pageTs) => pageTs < lookup)
+              : -1;
+
+            return {
+              id: result.id,
+              c: result.c,
+              u: result.u,
+              t: result.t,
+              p: result.p,
+              m_text: result.m,
+              page: index < 0 ? 0 : index,
+            };
+          });
         }
 
         async openDatabase() {
@@ -255,7 +391,7 @@
 
             this.worker = worker;
             this.setState({ ready: true, channels, users }, () => {
-              if (this.state.searchValue) this.updateResults();
+              if (this.hasSearchCriteria()) this.updateResults();
             });
           } catch (error) {
             console.error("could not open the search database", error);
@@ -298,18 +434,27 @@
           this.setState({ toDate: value }, () => this.updateResults());
         }
 
+        handleSortChange({ target: { value } }) {
+          this.setState({ selectedSort: value }, () => this.updateResults());
+        }
+
         handleSearchClear() {
           clearTimeout(this.pending);
           this.queryId++;
-          this.setState({
-            searchValue: "",
-            matchingMessages: [],
-            selectedChannel: "",
-            selectedUser: "",
-            fromDate: "",
-            toDate: "",
-            searching: false,
-          });
+          this.setState(
+            {
+              searchValue: "",
+              matchingMessages: [],
+              selectedChannel: "",
+              selectedUser: "",
+              fromDate: "",
+              toDate: "",
+              searching: false,
+            },
+            () => {
+              this.syncUrl();
+            },
+          );
         }
 
         async updateResults() {
@@ -319,7 +464,10 @@
             selectedUser,
             fromDate,
             toDate,
+            selectedSort,
           } = this.state;
+          this.syncUrl();
+
           const text = searchValue.trim();
           // A date is a day on somebody's calendar, and which day it is depends
           // on the clock. These are read in the reader's own timezone, which is
@@ -333,6 +481,7 @@
             user: selectedUser,
             after,
             before,
+            sort: selectedSort,
           });
 
           if (!query || (!this.worker && !this.miniSearch)) {
@@ -352,6 +501,7 @@
                   selectedUser,
                   after,
                   before,
+                  selectedSort,
                 );
 
             // A slower earlier query must not overwrite a faster later one.
@@ -378,6 +528,7 @@
             selectedUser,
             fromDate,
             toDate,
+            selectedSort,
             ready,
             searching,
             error,
@@ -418,12 +569,14 @@
                     onUserChange={this.handleUserChange}
                     onFromChange={this.handleFromChange}
                     onToChange={this.handleToChange}
+                    onSortChange={this.handleSortChange}
                     onSearchClear={this.handleSearchClear}
                     value={searchValue}
                     selectedChannel={selectedChannel}
                     selectedUser={selectedUser}
                     fromDate={fromDate}
                     toDate={toDate}
+                    selectedSort={selectedSort}
                     searchInputRef={this.searchInputRef}
                     channels={channels}
                     users={users}
@@ -432,13 +585,23 @@
                   <p>Opening the search index…</p>
                 )}
                 {matchingMessages.length > 0 ? (
-                  <MessagesList
-                    messages={matchingMessages}
-                    channels={channels}
-                    users={users}
-                  />
+                  <div>
+                    <div className="SearchSummary">
+                      {matchingMessages.length >= 50
+                        ? "Showing top 50 messages"
+                        : matchingMessages.length === 1
+                          ? "Found 1 message"
+                          : `Found ${matchingMessages.length} messages`}
+                    </div>
+                    <MessagesList
+                      messages={matchingMessages}
+                      channels={channels}
+                      users={users}
+                      query={searchValue}
+                    />
+                  </div>
                 ) : (
-                  <p>
+                  <p className="SearchSummary empty">
                     {searching
                       ? "Searching…"
                       : asked
@@ -452,7 +615,7 @@
         }
       }
 
-      const MessagesList = ({ messages, channels, users }) => (
+      const MessagesList = ({ messages, channels, users, query }) => (
         <ul className="MessagesList">
           {messages.map((message) => (
             <Message
@@ -460,28 +623,32 @@
               message={message}
               channels={channels}
               users={users}
+              query={query}
             />
           ))}
         </ul>
       );
 
-      const Message = ({ message, channels, users }) => {
+      const Message = ({ message, channels, users, query }) => {
         // The page a result is on comes from the database, which knows the
         // page ranges - and knows that a thread reply is rendered inside its
         // parent's block, so it is the parent's page that holds it.
         const page = message.page === null ? 0 : message.page;
         const href = `html/${message.c}-${page}.html#${message.t}`;
+        const isReply = Boolean(message.p);
 
         return (
           <a href={href} target="_blank">
             <li className="Message">
-              <p>
-                <span className="Channel">#{channels[message.c]}</span> -{" "}
+              <p className="MessageMeta">
+                <span className="Channel">#{channels[message.c]}</span>
+                <span className="MetaSeparator"> - </span>
                 <Timestamp timestamp={message.t} />
+                {isReply && <span className="ThreadBadge">↳ Thread reply</span>}
               </p>
               <p>
                 <strong>@{users[message.u] || message.u}: </strong>
-                <EmojiText text={message.m_text} />
+                <EmojiText text={message.m_text} query={query} />
               </p>
             </li>
           </a>
@@ -489,7 +656,32 @@
       };
 
       /**
-       * A result with its emoji shown as emoji.
+       * Highlight matched query terms inside a text string.
+       */
+      function renderHighlight(text, query) {
+        if (!text) return null;
+        if (
+          typeof splitSearchHighlight !== "function" ||
+          !query ||
+          !query.trim()
+        ) {
+          return text;
+        }
+
+        const segments = splitSearchHighlight(text, query);
+        return segments.map((segment, idx) =>
+          segment.match ? (
+            <mark key={idx} className="search-highlight">
+              {segment.text}
+            </mark>
+          ) : (
+            <React.Fragment key={idx}>{segment.text}</React.Fragment>
+          ),
+        );
+      }
+
+      /**
+       * A result with its emoji shown as emoji and search terms highlighted.
        *
        * What comes out of either index is the raw message text, shortcodes and
        * all - so this page was the one place in the archive where a custom
@@ -501,8 +693,10 @@
        * survivable: the text is then printed exactly as it was typed, which is
        * what this page did before.
        */
-      const EmojiText = ({ text }) => {
-        if (typeof splitEmoji !== "function") return text || null;
+      const EmojiText = ({ text, query }) => {
+        if (typeof splitEmoji !== "function") {
+          return renderHighlight(text || "", query);
+        }
 
         return splitEmoji(text || "", window.ARCHIVE_EMOJI || {}).map(
           (part, index) =>
@@ -516,7 +710,9 @@
                 loading="lazy"
               />
             ) : (
-              <React.Fragment key={index}>{part.text}</React.Fragment>
+              <React.Fragment key={index}>
+                {renderHighlight(part.text, query)}
+              </React.Fragment>
             ),
         );
       };
@@ -549,12 +745,14 @@
         onUserChange,
         onFromChange,
         onToChange,
+        onSortChange,
         onSearchClear,
         value,
         selectedChannel,
         selectedUser,
         fromDate,
         toDate,
+        selectedSort,
         searchInputRef,
         channels,
         users,
@@ -574,15 +772,22 @@
                 value={value}
                 onChange={onChange}
                 ref={searchInputRef}
-                placeholder="Search messages..."
+                placeholder="Search messages... (press / to focus)"
                 autoComplete="none"
                 autoCorrect="none"
                 autoCapitalize="none"
                 spellCheck="false"
               />
-              <button className="clear" onClick={onSearchClear}>
-                &times;
-              </button>
+              {!value && <kbd className="SearchShortcut">/</kbd>}
+              {value ? (
+                <button
+                  className="clear"
+                  onClick={onSearchClear}
+                  title="Clear search"
+                >
+                  &times;
+                </button>
+              ) : null}
             </div>
             <div className="Filters">
               <select value={selectedChannel} onChange={onChannelChange}>
@@ -600,6 +805,11 @@
                     @{name}
                   </option>
                 ))}
+              </select>
+              <select value={selectedSort} onChange={onSortChange}>
+                <option value="score">Most relevant</option>
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
               </select>
               <label className="DateFilter">
                 <span>From</span>

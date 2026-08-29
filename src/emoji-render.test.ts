@@ -99,7 +99,9 @@ describe("the search page", () => {
   it("renders a result's text through the emoji splitter", () => {
     // The whole point of the index and the module below is this one line: a
     // result that prints message.m_text raw shows shortcodes again.
-    expect(template).toContain("<EmojiText text={message.m_text} />");
+    expect(template).toContain(
+      "<EmojiText text={message.m_text} query={query} />",
+    );
   });
 
   it("has both halves filled in when it is built", () => {

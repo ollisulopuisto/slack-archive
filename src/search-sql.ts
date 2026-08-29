@@ -22,6 +22,7 @@ export interface SearchRequest {
   /** Epoch seconds; messages strictly before this moment. */
   before?: number;
   limit?: number;
+  sort?: "score" | "relevance" | "newest" | "oldest" | string;
 }
 
 export interface SearchSql {
@@ -92,7 +93,7 @@ const COLUMNS = `m.id id, m.channel_id c, m.user_id u, m.timestamp t,
  * page's wildcard search meant.
  */
 export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
-  const { channel, user, after, before, limit = 50 } = request;
+  const { channel, user, after, before, limit = 50, sort } = request;
   const match = toMatchExpression(request.query || "");
   const params: Array<string | number> = [];
   const where: string[] = [];
@@ -136,11 +137,20 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
 
   params.push(limit);
 
+  let orderBy = match ? "rank" : "m.timestamp desc";
+  if (sort === "newest") {
+    orderBy = "m.timestamp desc";
+  } else if (sort === "oldest") {
+    orderBy = "m.timestamp asc";
+  } else if (sort === "score" || sort === "relevance") {
+    orderBy = match ? "rank" : "m.timestamp desc";
+  }
+
   return {
     sql: `select ${COLUMNS}
     ${from}
    where ${where.join(" and ")}
-   order by ${match ? "rank" : "m.timestamp desc"}
+   order by ${orderBy}
    limit ?`,
     params,
   };

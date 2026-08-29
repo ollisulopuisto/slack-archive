@@ -4,12 +4,14 @@ import {
   filterResultsByPhrases,
   getSearchFilter,
   parseSearchQuery,
+  sortSearchResults,
 } from "./search-query.js";
 
 function performSearch(
   miniSearch: MiniSearch,
   query: string,
   filters: { channel?: string; user?: string } = {},
+  sort?: string,
 ) {
   const { cleanQuery, phrases } = parseSearchQuery(query);
 
@@ -31,6 +33,7 @@ function performSearch(
   }
 
   results = filterResultsByPhrases(results, phrases);
+  results = sortSearchResults(results, sort, !!cleanQuery);
 
   return results;
 }
@@ -92,5 +95,25 @@ describe("Search Logic", () => {
     const results = performSearch(miniSearch, '"hello"');
 
     expect(results.some((result) => result.t === "5")).toBe(false);
+  });
+
+  it("should sort results newest first", () => {
+    const results = performSearch(miniSearch, "hello", {}, "newest");
+    expect(results.map((r) => r.t)).toEqual(["2", "1"]);
+  });
+
+  it("should sort results oldest first", () => {
+    const results = performSearch(miniSearch, "hello", {}, "oldest");
+    expect(results.map((r) => r.t)).toEqual(["1", "2"]);
+  });
+
+  it("should sort filter-only results newest first by default", () => {
+    const results = performSearch(miniSearch, "", { channel: "c1" });
+    expect(results.map((r) => r.t)).toEqual(["2", "1"]);
+  });
+
+  it("should sort filter-only results oldest first when requested", () => {
+    const results = performSearch(miniSearch, "", { channel: "c1" }, "oldest");
+    expect(results.map((r) => r.t)).toEqual(["1", "2"]);
   });
 });

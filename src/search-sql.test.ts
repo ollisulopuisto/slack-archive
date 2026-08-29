@@ -143,3 +143,40 @@ describe("the date range", () => {
     expect(query!.sql).toContain("order by m.timestamp desc");
   });
 });
+
+describe("search result sorting", () => {
+  it("defaults to relevance when searching text", () => {
+    const { sql } = buildSearchSql({ query: "kokous" })!;
+    expect(sql).toContain("order by rank");
+  });
+
+  it("defaults to newest first when only filtering without text", () => {
+    const { sql } = buildSearchSql({ query: "", user: "U1" })!;
+    expect(sql).toContain("order by m.timestamp desc");
+  });
+
+  it("sorts by newest first when requested with text query", () => {
+    const { sql } = buildSearchSql({ query: "kokous", sort: "newest" })!;
+    expect(sql).toContain("order by m.timestamp desc");
+    expect(sql).not.toContain("order by rank");
+  });
+
+  it("sorts by oldest first when requested with text query", () => {
+    const { sql } = buildSearchSql({ query: "kokous", sort: "oldest" })!;
+    expect(sql).toContain("order by m.timestamp asc");
+    expect(sql).not.toContain("order by rank");
+  });
+
+  it("sorts by oldest first when requested without text query", () => {
+    const { sql } = buildSearchSql({ query: "", user: "U1", sort: "oldest" })!;
+    expect(sql).toContain("order by m.timestamp asc");
+  });
+
+  it("sorts by relevance when explicitly requested with score or relevance", () => {
+    const byScore = buildSearchSql({ query: "kokous", sort: "score" })!;
+    expect(byScore.sql).toContain("order by rank");
+
+    const byRelevance = buildSearchSql({ query: "kokous", sort: "relevance" })!;
+    expect(byRelevance.sql).toContain("order by rank");
+  });
+});

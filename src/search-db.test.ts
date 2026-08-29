@@ -9,6 +9,7 @@ import {
   openSearchDatabase,
   searchDatabase,
 } from "./search-db.js";
+import { buildSearchSql } from "./search-sql.js";
 
 const CHANNELS = [
   { id: "C1", name: "general", kind: "public" as const, isArchived: false },
@@ -546,6 +547,26 @@ describe("searchDatabase", () => {
     // query asks for messages containing both "not" and "intel".
     expect(searchDatabase(db, "NOT intel")).toHaveLength(0);
     expect(searchDatabase(db, "^ ( )")).toEqual([]);
+    db.close();
+  });
+
+  it("executes search query sorted by newest first", () => {
+    const db = openSearchDatabase(dbPath);
+    const query = buildSearchSql({ query: "arkisto", sort: "newest" })!;
+    const rows = db.all(query.sql, query.params) as Array<{ t: string }>;
+    expect(rows).toHaveLength(2);
+    expect(rows[0].t).toBe("1700000002.0001");
+    expect(rows[1].t).toBe("1700000000.0001");
+    db.close();
+  });
+
+  it("executes search query sorted by oldest first", () => {
+    const db = openSearchDatabase(dbPath);
+    const query = buildSearchSql({ query: "arkisto", sort: "oldest" })!;
+    const rows = db.all(query.sql, query.params) as Array<{ t: string }>;
+    expect(rows).toHaveLength(2);
+    expect(rows[0].t).toBe("1700000000.0001");
+    expect(rows[1].t).toBe("1700000002.0001");
     db.close();
   });
 });

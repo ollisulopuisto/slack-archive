@@ -5,3 +5,7 @@ slack-archive
 *.log
 .token
 lib
+*~
+*.bak
+*.backup
+*.swp
