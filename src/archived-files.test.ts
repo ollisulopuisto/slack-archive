@@ -93,6 +93,8 @@ describe("externalFileUrl()", () => {
   });
 
   it("is nothing for a file Slack hid", () => {
-    expect(externalFileUrl({ id: "F2", mode: "hidden_by_limit" })).toBeUndefined();
+    expect(
+      externalFileUrl({ id: "F2", mode: "hidden_by_limit" }),
+    ).toBeUndefined();
   });
 });

@@ -292,7 +292,8 @@ export function createStats({ customEmoji, bots }: StatsOptions = {}) {
         if (reaction.name) {
           channelStats.emoji[reaction.name] =
             (channelStats.emoji[reaction.name] || 0) + n;
-          if (customEmoji?.has(reaction.name)) channelStats.customReactions += n;
+          if (customEmoji?.has(reaction.name))
+            channelStats.customReactions += n;
         }
         for (const giver of reaction.users || []) {
           channelStats.reactionsGiven[giver] =

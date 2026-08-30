@@ -9,9 +9,7 @@ import { UserStats } from "./stats.js";
  * the pages were written only for people who said something in a channel that
  * is being published, bots excluded.
  */
-export function profilePageIds(
-  byUser: Record<string, UserStats>,
-): Set<string> {
+export function profilePageIds(byUser: Record<string, UserStats>): Set<string> {
   return new Set(
     Object.values(byUser)
       .filter((person) => person.messages > 0 && !person.isBot)

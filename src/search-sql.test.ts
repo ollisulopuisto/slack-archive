@@ -180,3 +180,26 @@ describe("search result sorting", () => {
     expect(byRelevance.sql).toContain("order by rank");
   });
 });
+
+describe("the thread filter", () => {
+  it("filters for channel topics / root messages only", () => {
+    const query = buildSearchSql({ query: "kokous", threads: "roots" });
+    expect(query!.sql).toContain("m.parent_timestamp is null");
+  });
+
+  it("filters for thread replies only", () => {
+    const query = buildSearchSql({ query: "kokous", threads: "replies" });
+    expect(query!.sql).toContain("m.parent_timestamp is not null");
+  });
+
+  it("is a valid search query on its own with no text", () => {
+    const query = buildSearchSql({ query: "", threads: "replies" });
+    expect(query).toBeDefined();
+    expect(query!.sql).toContain("m.parent_timestamp is not null");
+  });
+
+  it("includes all messages when threads is all", () => {
+    const query = buildSearchSql({ query: "kokous", threads: "all" });
+    expect(query!.sql).not.toContain("m.parent_timestamp is");
+  });
+});

@@ -23,6 +23,7 @@ export interface SearchRequest {
   before?: number;
   limit?: number;
   sort?: "score" | "relevance" | "newest" | "oldest" | string;
+  threads?: "all" | "roots" | "replies";
 }
 
 export interface SearchSql {
@@ -79,7 +80,7 @@ function bound(seconds: number) {
 /** Which page of the archive a message is rendered on. */
 const PAGE_OF_MESSAGE = `(select min(p.page) from pages p
        where p.channel_id = m.channel_id
-         and p.oldest_ts < coalesce(m.parent_timestamp, m.timestamp))`;
+          and p.oldest_ts < coalesce(m.parent_timestamp, m.timestamp))`;
 
 const COLUMNS = `m.id id, m.channel_id c, m.user_id u, m.timestamp t,
       m.parent_timestamp p, m.message m_text, ${PAGE_OF_MESSAGE} page`;
@@ -87,21 +88,32 @@ const COLUMNS = `m.id id, m.channel_id c, m.user_id u, m.timestamp t,
 /**
  * The query for one search, or nothing when there is nothing to ask.
  *
- * With text, the full-text index answers and orders by relevance. With only
- * filters set - everything this person said, everything in this channel - there
- * is no relevance to order by, so it is newest first, which is what the old
- * page's wildcard search meant.
+ * With text and default sort, the full-text index answers and orders by relevance.
+ * With only filters set - everything this person said, everything in this channel -
+ * there is no relevance to order by, so it is newest first.
+ * If explicitly requested, results can be sorted newest first or oldest first.
  */
 export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
-  const { channel, user, after, before, limit = 50, sort } = request;
+  const {
+    channel,
+    user,
+    after,
+    before,
+    sort,
+    threads = "all",
+    limit = 50,
+  } = request;
   const match = toMatchExpression(request.query || "");
-  const params: Array<string | number> = [];
-  const where: string[] = [];
+  const hasFilter = Boolean(
+    channel || user || after || before || (threads && threads !== "all"),
+  );
 
-  if (!match && !channel && !user && !after && !before) {
+  if (!match && !hasFilter) {
     return undefined;
   }
 
+  const params: Array<string | number> = [];
+  const where: string[] = [];
   let from = "from messages m";
 
   if (match) {
@@ -120,6 +132,12 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
     params.push(user);
   }
 
+  if (threads === "roots") {
+    where.push("m.parent_timestamp is null");
+  } else if (threads === "replies") {
+    where.push("m.parent_timestamp is not null");
+  }
+
   // Compared as TEXT, deliberately. A Slack timestamp is ten digits, a dot and
   // six more, so the string order and the numeric order are the same thing -
   // and the index is on the text column, which `cast(timestamp as real)` would
@@ -135,8 +153,6 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
     params.push(bound(before));
   }
 
-  params.push(limit);
-
   let orderBy = match ? "rank" : "m.timestamp desc";
   if (sort === "newest") {
     orderBy = "m.timestamp desc";
@@ -145,6 +161,8 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
   } else if (sort === "score" || sort === "relevance") {
     orderBy = match ? "rank" : "m.timestamp desc";
   }
+
+  params.push(limit);
 
   return {
     sql: `select ${COLUMNS}

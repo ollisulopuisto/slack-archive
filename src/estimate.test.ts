@@ -32,8 +32,14 @@ describe("estimateMissingByMonth()", () => {
     // The workspace doubled between 2020 and 2022; the missing 2021 should sit
     // between them rather than at either end.
     const monthly = {
-      ...year(2020, seasonal.map((v) => v)),
-      ...year(2022, seasonal.map((v) => v * 4)),
+      ...year(
+        2020,
+        seasonal.map((v) => v),
+      ),
+      ...year(
+        2022,
+        seasonal.map((v) => v * 4),
+      ),
     };
     const gap = { from: "2021-01-01", to: "2021-12-31", days: 365 };
 
@@ -57,7 +63,10 @@ describe("estimateMissingByMonth()", () => {
     const agree = { ...year(2020, seasonal), ...year(2022, seasonal) };
     const disagree = {
       ...year(2020, seasonal),
-      ...year(2022, seasonal.map((v, i) => (i === 5 ? v * 6 : v))),
+      ...year(
+        2022,
+        seasonal.map((v, i) => (i === 5 ? v * 6 : v)),
+      ),
     };
     const gap = { from: "2021-06-01", to: "2021-06-30", days: 30 };
 
@@ -80,7 +89,9 @@ describe("estimateMissingByMonth()", () => {
 
   it("says nothing when there is nothing to reason from", () => {
     expect(
-      estimateMissingByMonth({}, [{ from: "2021-06-01", to: "2021-06-30", days: 30 }]),
+      estimateMissingByMonth({}, [
+        { from: "2021-06-01", to: "2021-06-30", days: 30 },
+      ]),
     ).toEqual({});
   });
 });

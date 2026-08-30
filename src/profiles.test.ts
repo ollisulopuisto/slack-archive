@@ -14,9 +14,9 @@ function person(userId: string, extra: Partial<UserStats> = {}): UserStats {
 
 describe("profilePageIds()", () => {
   it("is everyone a page was written for", () => {
-    expect([
-      ...profilePageIds({ U1: person("U1"), U2: person("U2") }),
-    ]).toEqual(["U1", "U2"]);
+    expect([...profilePageIds({ U1: person("U1"), U2: person("U2") })]).toEqual(
+      ["U1", "U2"],
+    );
   });
 
   it("leaves out bots - they share one page rather than having their own", () => {

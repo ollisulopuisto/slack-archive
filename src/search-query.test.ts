@@ -1,10 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+
 import {
-  parseSearchQuery,
-  getSearchFilter,
-  filterResultsByPhrases,
-  sortSearchResults,
   extractHighlightTerms,
+  filterResultsByPhrases,
+  getSearchFilter,
+  getSearchTerms,
+  parseSearchQuery,
+  sortSearchResults,
   splitSearchHighlight,
 } from "./search-query.js";
 
@@ -20,23 +22,34 @@ describe("parseSearchQuery", () => {
     expect(res.phrases).toEqual([]);
     expect(res.cleanQuery).toBe("simple query");
   });
+
+  it("handles empty query", () => {
+    const { cleanQuery, phrases } = parseSearchQuery("");
+    expect(cleanQuery).toBe("");
+    expect(phrases).toEqual([]);
+  });
 });
 
-describe("extractHighlightTerms", () => {
-  it("extracts both phrases and words sorted by length", () => {
-    const terms = extractHighlightTerms('hello "big world" a');
-    expect(terms).toEqual(["big world", "hello", "a"]);
+describe("getSearchTerms and extractHighlightTerms", () => {
+  it("extracts phrases and words sorted longest first", () => {
+    const terms = getSearchTerms('"quick brown fox" jumps over');
+    expect(terms).toEqual(["quick brown fox", "jumps", "over"]);
+
+    const hlTerms = extractHighlightTerms('"quick brown fox" jumps over');
+    expect(hlTerms).toEqual(["quick brown fox", "jumps", "over"]);
   });
 
-  it("returns empty array for empty or blank query", () => {
+  it("deduplicates case-insensitively while preserving length ordering", () => {
+    const terms = getSearchTerms("test Test TEST testing");
+    expect(terms).toEqual(["testing", "test"]);
+  });
+
+  it("handles empty or whitespace query", () => {
+    expect(getSearchTerms("")).toEqual([]);
+    expect(getSearchTerms("   ")).toEqual([]);
     expect(extractHighlightTerms("")).toEqual([]);
     expect(extractHighlightTerms("   ")).toEqual([]);
     expect(extractHighlightTerms('""')).toEqual([]);
-  });
-
-  it("deduplicates terms ignoring case", () => {
-    const terms = extractHighlightTerms("test TEST");
-    expect(terms).toEqual(["test"]);
   });
 });
 
@@ -110,30 +123,57 @@ describe("splitSearchHighlight", () => {
 
 describe("getSearchFilter", () => {
   it("filters by channel and user", () => {
-    const filter = getSearchFilter({ channel: "C1", user: "U1" });
+    const filter = getSearchFilter({ channel: "C1", user: "U1" })!;
     expect(filter).toBeDefined();
-    expect(filter!({ c: "C1", u: "U1" })).toBe(true);
-    expect(filter!({ c: "C1", u: "U2" })).toBe(false);
-    expect(filter!({ c: "C2", u: "U1" })).toBe(false);
+    expect(filter({ c: "C1", u: "U1" })).toBe(true);
+    expect(filter({ c: "C1", u: "U2" })).toBe(false);
+    expect(filter({ c: "C2", u: "U1" })).toBe(false);
+  });
+
+  it("filters for root messages only", () => {
+    const filter = getSearchFilter({ threads: "roots" })!;
+    expect(filter({ c: "C1", u: "U1", p: undefined })).toBe(true);
+    expect(filter({ c: "C1", u: "U1", p: "123.456" })).toBe(false);
+  });
+
+  it("filters for thread replies only", () => {
+    const filter = getSearchFilter({ threads: "replies" })!;
+    expect(filter({ c: "C1", u: "U1", p: undefined })).toBe(false);
+    expect(filter({ c: "C1", u: "U1", p: "123.456" })).toBe(true);
+  });
+
+  it("combines thread filtering with channel and user filters", () => {
+    const filter = getSearchFilter({
+      channel: "C1",
+      user: "U1",
+      threads: "replies",
+    })!;
+    expect(filter({ c: "C1", u: "U1", p: "123.456" })).toBe(true);
+    expect(filter({ c: "C2", u: "U1", p: "123.456" })).toBe(false);
+    expect(filter({ c: "C1", u: "U2", p: "123.456" })).toBe(false);
+    expect(filter({ c: "C1", u: "U1", p: undefined })).toBe(false);
   });
 
   it("returns undefined when no filters are set", () => {
     expect(getSearchFilter({})).toBeUndefined();
+    expect(getSearchFilter({ threads: "all" })).toBeUndefined();
   });
 });
 
 describe("filterResultsByPhrases", () => {
   it("keeps results matching all phrases case-insensitively", () => {
     const results = [
-      { m: "Hello World and Universe" },
-      { m: "Hello Only" },
-      { m: "world universe" },
+      { id: "1", m: "Hello World and Universe" },
+      { id: "2", m: "Hello Only" },
+      { id: "3", m: "world universe" },
     ];
     const filtered = filterResultsByPhrases(results, ["World", "Universe"]);
-    expect(filtered).toEqual([
-      { m: "Hello World and Universe" },
-      { m: "world universe" },
-    ]);
+    expect(filtered.map((r) => r.id)).toEqual(["1", "3"]);
+  });
+
+  it("is case-insensitive", () => {
+    const results = [{ id: "1", m: "Hello World" }];
+    expect(filterResultsByPhrases(results, ["hello world"])).toHaveLength(1);
   });
 });
 

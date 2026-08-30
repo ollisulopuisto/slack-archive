@@ -13,18 +13,52 @@ export function parseSearchQuery(query: string) {
   };
 }
 
+/**
+ * Returns distinct search terms and quoted phrases ordered longest to shortest.
+ * Used for highlight tokenization in search results.
+ */
+export function getSearchTerms(query: string): string[] {
+  if (!query || typeof query !== "string") return [];
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const { phrases } = parseSearchQuery(trimmed);
+  const withoutQuotes = trimmed.replace(/"([^"]*)"/g, " ");
+  const words = withoutQuotes
+    .split(/\s+/)
+    .map((w) => w.trim())
+    .filter((w) => w.length > 0);
+
+  const seen = new Set<string>();
+  const terms: string[] = [];
+
+  for (const term of [...phrases, ...words]) {
+    const lower = term.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      terms.push(term);
+    }
+  }
+
+  return terms.sort((a, b) => b.length - a.length);
+}
+
 export function getSearchFilter({
   channel,
   user,
+  threads = "all",
 }: {
   channel?: string;
   user?: string;
+  threads?: "all" | "roots" | "replies";
 }) {
-  if (!channel && !user) return undefined;
+  if (!channel && !user && (!threads || threads === "all")) return undefined;
 
   return (result: any) => {
     if (channel && result.c !== channel) return false;
     if (user && result.u !== user) return false;
+    if (threads === "roots" && result.p) return false;
+    if (threads === "replies" && !result.p) return false;
     return true;
   };
 }
