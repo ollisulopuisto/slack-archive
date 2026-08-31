@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Anchor scroll padding**: Archive links with timestamps (e.g. `#1783581635.429659`) no longer hide the top of the linked message under the sticky channel header. Added `scroll-padding-top: 120px` on `html` to reserve space for the header during anchor navigation.
+
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Calendar Versioning](https://calver.org/).
 
