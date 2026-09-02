@@ -295,9 +295,15 @@ export interface NameHistoryEntry {
 export function nameHistory(
   userNames: UserNames,
   exclude: Set<string>,
+  allowed?: Set<string>,
 ): Array<NameHistoryEntry> {
   return Object.entries(userNames)
-    .filter(([userId, names]) => names.length > 0 && !exclude.has(userId))
+    .filter(
+      ([userId, names]) =>
+        names.length > 0 &&
+        !exclude.has(userId) &&
+        (!allowed || allowed.has(userId)),
+    )
     .map(([userId, names]) => ({ userId, names }))
     .sort((a, b) => b.names.length - a.names.length);
 }

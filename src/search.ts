@@ -34,13 +34,16 @@ import { getEmojiIndex } from "./emoji.js";
 import { buildSearchDatabase } from "./search-db.js";
 import {
   botUserIds,
+  collectIndexedUserIds,
   excludedUserIds,
   isChannelSearchable,
   isMessageSearchable,
+  pickVisibleUsers,
   toSearchMessages,
 } from "./search-filter.js";
 import { writeSearchData } from "./data-write.js";
 import { reportTimings, timed } from "./timings.js";
+import { contentSecurityPolicy } from "./csp.js";
 
 // Format:
 // channelId: [ timestamp0, timestamp1, timestamp2, ... ]
@@ -205,20 +208,10 @@ async function createSearchFile(spinner: Ora) {
     // no messages, but enough to say those conversations exist and roughly how
     // busy they were.
     pages: {},
-    // Oldest first. Somebody looking for a name that was dropped in 2019 is
-    // searching for the person, and this is the only place that connects them.
-    names: Object.fromEntries(
-      Object.entries(userNames).map(([userId, names]) => [
-        userId,
-        names.map((name) => name.nick),
-      ]),
-    ),
+    names: {},
   };
 
-  // Users
-  for (const user in users) {
-    result.users[user] = users[user].name || users[user].real_name || "Unknown";
-  }
+  const visibleUsers = new Set<string>();
 
   const hiddenUsers = new Set([
     ...excludedUserIds(SEARCH_EXCLUDE_USERS, users),
@@ -270,7 +263,30 @@ async function createSearchFile(spinner: Ora) {
 
     result.messages![channel.id] = messages;
     result.channels[channel.id] = name;
+
+    for (const userId of collectIndexedUserIds({
+      messages,
+      members: channel.members,
+    })) {
+      visibleUsers.add(userId);
+    }
   }
+
+  // Only people who appear in this file. The workspace directory names
+  // everyone, including those who only ever DMed, and this file is
+  // downloaded whole by anyone who opens search.
+  const directory: Record<string, string> = {};
+  for (const userId of visibleUsers) {
+    if (!users[userId]) continue;
+    directory[userId] =
+      users[userId].name || users[userId].real_name || "Unknown";
+  }
+  result.users = directory;
+  result.names = Object.fromEntries(
+    Object.entries(pickVisibleUsers(userNames, visibleUsers)).map(
+      ([userId, names]) => [userId, names.map((name) => name.nick)],
+    ),
+  );
 
   // Built last, from the same list the messages came from, so a channel can
   // never appear in the page index without appearing in the file proper.
@@ -286,22 +302,36 @@ async function createSearchHTML() {
   let template = fs.readFileSync(SEARCH_TEMPLATE_PATH, "utf8");
 
   template = template.replace(
+    "<!-- csp -->",
+    `<meta http-equiv="Content-Security-Policy" content="${contentSecurityPolicy({})}" />`,
+  );
+
+  copyNodeModuleFile(["react", "umd", "react.production.min.js"], "react.js");
+  copyNodeModuleFile(
+    ["react-dom", "umd", "react-dom.production.min.js"],
+    "react-dom.js",
+  );
+  writeBrowserScript("search-app.js", compiledSearchApp());
+  writeBrowserScript(
+    "search-indexes.js",
+    `window.SEARCH_INDEXES = ${JSON.stringify(SEARCH_INDEX)};\n`,
+  );
+
+  template = template.replace(
     "<!-- react -->",
-    getScript(`react@18.3.1/umd/react.production.min.js`),
+    `<script src="html/react.js"></script>`,
   );
   template = template.replace(
     "<!-- react-dom -->",
-    getScript(`react-dom@18.3.1/umd/react-dom.production.min.js`),
+    `<script src="html/react-dom.js"></script>`,
   );
-  template = template.replace(
-    `<!-- babel -->`,
-    getScript(`babel-standalone@6.26.0/babel.min.js`),
-  );
-  // What the page may use, decided here and read there: an index that was
-  // not built is not a fallback the page can quietly try.
   template = template.replace(
     "<!-- search-indexes -->",
-    `<script>window.SEARCH_INDEXES = ${JSON.stringify(SEARCH_INDEX)};</script>`,
+    `<script src="html/search-indexes.js"></script>`,
+  );
+  template = template.replace(
+    "<!-- search-app -->",
+    `<script src="html/search-app.js"></script>`,
   );
 
   if (SEARCH_INDEX.db) {
@@ -317,9 +347,14 @@ async function createSearchHTML() {
   }
 
   if (SEARCH_INDEX.js) {
+    copyNodeModuleFile(
+      ["minisearch", "dist", "umd", "index.min.js"],
+      "minisearch.js",
+    );
+
     template = template.replace(
       `<!-- minisearch -->`,
-      getScript("minisearch@7.2.0/dist/umd/index.min.js"),
+      `<script src="html/minisearch.js"></script>`,
     );
 
     template = template.replace(
@@ -328,13 +363,10 @@ async function createSearchHTML() {
     );
   }
 
-  const sharedQueryLogicJs = fs
-    .readFileSync(path.join(__dirname, "./search-query.js"), "utf8")
-    .replace(/export /g, "");
-
+  writeStrippedModule("search-query.js");
   template = template.replace(
     "<!-- search-query-logic -->",
-    `<script type="text/javascript">${sharedQueryLogicJs}</script>`,
+    `<script src="html/search-query.js"></script>`,
   );
 
   writeEmojiIndex();
@@ -344,29 +376,16 @@ async function createSearchHTML() {
     `<script type="text/javascript" src="html/emoji.js"></script>`,
   );
 
-  // The same splitting the rendered pages do, running in the browser this
-  // time. Inlined rather than fetched, because it is a few lines and the page
-  // has to have it before the first result is drawn.
-  const emojiRenderJs = fs
-    .readFileSync(path.join(__dirname, "./emoji-render.js"), "utf8")
-    .replace(/export /g, "");
-
+  writeStrippedModule("emoji-render.js");
   template = template.replace(
     "<!-- emoji-render -->",
-    `<script type="text/javascript">${emojiRenderJs}</script>`,
+    `<script src="html/emoji-render.js"></script>`,
   );
 
-  // Read the compiled JS (types already stripped by tsc), then remove
-  // `export` keywords so the functions are globals in the browser. The page
-  // and this process therefore run the same query builder, and it is tested
-  // here rather than in a browser.
-  const searchSqlJs = fs
-    .readFileSync(path.join(__dirname, "./search-sql.js"), "utf8")
-    .replace(/export /g, "");
-
+  writeStrippedModule("search-sql.js");
   template = template.replace(
     "<!-- search-sql -->",
-    `<script type="text/javascript">${searchSqlJs}</script>`,
+    `<script src="html/search-sql.js"></script>`,
   );
 
   template = template.replace(`<!-- Size -->`, getSize());
@@ -428,6 +447,53 @@ function getSize() {
  * same-origin, and because an archive that is published behind a login should
  * not need a third party to be up in order to be searchable.
  */
+function copyNodeModuleFile(from: Array<string>, to: string) {
+  const source = path.join(__dirname, "..", "node_modules", ...from);
+
+  if (!fs.existsSync(source)) {
+    throw new Error(`Cannot build the search page: ${source} is missing.`);
+  }
+
+  fs.copySync(source, path.join(HTML_DIR, to));
+}
+
+/** tsc output with `export` / `import` removed so it is a browser global script. */
+function writeStrippedModule(name: string) {
+  const source = path.join(__dirname, name);
+
+  if (!fs.existsSync(source)) {
+    throw new Error(`Cannot build the search page: ${source} is missing.`);
+  }
+
+  writeBrowserScript(
+    name,
+    fs
+      .readFileSync(source, "utf8")
+      .replace(/^import .+;?\n/gm, "")
+      .replace(/export /g, ""),
+  );
+}
+
+function compiledSearchApp(): string {
+  const source = path.join(__dirname, "search-app.js");
+
+  if (!fs.existsSync(source)) {
+    throw new Error(
+      `Cannot build the search page: ${source} is missing. ` +
+        `tsc compiles src/search-app.tsx; run npm run compile.`,
+    );
+  }
+
+  return fs
+    .readFileSync(source, "utf8")
+    .replace(/^import .+;?\n/gm, "")
+    .replace(/export \{\};\n?/g, "");
+}
+
+function writeBrowserScript(name: string, contents: string) {
+  fs.outputFileSync(path.join(HTML_DIR, name), contents);
+}
+
 function copySqliteRuntime() {
   const dist = path.join(
     __dirname,
@@ -454,8 +520,4 @@ function copySqliteRuntime() {
 
     fs.copySync(source, path.join(HTML_DIR, to));
   }
-}
-
-function getScript(script: string) {
-  return `<script crossorigin src="https://cdn.jsdelivr.net/npm/${script}"></script>`;
 }

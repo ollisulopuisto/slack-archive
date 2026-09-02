@@ -2,9 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [v26.09.02.202] - 2026-09-02
 
 ### Fixed
+- **Stored XSS in message pages**: Message HTML now escapes Slack mrkdwn and display names. A Content-Security-Policy forbids inline script.
+- **Slack token logged in full**: Logs print `xoxp-…last4`. `--no-merge` no longer deletes `.token`.
+- **Private Slack file URLs on published pages**: Non-image attachments link to the archived copy, not `url_private` (which can carry `?t=` tokens).
+- **Bearer token sent to arbitrary download URLs**: The Slack token is sent only to Slack's file hosts, and not followed off them on redirect.
+- **Published names and search users included DM-only people**: The names page and the search index name only people who appear in indexed channels.
+- **Emoji filenames kept the query string**: `party.gif?cache=1` is stored as `party.gif`.
+- **`--no-slack-connect` rewrote `user-avatars.json`**: Past-avatar fetching is skipped when nothing was fetched from Slack.
+- **Search page compiled JSX in the browser from a CDN**: React, MiniSearch and the app are vendored files. No babel-standalone.
+- **NAS job kept the Slack token and deploy internals in the public script**: Config and the token live outside the archive tree.
 - **Anchor scroll padding**: Archive links with timestamps (e.g. `#1783581635.429659`) no longer hide the top of the linked message under the sticky channel header. Added `scroll-padding-top: 120px` on `html` to reserve space for the header during anchor navigation.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

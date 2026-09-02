@@ -1,0 +1,37 @@
+# Copy to /root/.slack-archive/nas.conf (or set NAS_ARCHIVE_CONF) and fill in.
+# This file is the machine-specific half; the script in the repository is not.
+
+# Directory that holds <workspace>/slack-archive for each workspace.
+ROOT="/path/to/slack-archives"
+
+# Pin a version. `latest` would mean the nightly run silently changes what it
+# is running.
+IMAGE="ghcr.io/ollisulopuisto/slack-archive:VERSION"
+
+# uid:gid the container writes as, so the archive stays owned by its owner.
+RUN_AS="1000:1000"
+
+# Extra group the process needs to read the archive tree (Synology ACL). Empty
+# if POSIX mode is enough.
+GROUP_ADD=""
+
+TIMEZONE="Europe/Helsinki"
+
+# Search-index rsync. The key must not live on a shared volume.
+SYNC_KEY="/root/.ssh/slack-archive-sync"
+SYNC_HOST="user@host.example"
+
+# Public-site publish. Separate key from the index sync.
+PUBLISH_DIR="/path/to/publish-work"
+SITE="user@host.example:/var/www/archive"
+START_CHANNEL=""
+EXCLUDE_USER_FILES=""
+SEARCH_EXCLUDE_USERS=""
+
+# Optional. A URL in this file is POSTed every four minutes so a sleeping NAS
+# stays awake for the render.
+HEARTBEAT_URL_FILE="/root/.nas-heartbeat-url"
+
+# Slack tokens live here as <workspace>, not in the archive tree. The archive
+# tree is often on a share; this directory must not be.
+TOKEN_DIR="/root/.slack-archive/tokens"

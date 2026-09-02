@@ -9,7 +9,8 @@ import path from "path";
 vi.mock("node-fetch", () => ({ default: vi.fn() }));
 
 import fetch from "node-fetch";
-import { downloadURL } from "./download-files.js";
+import { config } from "./config.js";
+import { downloadURL, shouldSendSlackToken } from "./download-files.js";
 
 let dir: string;
 
@@ -62,5 +63,93 @@ describe("downloadURL", () => {
 
     expect(fetch).not.toHaveBeenCalled();
     expect(fs.readFileSync(filePath, "utf8")).toBe("OLD");
+  });
+});
+
+describe("shouldSendSlackToken", () => {
+  it("is true only for Slack's own file hosts", () => {
+    expect(
+      shouldSendSlackToken("https://files.slack.com/files-pri/T1-F1/x.png"),
+    ).toBe(true);
+    expect(shouldSendSlackToken("https://slack-files.com/files-pri/T1/x")).toBe(
+      true,
+    );
+  });
+
+  it("is false for everything else, including Slack's public CDN", () => {
+    // Avatars and emoji live on slack-edge and do not need the token. An
+    // attacker-controlled url_private must never see it either.
+    expect(
+      shouldSendSlackToken("https://emoji.slack-edge.com/T1/party.png"),
+    ).toBe(false);
+    expect(shouldSendSlackToken("https://evil.example/steal")).toBe(false);
+    expect(shouldSendSlackToken("not a url")).toBe(false);
+  });
+});
+
+describe("downloadURL authorization", () => {
+  beforeEach(() => {
+    config.token = "xoxp-secret-token";
+  });
+
+  afterEach(() => {
+    config.token = process.env.SLACK_TOKEN;
+  });
+
+  it("does not send the Slack token to a host that is not Slack's file store", async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => new TextEncoder().encode("PNG").buffer,
+    } as any);
+
+    await downloadURL("https://evil.example/x.png", path.join(dir, "x.png"));
+
+    const headers = vi.mocked(fetch).mock.calls[0][1]?.headers as any;
+    expect(headers?.Authorization).toBeUndefined();
+  });
+
+  it("sends the token to files.slack.com", async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => new TextEncoder().encode("PNG").buffer,
+    } as any);
+
+    await downloadURL(
+      "https://files.slack.com/files-pri/T1-F1/x.png",
+      path.join(dir, "x.png"),
+    );
+
+    const headers = vi.mocked(fetch).mock.calls[0][1]?.headers as any;
+    expect(headers?.Authorization).toBe("Bearer xoxp-secret-token");
+  });
+
+  it("does not follow a redirect off Slack with the token", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 302,
+        headers: {
+          get: (name: string) =>
+            name === "location" ? "https://evil.example/x" : null,
+        },
+        arrayBuffer: async () => new ArrayBuffer(0),
+      } as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => new TextEncoder().encode("PNG").buffer,
+      } as any);
+
+    await downloadURL(
+      "https://files.slack.com/files-pri/T1-F1/x.png",
+      path.join(dir, "x.png"),
+      { force: true },
+    );
+
+    expect(vi.mocked(fetch).mock.calls[1][0]).toBe("https://evil.example/x");
+    const headers = vi.mocked(fetch).mock.calls[1][1]?.headers as any;
+    expect(headers?.Authorization).toBeUndefined();
   });
 });

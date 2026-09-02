@@ -167,4 +167,3 @@ export function splitSearchHighlight(
 
   return segments.length > 0 ? segments : [{ text, match: false }];
 }
-

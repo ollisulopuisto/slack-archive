@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  collectIndexedUserIds,
   excludedUserIds,
   isChannelSearchable,
   isMessageSearchable,
+  pickVisibleUsers,
   toSearchMessages,
 } from "./search-filter.js";
 
@@ -12,6 +14,24 @@ const USERS = {
   U2: { id: "U2", name: "backlog", profile: { display_name: "Backlog" } },
   U3: { id: "U3", name: "olli" },
 } as any;
+
+describe("collectIndexedUserIds", () => {
+  it("keeps authors, reactors and members, and nobody else", () => {
+    const ids = collectIndexedUserIds({
+      messages: [{ u: "U1", reactions: [{ users: ["U2"] }] }, { u: "U3" }],
+      members: ["U3", "U4"],
+    });
+
+    expect([...ids].sort()).toEqual(["U1", "U2", "U3", "U4"]);
+    expect(ids.has("U_DM")).toBe(false);
+  });
+
+  it("picks only the visible users out of a directory", () => {
+    expect(
+      pickVisibleUsers({ U1: "alice", U_DM: "secret" }, new Set(["U1"])),
+    ).toEqual({ U1: "alice" });
+  });
+});
 
 describe("excludedUserIds", () => {
   it("resolves handles to ids, case-insensitively", () => {

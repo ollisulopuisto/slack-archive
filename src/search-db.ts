@@ -389,50 +389,6 @@ export async function buildSearchDatabase(
     }
     pageStmt.finalize();
 
-    const userStmt = db.prepare(
-      "INSERT OR REPLACE INTO users (id, name) VALUES (?, ?)",
-    );
-    for (const [userId, name] of Object.entries(users)) {
-      userStmt.run([userId, name]);
-    }
-    userStmt.finalize();
-
-    const nameStmt = db.prepare(
-      `INSERT INTO user_names (user_id, nick, first, last, sources, kinds)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    );
-    for (const [userId, userNames] of Object.entries(names || {})) {
-      for (const name of userNames) {
-        nameStmt.run([
-          userId,
-          name.nick,
-          name.first,
-          name.last,
-          name.sources.join(","),
-          (name.kinds || []).join(","),
-        ]);
-      }
-    }
-    nameStmt.finalize();
-
-    const statusStmt = db.prepare(
-      `INSERT INTO user_statuses (user_id, text, emoji, first, last, kind)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    );
-    for (const [userId, userStatuses] of Object.entries(statuses || {})) {
-      for (const status of userStatuses) {
-        statusStmt.run([
-          userId,
-          status.text,
-          status.emoji,
-          status.first,
-          status.last,
-          status.kind || "status",
-        ]);
-      }
-    }
-    statusStmt.finalize();
-
     const memberStmt = db.prepare(
       "INSERT INTO channel_members (channel_id, user_id) VALUES (?, ?)",
     );
@@ -476,6 +432,8 @@ export async function buildSearchDatabase(
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     );
 
+    const visibleUsers = new Set<string>();
+
     for (const channel of channels) {
       if (!channel.id) continue;
 
@@ -489,11 +447,17 @@ export async function buildSearchDatabase(
 
       const messages = await loadMessages(channel.id);
 
+      for (const userId of channel.members || []) {
+        if (userId) visibleUsers.add(userId);
+      }
+
       for (const message of messages) {
         if (!message.t) continue;
 
         const id = `${channel.id}-${message.t}`;
         const text = message.m || "";
+
+        if (message.u) visibleUsers.add(message.u);
 
         msgStmt.run([
           id,
@@ -517,6 +481,7 @@ export async function buildSearchDatabase(
           reactionStmt.run([id, channel.id, reaction.name, total]);
 
           for (const reactor of named) {
+            visibleUsers.add(reactor);
             reactionUserStmt.run([id, reaction.name, reactor]);
           }
         }
@@ -543,6 +508,56 @@ export async function buildSearchDatabase(
     fileStmt.finalize();
     reactionStmt.finalize();
     reactionUserStmt.finalize();
+
+    // Only people who appear in this index. The workspace directory names
+    // everyone, including those who only ever DMed, and that list used to
+    // ship in the published search.db.
+    const userStmt = db.prepare(
+      "INSERT OR REPLACE INTO users (id, name) VALUES (?, ?)",
+    );
+    for (const [userId, name] of Object.entries(users)) {
+      if (!visibleUsers.has(userId)) continue;
+      userStmt.run([userId, name]);
+    }
+    userStmt.finalize();
+
+    const nameStmt = db.prepare(
+      `INSERT INTO user_names (user_id, nick, first, last, sources, kinds)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+    for (const [userId, userNames] of Object.entries(names || {})) {
+      if (!visibleUsers.has(userId)) continue;
+      for (const name of userNames) {
+        nameStmt.run([
+          userId,
+          name.nick,
+          name.first,
+          name.last,
+          name.sources.join(","),
+          (name.kinds || []).join(","),
+        ]);
+      }
+    }
+    nameStmt.finalize();
+
+    const statusStmt = db.prepare(
+      `INSERT INTO user_statuses (user_id, text, emoji, first, last, kind)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+    for (const [userId, userStatuses] of Object.entries(statuses || {})) {
+      if (!visibleUsers.has(userId)) continue;
+      for (const status of userStatuses) {
+        statusStmt.run([
+          userId,
+          status.text,
+          status.emoji,
+          status.first,
+          status.last,
+          status.kind || "status",
+        ]);
+      }
+    }
+    statusStmt.finalize();
 
     db.exec("COMMIT");
   } finally {

@@ -71,6 +71,52 @@ export function botUserIds(users: Users): Set<string> {
   return bots;
 }
 
+/**
+ * Who an index is allowed to name: people who appear in it, not the whole
+ * workspace directory.
+ *
+ * The users table and the search-page dropdown used to list everyone in
+ * users.json, including people who only ever DMed.
+ */
+export function collectIndexedUserIds(options: {
+  messages: Array<{
+    u?: string;
+    reactions?: Array<{ users?: Array<string> }>;
+  }>;
+  members?: Array<string>;
+}): Set<string> {
+  const ids = new Set<string>();
+
+  for (const userId of options.members || []) {
+    if (userId) ids.add(userId);
+  }
+
+  for (const message of options.messages) {
+    if (message.u) ids.add(message.u);
+
+    for (const reaction of message.reactions || []) {
+      for (const userId of reaction.users || []) {
+        if (userId) ids.add(userId);
+      }
+    }
+  }
+
+  return ids;
+}
+
+export function pickVisibleUsers<T>(
+  users: Record<string, T>,
+  visible: Set<string>,
+): Record<string, T> {
+  const picked: Record<string, T> = {};
+
+  for (const [userId, value] of Object.entries(users)) {
+    if (visible.has(userId)) picked[userId] = value;
+  }
+
+  return picked;
+}
+
 /** Is this channel one the index may hold at all? */
 export function isChannelSearchable(
   channel: Channel,

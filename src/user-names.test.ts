@@ -10,6 +10,35 @@ import {
   UserNames,
 } from "./user-names.js";
 
+describe("nameHistory", () => {
+  const names: UserNames = {
+    U1: [
+      {
+        nick: "alice",
+        first: "2016-01-01T00:00:00.000Z",
+        last: "2016-01-02T00:00:00.000Z",
+        sources: ["profile"],
+      },
+    ],
+    U_DM: [
+      {
+        nick: "only-in-dms",
+        first: "2016-01-01T00:00:00.000Z",
+        last: "2016-01-02T00:00:00.000Z",
+        sources: ["mention"],
+      },
+    ],
+  };
+
+  it("can be limited to people this site actually publishes", () => {
+    // Name history is mined from every archived channel, DMs included. The
+    // names page used to list people who never posted in a published channel.
+    const history = nameHistory(names, new Set(), new Set(["U1"]));
+
+    expect(history.map((entry) => entry.userId)).toEqual(["U1"]);
+  });
+});
+
 describe("slackTimestampToIso", () => {
   it("converts a Slack timestamp", () => {
     expect(slackTimestampToIso("1475062758.000002")).toBe(

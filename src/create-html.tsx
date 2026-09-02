@@ -8,7 +8,6 @@ import { chunk, sortBy } from "lodash-es";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
 import esMain from "es-main";
-import slackMarkdown from "slack-markdown";
 
 import {
   clearMessagesCache,
@@ -50,7 +49,6 @@ import {
   getProfileFilePath,
   getChannelStatsFilePath,
   OUT_DIR,
-  MESSAGES_JS_PATH,
   FORCE_HTML_GENERATION,
 } from "./config.js";
 import { slackTimestampToJavaScriptTimestamp } from "./timestamp.js";
@@ -58,9 +56,9 @@ import { getPageIndex, recordPage } from "./search.js";
 import { write } from "./data-write.js";
 import { getSlackArchiveData } from "./archive-data.js";
 import { getEmojiRef, getEmojiUnicode, isEmojiUnicode } from "./emoji.js";
-import { renderEmojiInHtml } from "./emoji-text.js";
-import { selfHealingRedirect } from "./self-heal.js";
 import { splitQuotes } from "./blockquotes.js";
+import { contentSecurityPolicy } from "./csp.js";
+import { renderMessageHtml } from "./message-html.js";
 import { withoutBroadcastCopies } from "./broadcasts.js";
 import { reportTimings, timed } from "./timings.js";
 import { defaultWorkerCount, renderPagesInWorkers } from "./render-workers.js";
@@ -86,11 +84,7 @@ import {
   PageMeta,
   profileMeta,
 } from "./page-meta.js";
-import {
-  ArchiveLinkContext,
-  archiveLinkContext,
-  rewriteSlackLinks,
-} from "./slack-links.js";
+import { archiveLinkContext } from "./slack-links.js";
 import { getName } from "./users.js";
 import {
   nameAt,
@@ -249,7 +243,6 @@ const Files: React.FunctionComponent<FilesProps> = (props) => {
     }
 
     if (!file.mimetype?.startsWith("image") && thumb) {
-      href = file.url_private || href;
       src = `${FILES_BASE_URL}files/${channelId}/${archivedThumbName(file)}`;
 
       return (
@@ -377,10 +370,6 @@ const Message: React.FunctionComponent<MessageProps> = (props) => {
     thenKnownAs && thenKnownAs.toLowerCase() !== (username || "").toLowerCase()
       ? thenKnownAs
       : null;
-  const slackCallbacks = {
-    user: ({ id }: { id: string }) => `@${getName(id, users)}`,
-  };
-
   // A profile page exists for everyone who wrote a message, except bots - they
   // get one page between them rather than one each. So the link is offered
   // when there is somewhere for it to go, and never when it would 404.
@@ -430,16 +419,11 @@ const Message: React.FunctionComponent<MessageProps> = (props) => {
         <br />
         <div className="text">
           {splitQuotes(message.text).map((block, i) => {
-            const html = renderEmojiInHtml(
-              rewriteSlackLinks(
-                slackMarkdown.toHTML(block.text, {
-                  escapeHTML: false,
-                  slackCallbacks,
-                }),
-                linkContext,
-              ),
+            const html = renderMessageHtml(block.text, {
+              users,
+              linkContext,
               base,
-            );
+            });
 
             return block.quote ? (
               <blockquote key={i} dangerouslySetInnerHTML={{ __html: html }} />
@@ -462,10 +446,9 @@ interface MessagesPageProps {
   months: Array<MonthPage>;
 }
 const MessagesPage: React.FunctionComponent<MessagesPageProps> = (props) => {
-  const { gaps, slackArchiveData } = useRender();
+  const { gaps, slackArchiveData, base } = useRender();
 
   const { channel, index, chunksInfo, months } = props;
-  const messagesJs = fs.readFileSync(MESSAGES_JS_PATH, "utf8");
 
   // Newest message is first; the page reads oldest first. A reply sent with
   // "also send to channel" arrives twice - once here, once inside its parent -
@@ -511,7 +494,7 @@ const MessagesPage: React.FunctionComponent<MessagesPageProps> = (props) => {
 
   return (
     <HtmlPage meta={meta}>
-      <div className="page" style={{ paddingLeft: 10 }}>
+      <div className="page">
         <Header
           index={index}
           chunksInfo={chunksInfo}
@@ -519,7 +502,7 @@ const MessagesPage: React.FunctionComponent<MessagesPageProps> = (props) => {
           months={months}
         />
         <div className="messages-list">{messages}</div>
-        <script dangerouslySetInnerHTML={{ __html: messagesJs }} />
+        <script src={`${base}scroll.js`} />
       </div>
     </HtmlPage>
   );
@@ -834,9 +817,7 @@ const IndexPage: React.FunctionComponent = () => {
             own messages carry them, they are pasted around Slack, and the bot
             generates them. They land here and get sent on. */}
         <script src={`${base}pages.js`} />
-        <script
-          dangerouslySetInnerHTML={{ __html: selfHealingRedirect(base) }}
-        />
+        <script src={`${base}self-heal.js`} />
       </div>
     </HtmlPage>
   );
@@ -847,14 +828,20 @@ interface HtmlPageProps {
   meta?: PageMeta;
 }
 const HtmlPage: React.FunctionComponent<HtmlPageProps> = (props) => {
-  const { teamMeta, base } = useRender();
+  const { teamMeta, base, linkContext } = useRender();
 
   return (
-    <html lang="en">
+    <html lang="en" data-archive-base={base}>
       <head>
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta
+          httpEquiv="Content-Security-Policy"
+          content={contentSecurityPolicy({
+            filesBaseUrl: linkContext.filesBaseUrl,
+          })}
+        />
         <title>{props.meta?.title || teamMeta.title}</title>
         {/* What a preview of a shared link reads. Slack's own crawler cannot
             see these - the site answers it with a 401, which is the point of
@@ -1026,7 +1013,7 @@ const Pagination: React.FunctionComponent<PaginationProps> = (props) => {
 const NamesPage: React.FunctionComponent = () => {
   const { users, userNames, botIds, profileIds } = useRender();
 
-  const people = nameHistory(userNames, botIds).map((person) => ({
+  const people = nameHistory(userNames, botIds, profileIds).map((person) => ({
     ...person,
     current: getName(person.userId, users),
   }));

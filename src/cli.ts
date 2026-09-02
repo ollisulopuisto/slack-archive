@@ -34,6 +34,8 @@ import {
   getChannelsToCreateFilesFor,
 } from "./create-html.js";
 import { createBackup, deleteBackup, deleteOlderBackups } from "./backup.js";
+import { emptyArchive } from "./empty-archive.js";
+import { redactToken } from "./secrets.js";
 import { isValid, parseISO } from "date-fns";
 import { createSearch } from "./search.js";
 import { write, writeAndMerge, writeJsonArray } from "./data-write.js";
@@ -90,7 +92,7 @@ async function selectMergeFiles(): Promise<boolean> {
   ]);
 
   if (!merge) {
-    fs.emptyDirSync(OUT_DIR);
+    emptyArchive(OUT_DIR);
   }
 
   return merge;
@@ -212,7 +214,13 @@ async function getToken() {
   }
 
   if (config.token) {
-    console.log(`Using token ${config.token}`);
+    console.log(`Using token ${redactToken(config.token)}`);
+    return;
+  }
+
+  const tokenFile = process.env.SLACK_TOKEN_FILE;
+  if (tokenFile && fs.existsSync(tokenFile)) {
+    config.token = fs.readFileSync(tokenFile, "utf-8").trim();
     return;
   }
 
@@ -303,7 +311,7 @@ async function getAuthTest() {
       `Authentication with Slack failed. The error was: ${result.error}`,
     );
     console.log(
-      `The provided token was ${config.token}. Double-check the token and try again.`,
+      `The provided token was ${redactToken(config.token)}. Double-check the token and try again.`,
     );
     console.log(
       `For more information on the error code, see the error table at https://api.slack.com/methods/auth.test`,
@@ -476,7 +484,9 @@ export async function main() {
       } users.`,
     );
 
-    await downloadAvatarHistory();
+    if (!NO_SLACK_CONNECT) {
+      await downloadAvatarHistory();
+    }
   }
 
   /**

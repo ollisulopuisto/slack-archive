@@ -174,6 +174,40 @@ describe("buildSearchDatabase", () => {
     expect(fs.existsSync(dbPath)).toBe(true);
   });
 
+  it("does not store a user who never appears in the indexed channels", async () => {
+    // The published search.db used to hold every workspace member, so the
+    // user dropdown named people who only ever DMed.
+    const ghostPath = path.join(dir, "ghost.db");
+
+    await buildSearchDatabase(ghostPath, {
+      users: { ...USERS, U_DM: "secret" },
+      names: {
+        U_DM: [
+          {
+            nick: "only-in-dms",
+            first: "2016-01-01T00:00:00.000Z",
+            last: "2016-01-02T00:00:00.000Z",
+            sources: ["mention"],
+          },
+        ],
+      },
+      channels: CHANNELS,
+      loadMessages: async (channelId) => MESSAGES[channelId] || [],
+      pages: PAGES,
+    });
+
+    const db = openSearchDatabase(ghostPath);
+    const users = db.all("SELECT id FROM users") as Array<{ id: string }>;
+    const nicks = db.all("SELECT user_id FROM user_names") as Array<{
+      user_id: string;
+    }>;
+
+    expect(users.map((row) => row.id)).not.toContain("U_DM");
+    expect(nicks.map((row) => row.user_id)).not.toContain("U_DM");
+    db.close();
+    fs.removeSync(ghostPath);
+  });
+
   it("indexes every message", () => {
     const db = openSearchDatabase(dbPath);
     expect(countMessages(db)).toBe(8);
@@ -708,8 +742,8 @@ describe("what kind of name and status", () => {
 
     await buildSearchDatabase(file, {
       users: { U1: "infosota" },
-      channels: [],
-      loadMessages: async () => [],
+      channels: [{ id: "C1", name: "general", kind: "public" }],
+      loadMessages: async () => [{ t: "1.0", u: "U1", m: "moi" }],
       names: {
         U1: [
           {

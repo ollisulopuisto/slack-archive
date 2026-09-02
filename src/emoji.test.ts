@@ -48,6 +48,19 @@ describe("downloadAllEmoji()", () => {
     );
   });
 
+  it("strips a query string from the filename", async () => {
+    // path.extname("x.gif?cache=1") is ".gif?cache=1". File downloads already
+    // drop the query; emoji downloads did not, and the page then looked for
+    // party.gif while disk had party.gif?cache=1.
+    await downloadAllEmoji({
+      party: "https://emoji.slack.com/party.gif?cache=1",
+    });
+
+    expect(downloadURL.mock.calls[0][1]).toBe(
+      path.join(EMOJIS_DIR, "party.gif"),
+    );
+  });
+
   it("stores an alias under its own name, so :salut-2: renders too", async () => {
     await downloadAllEmoji({
       salut: "https://emoji.slack.com/salut.png",

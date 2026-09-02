@@ -78,7 +78,11 @@ export function archivedThumbName(file: ArchivedFile): string | undefined {
   return file?.id ? `${file.id}.png` : undefined;
 }
 
-function fileExtension(url: string): string {
+export function urlFileExtension(url: string): string {
   // Slack's URLs carry query strings; `?t=abc` is not a file extension.
   return path.extname(String(url).split("?")[0]);
+}
+
+function fileExtension(url: string): string {
+  return urlFileExtension(url);
 }

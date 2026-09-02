@@ -1506,6 +1506,10 @@ mark.search-highlight {
   overflow-x: auto;
 }
 
+.page {
+  padding-left: 10px;
+}
+
 .messages-list {
   max-width: 100%;
 }

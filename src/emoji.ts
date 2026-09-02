@@ -4,6 +4,7 @@ import fs from "fs";
 import { createRequire } from "node:module";
 
 import { EMOJIS_DIR, NO_SLACK_CONNECT } from "./config.js";
+import { urlFileExtension } from "./archived-files.js";
 import { downloadURL } from "./download-files.js";
 import { EmojiIndex } from "./emoji-render.js";
 import { ArchiveMessage, Emojis } from "./interfaces.js";
@@ -164,7 +165,7 @@ export async function downloadEmoji(
     }
   }
 
-  const extension = path.extname(url);
+  const extension = urlFileExtension(url);
   const filePath = getEmojiFilePath(name, extension);
 
   await downloadURL(url, filePath!);
@@ -212,7 +213,7 @@ export async function downloadAllEmoji(emojis: Emojis) {
 
     // Under its OWN name, not the target's: the message says :salut-2:, and
     // that is the file the page will ask for.
-    await downloadURL(url, getEmojiFilePath(name, path.extname(url))!);
+    await downloadURL(url, getEmojiFilePath(name, urlFileExtension(url))!);
     downloaded++;
   }
 

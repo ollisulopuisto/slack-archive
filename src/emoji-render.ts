@@ -47,8 +47,7 @@ export interface EmojiIndex {
 
 /** A run of ordinary text, or one emoji found in it. */
 export type EmojiPart =
-  | { kind: "text"; text: string }
-  | { kind: "image"; name: string; ref: string };
+  { kind: "text"; text: string } | { kind: "image"; name: string; ref: string };
 
 /**
  * A line split into text and the emoji in it, in the order they were typed.

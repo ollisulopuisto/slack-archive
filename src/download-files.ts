@@ -34,12 +34,40 @@ export interface DownloadUrlOptions {
  */
 export type DownloadOutcome = "stored" | "skipped" | "refused" | "failed";
 
+/**
+ * Whether this URL may see the Slack user token.
+ *
+ * The default used to send `Authorization: Bearer` to whatever Slack (or a
+ * crafted JSON file) named. Avatars and emoji do not need it; an
+ * attacker-controlled `url_private` must never see it.
+ */
+export function shouldSendSlackToken(url: string): boolean {
+  let host: string;
+
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+
+  return (
+    host === "files.slack.com" ||
+    host.endsWith(".files.slack.com") ||
+    host === "slack-files.com" ||
+    host.endsWith(".slack-files.com")
+  );
+}
+
+const REDIRECT = new Set([301, 302, 303, 307, 308]);
+
 export async function downloadURL(
   url: string,
   filePath: string,
   options: DownloadUrlOptions = {},
+  redirectsLeft = 5,
 ): Promise<DownloadOutcome> {
-  const authorize = options.authorize === undefined ? true : options.authorize;
+  const wantsAuth = options.authorize !== false;
+  const authorize = wantsAuth && shouldSendSlackToken(url);
 
   if (!options.force && fs.existsSync(filePath)) {
     return "skipped";
@@ -53,7 +81,27 @@ export async function downloadURL(
     : {};
 
   try {
-    const response = await fetch(url, { headers });
+    const response = await fetch(url, { headers, redirect: "manual" });
+
+    if (REDIRECT.has(response.status)) {
+      const location = response.headers.get("location");
+
+      if (!location || redirectsLeft <= 0) {
+        console.warn(`Failed to download file ${url}: redirect with no target`);
+        return "failed";
+      }
+
+      const next = new URL(location, url).href;
+
+      // Recompute authorization for the new host: a Slack URL that bounces to
+      // a tracker must not take the token with it.
+      return downloadURL(
+        next,
+        filePath,
+        { ...options, force: true },
+        redirectsLeft - 1,
+      );
+    }
 
     // A refusal has a body too. Slack answers an expired avatar or file link
     // with a 243-byte XML document, and writing that under the requested name
