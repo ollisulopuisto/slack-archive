@@ -265,7 +265,11 @@ half of the site, then remove the images the last few upgrades left on disk. It
 is here for the same reason `publish.sh` is - a copy that lives only on one
 machine cannot be reviewed or tested, and this one had already grown a step
 that logged OK for work it had not done. Install it by copying it to the NAS;
-the paths at the top are that NAS's.
+the machine-specific half lives in a config it loads from
+`/root/.slack-archive/nas.conf` (override with `NAS_ARCHIVE_CONF`), which you
+fill in from `scripts/nas-archive.conf.example`. The Slack token is a file
+named after the workspace under `TOKEN_DIR`, mounted into the container - it no
+longer sits in the archive tree.
 
 A failed publish does not fail the run. The messages are on disk either way,
 and a non-zero exit would tell the scheduler the archive broke when it did not.
