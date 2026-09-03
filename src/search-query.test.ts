@@ -5,6 +5,7 @@ import {
   filterResultsByPhrases,
   getSearchFilter,
   getSearchTerms,
+  messageLink,
   parseSearchQuery,
   sortSearchResults,
   splitSearchHighlight,
@@ -192,5 +193,15 @@ describe("sortSearchResults", () => {
   it("sorts oldest first", () => {
     const res = sortSearchResults(items, "oldest");
     expect(res.map((x) => x.t)).toEqual(["100.0", "200.0", "300.0"]);
+  });
+});
+
+describe("messageLink", () => {
+  it("links a result to the channel's entry page, at the message", () => {
+    // The entry page resolves any timestamp with its own chunk index, so a
+    // result never needs to know which page of a thousand its message is on.
+    expect(messageLink("C2GVD3L85", "1722426397.188379")).toBe(
+      "html/C2GVD3L85.html#1722426397.188379",
+    );
   });
 });

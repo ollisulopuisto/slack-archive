@@ -167,3 +167,14 @@ export function splitSearchHighlight(
 
   return segments.length > 0 ? segments : [{ text, match: false }];
 }
+
+/**
+ * Where a search result is read: on the channel's entry page, at the message.
+ *
+ * The entry page resolves the timestamp against its own chunk index, so the
+ * link does not need to know which of a channel's pages of a thousand
+ * messages holds it - and a thread reply opens where its parent is rendered.
+ */
+export function messageLink(channelId: string, ts: string): string {
+  return `html/${channelId}.html#${ts}`;
+}

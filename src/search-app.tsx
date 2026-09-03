@@ -24,6 +24,7 @@ declare function sortSearchResults(
 ): any;
 declare function splitSearchHighlight(text: string, query: string): any;
 declare function splitEmoji(text: string, index: any): any;
+declare function messageLink(channelId: string, ts: string): string;
 
 // How much of the database one page-load may pull down before it gives
 // up. Every query it can answer reads a few hundred kilobytes; anything
@@ -276,7 +277,7 @@ class App extends React.PureComponent {
       return;
     }
 
-    const { messages, channels, users, pages } = window.search_data;
+    const { messages, channels, users } = window.search_data;
     const allMessages = [];
 
     for (const channel in messages) {
@@ -298,7 +299,6 @@ class App extends React.PureComponent {
     miniSearch.addAll(allMessages);
 
     this.miniSearch = miniSearch;
-    this.pages = pages;
     this.setState({ ready: true, channels, users }, () => {
       if (this.hasSearchCriteria()) this.updateResults();
     });
@@ -355,12 +355,6 @@ class App extends React.PureComponent {
     }
 
     return results.slice(0, 50).map((result) => {
-      const channelPages = this.pages[result.c] || null;
-      const lookup = result.p || result.t;
-      const index = channelPages
-        ? channelPages.findIndex((pageTs) => pageTs < lookup)
-        : -1;
-
       return {
         id: result.id,
         c: result.c,
@@ -368,7 +362,6 @@ class App extends React.PureComponent {
         t: result.t,
         p: result.p,
         m_text: result.m,
-        page: index < 0 ? 0 : index,
       };
     });
   }
@@ -730,11 +723,9 @@ const MessagesList = ({ messages, channels, users, query }) => (
 );
 
 const Message = ({ message, channels, users, query }) => {
-  // The page a result is on comes from the database, which knows the
-  // page ranges - and knows that a thread reply is rendered inside its
-  // parent's block, so it is the parent's page that holds it.
-  const page = message.page === null ? 0 : message.page;
-  const href = `html/${message.c}-${page}.html#${message.t}`;
+  // The entry page resolves the timestamp with its own chunk index, and a
+  // thread reply opens where its parent is rendered.
+  const href = messageLink(message.c, message.t);
   const isReply = Boolean(message.p && message.p !== message.t);
 
   return (
