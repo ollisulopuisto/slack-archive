@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v26.09.03.237] - 2026-09-03
+
+### Added
+- **Infinite scroll and lazy-loaded channel chunks (`channel.html`)**: Channels now feature a single entry page (`html/<channelId>.html`) that loads message history dynamically using a zero-dependency vanilla script (`static/channel.js`).
+  - Messages are partitioned into pre-rendered HTML chunks (`html/<channelId>/chunk-N.json`) containing server-rendered markup, preserving emoji, link rewriting, user avatars, name history, and gap dividers without client rendering duplication.
+  - Dual `IntersectionObserver` sentinels dynamically fetch and prepend/append chunks as the reader scrolls in either direction, displaying a loading indicator at the sentinel edge.
+  - Channels retain full backward compatibility: static paginated HTML files (`html/<channelId>-N.html`) continue to be generated for `file://` offline browsing, search engines, and noscript environments.
+- **Persistent permalink resolution**: Timestamp permalinks (`html/<channelId>.html#<timestamp>`) resolve the target chunk index from `pages.js` (`window.ARCHIVE_CHUNKS`) using raw Slack timestamp boundaries, fetch the appropriate chunk, and smoothly scroll the message into view.
+- **History API synchronization & scroll restoration**: As messages scroll through the viewport, the URL hash updates seamlessly with `history.replaceState`. Back/forward browser navigation (`popstate`) re-resolves the position using `history.scrollRestoration = "manual"`.
+- **Keyboard navigation**: Channel pages support Vim-style navigation: `j` / `k` step down/up by 200px, while `g` / `G` jump directly to the top or bottom of the channel.
+- **Entry point routing & search deep links**: Search results now link directly to `html/<channelId>.html#<timestamp>`. Sidebar links, the front page "Start reading" link, person-page drilldowns, channel stats, `static/self-heal.js`, and `static/scroll.js` all seamlessly route to the new channel entry page.
+
 ## [v26.09.02.202] - 2026-09-02
 
 ### Fixed
