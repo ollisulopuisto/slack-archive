@@ -565,9 +565,9 @@ export async function renderPages(
   plans: Array<ChannelPlan>,
 ) {
   const byId = new Map(channels.map((channel) => [channel.id!, channel]));
-  const total = plans.reduce((n, plan) => n + plan.pages.length, 0);
+  const total = plans.reduce((n, plan) => n + plan.chunks.length, 0);
   const spinner = ora({
-    text: `Rendering ${total} pages`,
+    text: `Rendering ${total} chunks`,
     // Several workers writing spinner frames to one terminal is illegible.
     isEnabled: !process.env.SLACK_ARCHIVE_QUIET,
   }).start();
@@ -578,22 +578,22 @@ export async function renderPages(
     const channel = byId.get(plan.channelId);
 
     if (!channel) {
-      console.warn(`Can't render pages for unknown channel ${plan.channelId}`);
+      console.warn(`Can't render chunks for unknown channel ${plan.channelId}`);
       continue;
     }
 
-    for (const page of plan.pages) {
-      const messages = await getMessageSlice(plan.channelId, page.span);
+    for (const chunk of plan.chunks) {
+      const messages = await getMessageSlice(plan.channelId, chunk.span);
 
       await renderAndWrite(
         <MessagesPage
           channel={channel}
           messages={messages}
-          index={page.index}
+          index={chunk.index}
           chunksInfo={plan.chunksInfo}
           months={plan.months}
         />,
-        getHTMLFilePath(plan.channelId, page.index),
+        getHTMLFilePath(plan.channelId, chunk.index),
       );
 
       done++;
@@ -2621,8 +2621,8 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
     // whether one process renders or nine do - and a worker reporting it back
     // was one more thing that could arrive out of order.
     for (const plan of channelPlans) {
-      for (const page of plan.pages) {
-        if (page.oldestTs) recordPage(plan.channelId, page.oldestTs);
+      for (const chunk of plan.chunks) {
+        if (chunk.oldestTs) recordPage(plan.channelId, chunk.oldestTs);
       }
     }
 
@@ -2640,8 +2640,8 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
     clearMessagesCache();
 
     const buckets = shareOutPages(channelPlans, workers);
-    const pages = channelPlans.reduce((n, plan) => n + plan.pages.length, 0);
-    console.log(`\n Rendering ${pages} pages on ${buckets.length} cores`);
+    const pages = channelPlans.reduce((n, plan) => n + plan.chunks.length, 0);
+    console.log(`\n Rendering ${pages} chunks on ${buckets.length} cores`);
 
     await renderPagesInWorkers(render, channels, buckets);
   });
