@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 
-import { normalizeBaseUrl, searchIndexes } from "./config.js";
+import {
+  normalizeBaseUrl,
+  searchIndexes,
+  getChunkDirPath,
+  getChunkFilePath,
+} from "./config.js";
 
 describe("normalizeBaseUrl", () => {
   it("leaves an unset value empty, so attachments stay relative", () => {
@@ -20,6 +25,23 @@ describe("normalizeBaseUrl", () => {
     );
     expect(normalizeBaseUrl("https://morttinen.pylly.club/media///")).toBe(
       "https://morttinen.pylly.club/media/",
+    );
+  });
+});
+
+describe("getChunkDirPath", () => {
+  it("returns the correct directory path for a channel", () => {
+    expect(getChunkDirPath("C12345")).toContain("slack-archive/html/C12345");
+  });
+});
+
+describe("getChunkFilePath", () => {
+  it("returns the correct file path for a channel and chunk index", () => {
+    expect(getChunkFilePath("C12345", 0)).toContain(
+      "slack-archive/html/C12345/chunk-0.json",
+    );
+    expect(getChunkFilePath("C12345", 5)).toContain(
+      "slack-archive/html/C12345/chunk-5.json",
     );
   });
 });
