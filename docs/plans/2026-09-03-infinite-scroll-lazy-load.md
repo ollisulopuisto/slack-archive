@@ -1144,3 +1144,37 @@ If issues arise:
 **2. Parallel Session (separate)** - Open new session with executing-plans, batch execution with checkpoints
 
 **Which approach?**
+---
+
+## Architecture revision (2026-09-03, during execution)
+
+react-window was dropped: it ships no UMD build and `file://` blocks module
+scripts, so the virtualized React list from tasks 6-10 cannot run in this
+static archive. The established browser pattern here is hand-written vanilla
+scripts in `static/` (scroll.js, self-heal.js, sidebar.js, drilldown.js) —
+the search page is the only React SPA, and even it runs as a UMD + stripped
+tsc output.
+
+Revised design:
+- Chunk JSON = `{ index, total, oldestTs, newestTs, html }` where `html` is
+  server-rendered message markup (same components as the static pages, so
+  emoji, link rewriting, avatars, name history and gap dividers all keep
+  working without a second client-side renderer).
+- `static/channel.js` (vanilla, zero deps): loads chunk 0, two
+  IntersectionObserver sentinels (older/newer), permalink resolution via
+  `pages.js` raw-timestamp boundaries, URL sync via History API, scroll
+  restoration on popstate.
+- Entry page `channelId.html`: SSR Header + `<div id="channel-messages">` +
+  `pages.js` + `channel.js`. Calendar links retarget to `#timestamp`.
+- `pages.js` = `window.ARCHIVE_CHUNKS = { channelId: [{oldestTs, newestTs}] }`
+  with RAW Slack timestamps (the first revision used display-formatted
+  strings, which broke numeric comparison — fixed).
+- self-heal.js / scroll.js / search results all redirect to
+  `channelId.html#timestamp`; static `channelId-N.html` pages stay as
+  fallback (old links keep working).
+- No virtualization: DOM grows with browsed history (same as reading a long
+  static page). DOM pruning can be added later if a 700-chunk channel proves
+  slow; chunked fetch is what fixes load performance.
+
+Status of the original task list: 1-5 done (chunk writer, render plan,
+workers), 6-10 replaced by the revision, 11-15 reworked as above.

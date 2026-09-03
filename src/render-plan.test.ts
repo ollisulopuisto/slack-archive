@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { planChannel, shareOutPages } from "./render-plan.js";
+import {
+  planChannel,
+  shareOutPages,
+  PagePlan,
+  ChannelPlan,
+} from "./render-plan.js";
 
 const span = (i: number) => ({ start: i * 100, end: i * 100 + 90 });
 const messages = (n: number) =>
@@ -58,6 +63,33 @@ describe("planChannel()", () => {
     const plan = planChannel("C1", [], [], options);
 
     expect(plan.chunks).toEqual([{ index: 0, span: { start: 0, end: 0 } }]);
+    expect(plan.chunksInfo).toEqual([]);
+  });
+
+  it("returns pages array alongside chunks for static fallback", () => {
+    const plan = planChannel(
+      "C1",
+      messages(25),
+      messages(25).map((_, i) => span(i)),
+      options,
+    );
+
+    expect(plan.pages).toHaveLength(3);
+    expect(plan.pages[0].span).toEqual({ start: 0, end: 990 });
+    expect(plan.pages[1].span).toEqual({ start: 1000, end: 1990 });
+    expect(plan.pages[2].span).toEqual({ start: 2000, end: 2490 });
+    expect(plan.pages.map((page) => page.oldestTs)).toEqual([
+      "2016.000100",
+      "2006.000100",
+      "2001.000100",
+    ]);
+    expect(plan.pages).toEqual(plan.chunks);
+  });
+
+  it("still gives a channel nobody posted in one page to say so", () => {
+    const plan = planChannel("C1", [], [], options);
+
+    expect(plan.pages).toEqual([{ index: 0, span: { start: 0, end: 0 } }]);
     expect(plan.chunksInfo).toEqual([]);
   });
 });

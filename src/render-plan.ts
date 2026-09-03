@@ -25,10 +25,14 @@ export interface ChunkPlan {
   oldestTs?: string;
 }
 
+/** Same structure as ChunkPlan, used for static HTML page fallback. */
+export type PagePlan = ChunkPlan;
+
 export interface ChannelPlan {
   channelId: string;
   chunksInfo: ChunksInfo;
-  chunks: Array<ChunkPlan>;
+  chunks: Array<ChunkPlan>; // for infinite scroll
+  pages: Array<PagePlan>; // for static fallback
   /** Every month this channel has messages in, and where that month starts. */
   months: Array<MonthPage>;
 }
@@ -47,6 +51,7 @@ export function planChannel(
 ): ChannelPlan {
   const chunksInfo: ChunksInfo = [];
   const chunks: Array<ChunkPlan> = [];
+  const pages: Array<PagePlan> = [];
 
   // A channel nobody ever posted in still gets its chunk, saying so.
   if (messages.length === 0) {
@@ -54,6 +59,7 @@ export function planChannel(
       channelId,
       chunksInfo,
       chunks: [{ index: 0, span: { start: 0, end: 0 } }],
+      pages: [{ index: 0, span: { start: 0, end: 0 } }],
       months: [],
     };
   }
@@ -67,17 +73,20 @@ export function planChannel(
       count: last - start + 1,
     });
 
-    chunks.push({
+    const chunkPlan: ChunkPlan = {
       index: chunks.length,
       span: { start: spans[start].start, end: spans[last].end },
       oldestTs: messages[last]?.ts,
-    });
+    };
+    chunks.push(chunkPlan);
+    pages.push(chunkPlan);
   }
 
   return {
     channelId,
     chunksInfo,
     chunks,
+    pages,
     months: monthsToPages(messages as never, chunkSize),
   };
 }
@@ -110,6 +119,7 @@ export function shareOutPages(
 
     if (existing) {
       existing.chunks.push(chunk);
+      existing.pages.push(chunk);
     } else {
       // chunksInfo travels once per worker per channel, not once per chunk:
       // a channel with 714 chunks carries 714 entries in it.
@@ -118,6 +128,7 @@ export function shareOutPages(
         chunksInfo: plan.chunksInfo,
         months: plan.months,
         chunks: [chunk],
+        pages: [chunk],
       });
     }
 

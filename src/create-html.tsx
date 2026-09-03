@@ -52,6 +52,7 @@ import {
   OUT_DIR,
   FORCE_HTML_GENERATION,
   HTML_DIR,
+  getChannelEntryPath,
 } from "./config.js";
 import { slackTimestampToJavaScriptTimestamp } from "./timestamp.js";
 import { getPageIndex, recordPage } from "./search.js";
@@ -69,6 +70,7 @@ import { pickStartChannel } from "./start-channel.js";
 import { skipsFiles } from "./file-owners.js";
 import { fillMonths, groupByYear, MonthPage } from "./calendar-nav.js";
 import { writeChunk } from "./chunk-writer.js";
+import { ChannelApp } from "./ChannelApp.js";
 import {
   emptyRenderContext,
   RenderContext,
@@ -573,9 +575,9 @@ export async function renderPages(
   ) => Promise<void>,
 ) {
   const byId = new Map(channels.map((channel) => [channel.id!, channel]));
-  const total = plans.reduce((n, plan) => n + plan.chunks.length, 0);
+  const totalChunks = plans.reduce((n, plan) => n + plan.chunks.length, 0);
   const spinner = ora({
-    text: `Rendering ${total} chunks`,
+    text: `Rendering ${totalChunks} chunks`,
     // Several workers writing spinner frames to one terminal is illegible.
     isEnabled: !process.env.SLACK_ARCHIVE_QUIET,
   }).start();
@@ -604,13 +606,104 @@ export async function renderPages(
       await writeChunkFn(plan.channelId, chunk.index, chunkData);
 
       done++;
-      spinner.text = `Rendering chunks: ${done}/${total}`;
+      spinner.text = `Rendering chunks: ${done}/${totalChunks}`;
       spinner.render();
     }
+
+    // Render the channel entry page (channelId.html) after all chunks
+    await renderChannelEntry(channel, plan, plan.months);
   }
 
   closeChannelFiles();
   spinner.succeed(`Rendered ${done} chunks`);
+
+  // Second pass: render static HTML pages for fallback/SEO/file://
+  const totalPages = plans.reduce((n, plan) => n + plan.pages.length, 0);
+  const pageSpinner = ora({
+    text: `Rendering ${totalPages} static pages`,
+    isEnabled: !process.env.SLACK_ARCHIVE_QUIET,
+  }).start();
+
+  let pageDone = 0;
+
+  for (const plan of plans) {
+    const channel = byId.get(plan.channelId);
+
+    if (!channel) {
+      console.warn(`Can't render pages for unknown channel ${plan.channelId}`);
+      continue;
+    }
+
+    for (const page of plan.pages) {
+      const messages = await getMessageSlice(plan.channelId, page.span);
+
+      await renderAndWrite(
+        <MessagesPage
+          channel={channel}
+          messages={messages}
+          index={page.index}
+          chunksInfo={plan.chunksInfo}
+          months={plan.months}
+        />,
+        getHTMLFilePath(plan.channelId, page.index),
+      );
+
+      pageDone++;
+      pageSpinner.text = `Rendering static pages: ${pageDone}/${totalPages}`;
+      pageSpinner.render();
+    }
+  }
+
+  pageSpinner.succeed(`Rendered ${pageDone} static pages`);
+}
+
+/**
+ * Render the channel entry HTML page (channelId.html) that loads ChannelApp.
+ * This replaces the old channelId-0.html as the main entry point.
+ */
+async function renderChannelEntry(
+  channel: Channel,
+  plan: ChannelPlan,
+  months: Array<MonthPage>,
+) {
+  // Count total messages across all chunks
+  const totalMessages = plan.chunks.reduce((sum, chunk) => {
+    // We don't have message counts in chunk plan, but chunksInfo has counts
+    return sum + (plan.chunksInfo[chunk.index]?.count || 0);
+  }, 0);
+
+  const meta = channelPageMeta({
+    name: channel.name || channel.id || "",
+    first: plan.chunks[plan.chunks.length - 1]?.oldestTs,
+    last: plan.chunks[0]?.oldestTs,
+    index: 0,
+    total: 1,
+    messages: totalMessages,
+    team: render.slackArchiveData.auth?.team,
+  });
+
+  const html = ReactDOMServer.renderToStaticMarkup(
+    <HtmlPage meta={meta}>
+      <div className="page">
+        <Header
+          index={0}
+          chunksInfo={plan.chunksInfo}
+          channel={channel}
+          months={months}
+        />
+        <div className="messages-list">
+          <ChannelApp
+            channelId={channel.id!}
+            base={render.base}
+            chunksTotal={plan.chunks.length}
+          />
+        </div>
+        <script src={`${render.base}channel-app.js`} />
+      </div>
+    </HtmlPage>,
+  );
+
+  await write(getChannelEntryPath(channel.id!), html);
 }
 
 /**
@@ -1109,17 +1202,25 @@ async function writeSidebarFragment() {
 }
 
 async function writePageIndex() {
-  const index = getPageIndex();
-  const published: Record<string, Array<string>> = {};
+  const chunks: Record<
+    string,
+    Array<{ oldestTs: string; newestTs: string }>
+  > = {};
 
-  for (const channelId of Object.keys(index)) {
-    if (render.publishedChannels.has(channelId))
-      published[channelId] = index[channelId];
+  for (const plan of channelPlans) {
+    if (!render.publishedChannels.has(plan.channelId)) continue;
+
+    const channelChunks = plan.chunksInfo.map((chunkInfo) => ({
+      oldestTs: chunkInfo.oldest || "",
+      newestTs: chunkInfo.newest || "",
+    }));
+
+    chunks[plan.channelId] = channelChunks;
   }
 
   await write(
     PAGES_INDEX_PATH,
-    `window.ARCHIVE_PAGES = ${JSON.stringify(published)};\n`,
+    `window.ARCHIVE_CHUNKS = ${JSON.stringify(chunks)};\n`,
   );
 }
 

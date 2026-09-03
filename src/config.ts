@@ -347,6 +347,10 @@ export function getChunkFilePath(channelId: string, chunkIndex: number) {
   return path.join(getChunkDirPath(channelId), `chunk-${chunkIndex}.json`);
 }
 
+export function getChannelEntryPath(channelId: string) {
+  return path.join(HTML_DIR, `${channelId}.html`);
+}
+
 export function getAvatarFilePath(userId: string, extension: string) {
   return path.join(AVATARS_DIR, `${userId}${extension}`);
 }
