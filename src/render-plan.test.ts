@@ -47,6 +47,36 @@ describe("planChannel()", () => {
     ]);
   });
 
+  it("records the raw timestamps at both ends of each chunk, for the permalink index", () => {
+    const plan = planChannel(
+      "C1",
+      messages(25),
+      messages(25).map((_, i) => span(i)),
+      options,
+    );
+
+    expect(plan.chunks.map((chunk) => chunk.newestTs)).toEqual([
+      "2025.000100",
+      "2015.000100",
+      "2005.000100",
+    ]);
+  });
+
+  it("records the message just older than each chunk, so a gap divider can sit at the chunk boundary", () => {
+    const plan = planChannel(
+      "C1",
+      messages(25),
+      messages(25).map((_, i) => span(i)),
+      options,
+    );
+
+    expect(plan.chunks.map((chunk) => chunk.adjacentOlderTs)).toEqual([
+      "2015.000100",
+      "2005.000100",
+      undefined,
+    ]);
+  });
+
   it("describes every chunk, because the chunk control lists them all", () => {
     const plan = planChannel(
       "C1",

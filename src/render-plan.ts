@@ -23,6 +23,10 @@ export interface ChunkPlan {
   span: ElementSpan;
   /** The oldest message on the chunk: what the permalink index records. */
   oldestTs?: string;
+  /** The newest message on the chunk, so a permalink has both ends of its range. */
+  newestTs?: string;
+  /** The message just older than this chunk, so a gap divider can sit on the boundary. */
+  adjacentOlderTs?: string;
 }
 
 /** Same structure as ChunkPlan, used for static HTML page fallback. */
@@ -77,6 +81,10 @@ export function planChannel(
       index: chunks.length,
       span: { start: spans[start].start, end: spans[last].end },
       oldestTs: messages[last]?.ts,
+      newestTs: messages[start]?.ts,
+      // The message right after this chunk's oldest one: the gap between the
+      // two is drawn at the top of this chunk, where the reader meets it.
+      adjacentOlderTs: messages[last + 1]?.ts,
     };
     chunks.push(chunkPlan);
     pages.push(chunkPlan);

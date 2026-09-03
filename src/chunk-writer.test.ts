@@ -28,7 +28,7 @@ describe("chunk-writer", () => {
   describe("writeChunk", () => {
     it("creates JSON file with correct structure", async () => {
       const chunk = {
-        messages: [{ ts: "123.456", text: "hello", user: "U1" }],
+        html: '<div class="message-gutter" id="123.456">hello</div>',
         oldestTs: "123.456",
         newestTs: "123.456",
         index: 0,
@@ -42,7 +42,7 @@ describe("chunk-writer", () => {
         "utf-8",
       );
       const parsed = JSON.parse(content);
-      expect(parsed.messages).toHaveLength(1);
+      expect(parsed.html).toContain("hello");
       expect(parsed.index).toBe(0);
       expect(parsed.oldestTs).toBe("123.456");
       expect(parsed.newestTs).toBe("123.456");
@@ -51,14 +51,14 @@ describe("chunk-writer", () => {
 
     it("writes multiple chunks to the same channel directory", async () => {
       const chunk1 = {
-        messages: [{ ts: "123.456", text: "first", user: "U1" }],
+        html: "<div>first</div>",
         oldestTs: "123.456",
         newestTs: "123.456",
         index: 0,
         total: 2,
       };
       const chunk2 = {
-        messages: [{ ts: "123.457", text: "second", user: "U1" }],
+        html: "<div>second</div>",
         oldestTs: "123.457",
         newestTs: "123.457",
         index: 1,

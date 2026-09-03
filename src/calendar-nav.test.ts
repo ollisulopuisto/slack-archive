@@ -19,11 +19,11 @@ describe("monthsToPages()", () => {
     const months = monthsToPages(messages as never, 2);
 
     expect(months).toEqual([
-      { month: "2024-05", page: 2 },
-      { month: "2024-06", page: 1 },
-      { month: "2025-04", page: 1 },
-      { month: "2025-05", page: 0 },
-      { month: "2025-06", page: 0 },
+      { month: "2024-05", page: 2, oldestTs: "1714521600.000000" },
+      { month: "2024-06", page: 1, oldestTs: "1717200000.000000" },
+      { month: "2025-04", page: 1, oldestTs: "1743465600.000000" },
+      { month: "2025-05", page: 0, oldestTs: "1746057600.000000" },
+      { month: "2025-06", page: 0, oldestTs: "1748736000.000000" },
     ]);
   });
 
@@ -35,7 +35,19 @@ describe("monthsToPages()", () => {
     ];
 
     expect(monthsToPages(spanning as never, 2)).toEqual([
-      { month: "2025-06", page: 1 },
+      { month: "2025-06", page: 1, oldestTs: "1748908800.000000" },
+    ]);
+  });
+
+  it("remembers the oldest message of each month, so an anchor can land there", () => {
+    const months = monthsToPages(messages as never, 2);
+
+    expect(months.map((month) => [month.month, month.oldestTs])).toEqual([
+      ["2024-05", "1714521600.000000"],
+      ["2024-06", "1717200000.000000"],
+      ["2025-04", "1743465600.000000"],
+      ["2025-05", "1746057600.000000"],
+      ["2025-06", "1748736000.000000"],
     ]);
   });
 

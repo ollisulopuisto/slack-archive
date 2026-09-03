@@ -17,6 +17,8 @@ export interface MonthPage {
   month: string;
   /** Absent when the channel has no messages in that month at all. */
   page?: number;
+  /** The oldest message in the month: where a "jump to this month" link lands. */
+  oldestTs?: string;
 }
 
 export interface YearMonths {
@@ -44,6 +46,7 @@ export function monthsToPages(
   chunkSize: number,
 ): Array<MonthPage> {
   const pages = new Map<string, number>();
+  const oldestByMonth = new Map<string, string>();
 
   for (const [i, message] of messages.entries()) {
     const seconds = Number.parseFloat(message?.ts || "");
@@ -56,10 +59,15 @@ export function monthsToPages(
     // Messages run newest first, so a later index is an older message: the
     // last page a month appears on is where that month starts.
     pages.set(month, page);
+    oldestByMonth.set(month, message.ts!);
   }
 
   return [...pages.entries()]
-    .map(([month, page]) => ({ month, page }))
+    .map(([month, page]) => ({
+      month,
+      page,
+      oldestTs: oldestByMonth.get(month),
+    }))
     .sort((a, b) => a.month.localeCompare(b.month));
 }
 

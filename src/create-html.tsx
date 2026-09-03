@@ -70,7 +70,6 @@ import { pickStartChannel } from "./start-channel.js";
 import { skipsFiles } from "./file-owners.js";
 import { fillMonths, groupByYear, MonthPage } from "./calendar-nav.js";
 import { writeChunk } from "./chunk-writer.js";
-import { ChannelApp } from "./ChannelApp.js";
 import {
   emptyRenderContext,
   RenderContext,
@@ -545,7 +544,7 @@ const ChannelLink: React.FunctionComponent<ChannelLinkProps> = ({
 
   return (
     <li key={name}>
-      <a title={name} href={`${base}${channel.id!}-0.html`}>
+      <a title={name} href={`${base}${channel.id!}.html`}>
         {leadSymbol}
         <span>{name}</span>
       </a>
@@ -556,6 +555,60 @@ const ChannelLink: React.FunctionComponent<ChannelLinkProps> = ({
 /** Used by a render worker: the context was built in the parent process. */
 export function setRenderContext(context: RenderContext) {
   render = context;
+}
+
+/**
+ * One chunk's messages as finished HTML, oldest first, with the gap dividers
+ * the static pages draw in the same places.
+ *
+ * The chunk carries markup rather than raw messages: the browser appends what
+ * it fetches and does not re-render it. Rendering here, once, in the worker,
+ * is what keeps emoji, link rewriting, avatars and "then known as" identical
+ * between the static pages and the infinite scroll.
+ *
+ * `adjacentOlderTs` is the message just older than this chunk - it lives in
+ * the chunk below, but the gap between the two belongs at the top of THIS
+ * chunk, where a reader scrolling up meets it.
+ */
+export function chunkMessagesHtml(
+  messages: Array<ArchiveMessage>,
+  channelId: string,
+  adjacentOlderTs?: string,
+): string {
+  const oldestFirst = [...withoutBroadcastCopies(messages)].reverse();
+  const rows: Array<React.ReactNode> = [];
+
+  for (const [i, message] of oldestFirst.entries()) {
+    const gap = gapBetween(
+      render.gaps,
+      dayOf(i === 0 ? adjacentOlderTs : oldestFirst[i - 1]?.ts),
+      dayOf(message.ts),
+    );
+
+    if (gap) {
+      rows.push(<GapDivider key={`gap-${gap.from}`} gap={gap} />);
+    }
+
+    rows.push(
+      <ParentMessage
+        key={message.ts}
+        message={message}
+        channelId={channelId}
+      />,
+    );
+  }
+
+  if (rows.length === 0) {
+    rows.push(<span key="empty">No messages were ever sent!</span>);
+  }
+
+  return ReactDOMServer.renderToStaticMarkup(
+    <RenderContextProvider.Provider
+      value={{ ...render, base: "", root: "../" }}
+    >
+      {rows}
+    </RenderContextProvider.Provider>,
+  );
 }
 
 /**
@@ -596,11 +649,11 @@ export async function renderPages(
       const messages = await getMessageSlice(plan.channelId, chunk.span);
 
       const chunkData: ChunkData = {
-        messages,
-        oldestTs: chunk.oldestTs || messages[messages.length - 1]?.ts || "",
-        newestTs: messages[0]?.ts || "",
+        html: chunkMessagesHtml(messages, channel.id!, chunk.adjacentOlderTs),
+        oldestTs: chunk.oldestTs || "",
+        newestTs: chunk.newestTs || "",
         index: chunk.index,
-        total: plan.chunks.length,
+        total: plan.chunksInfo.length,
       };
 
       await writeChunkFn(plan.channelId, chunk.index, chunkData);
@@ -609,9 +662,6 @@ export async function renderPages(
       spinner.text = `Rendering chunks: ${done}/${totalChunks}`;
       spinner.render();
     }
-
-    // Render the channel entry page (channelId.html) after all chunks
-    await renderChannelEntry(channel, plan, plan.months);
   }
 
   closeChannelFiles();
@@ -658,52 +708,61 @@ export async function renderPages(
 }
 
 /**
- * Render the channel entry HTML page (channelId.html) that loads ChannelApp.
- * This replaces the old channelId-0.html as the main entry point.
+ * The channel's entry page (channelId.html): the infinite-scroll home.
+ *
+ * The server renders everything that never changes - the header, the meta,
+ * the channel's shape - and leaves an empty list. channel.js fills it, one
+ * chunk of pre-rendered messages at a time, and turns `#timestamp` links into
+ * a scroll rather than a page jump. The static channelId-N.html pages are
+ * still written, for file://, for crawlers, and for the links already sent.
  */
-async function renderChannelEntry(
-  channel: Channel,
-  plan: ChannelPlan,
-  months: Array<MonthPage>,
-) {
-  // Count total messages across all chunks
-  const totalMessages = plan.chunks.reduce((sum, chunk) => {
-    // We don't have message counts in chunk plan, but chunksInfo has counts
-    return sum + (plan.chunksInfo[chunk.index]?.count || 0);
-  }, 0);
+async function renderChannelEntry(channel: Channel, plan: ChannelPlan) {
+  const totalMessages = plan.chunksInfo.reduce(
+    (sum, info) => sum + info.count,
+    0,
+  );
 
   const meta = channelPageMeta({
     name: channel.name || channel.id || "",
     first: plan.chunks[plan.chunks.length - 1]?.oldestTs,
-    last: plan.chunks[0]?.oldestTs,
+    last: plan.chunks[0]?.newestTs,
     index: 0,
     total: 1,
     messages: totalMessages,
     team: render.slackArchiveData.auth?.team,
   });
 
-  const html = ReactDOMServer.renderToStaticMarkup(
+  await renderAndWrite(
     <HtmlPage meta={meta}>
       <div className="page">
         <Header
           index={0}
           chunksInfo={plan.chunksInfo}
           channel={channel}
-          months={months}
+          months={plan.months}
+          infinite
         />
-        <div className="messages-list">
-          <ChannelApp
-            channelId={channel.id!}
-            base={render.base}
-            chunksTotal={plan.chunks.length}
-          />
+        <div
+          className="messages-list"
+          id="channel-messages"
+          data-channel-id={channel.id!}
+          data-chunks={plan.chunks.length}
+        >
+          <noscript>
+            <p>
+              The scrolling view needs JavaScript.{" "}
+              <a href={`${channel.id!}-0.html`}>
+                Read the channel as static pages instead.
+              </a>
+            </p>
+          </noscript>
         </div>
-        <script src={`${render.base}channel-app.js`} />
+        <script src={`${render.base}pages.js`} />
+        <script src={`${render.base}channel.js`} />
       </div>
     </HtmlPage>,
+    getChannelEntryPath(channel.id!),
   );
-
-  await write(getChannelEntryPath(channel.id!), html);
 }
 
 /**
@@ -905,7 +964,7 @@ const IndexPage: React.FunctionComponent = () => {
 
         <p className="front-links">
           {first ? (
-            <a href={`${base}${first.id}-0.html`}>
+            <a href={`${base}${first.id}.html`}>
               Start reading{first.name ? ` #${first.name}` : ""}
             </a>
           ) : null}{" "}
@@ -979,11 +1038,13 @@ interface HeaderProps {
   index: number;
   chunksInfo: ChunksInfo;
   channel: Channel;
+  /** The infinite-scroll entry page: months jump to anchors, there are no page buttons. */
+  infinite?: boolean;
 }
 const Header: React.FunctionComponent<HeaderProps> = (props) => {
   const { users, stats } = useRender();
 
-  const { channel, index, chunksInfo, months } = props;
+  const { channel, index, chunksInfo, months, infinite } = props;
   let created;
 
   if (!channel.is_im && !channel.is_mpim) {
@@ -1017,6 +1078,7 @@ const Header: React.FunctionComponent<HeaderProps> = (props) => {
         index={index}
         chunksInfo={chunksInfo}
         months={months}
+        infinite={infinite}
       />
     </div>
   );
@@ -1027,13 +1089,16 @@ interface PaginationProps {
   index: number;
   chunksInfo: ChunksInfo;
   channelId: string;
+  /** The entry page: no page buttons - the list scrolls - and the month
+      chips jump to anchors inside the one page rather than to a page. */
+  infinite?: boolean;
 }
 const Pagination: React.FunctionComponent<PaginationProps> = (props) => {
   const { gaps } = useRender();
-  const { index, channelId, chunksInfo, months } = props;
+  const { index, channelId, chunksInfo, months, infinite } = props;
   const length = chunksInfo.length;
 
-  if (length === 1) {
+  if (length === 1 && !infinite) {
     return null;
   }
 
@@ -1042,25 +1107,29 @@ const Pagination: React.FunctionComponent<PaginationProps> = (props) => {
 
   return (
     <div className="pagination">
-      <span className="pages">
-        {index > 0 ? (
-          <a href={`${channelId}-${index - 1}.html`} rel="prev">
-            ← Newer
-          </a>
-        ) : (
-          <span className="spent">← Newer</span>
-        )}
-        <span className="where">
-          {here ? `${here.newest} - ${here.oldest}` : `${index + 1}/${length}`}
+      {!infinite ? (
+        <span className="pages">
+          {index > 0 ? (
+            <a href={`${channelId}-${index - 1}.html`} rel="prev">
+              ← Newer
+            </a>
+          ) : (
+            <span className="spent">← Newer</span>
+          )}
+          <span className="where">
+            {here
+              ? `${here.newest} - ${here.oldest}`
+              : `${index + 1}/${length}`}
+          </span>
+          {index + 1 < length ? (
+            <a href={`${channelId}-${index + 1}.html`} rel="next">
+              Older →
+            </a>
+          ) : (
+            <span className="spent">Older →</span>
+          )}
         </span>
-        {index + 1 < length ? (
-          <a href={`${channelId}-${index + 1}.html`} rel="next">
-            Older →
-          </a>
-        ) : (
-          <span className="spent">Older →</span>
-        )}
-      </span>
+      ) : null}
 
       {/* Every page of the channel used to be one <select>, each option
           labelled with the timestamps at its ends. At 714 pages that is a list
@@ -1092,7 +1161,11 @@ const Pagination: React.FunctionComponent<PaginationProps> = (props) => {
                     ) : (
                       <a
                         key={month.month}
-                        href={`${channelId}-${month.page}.html`}
+                        href={
+                          infinite
+                            ? `${channelId}.html#${month.oldestTs}`
+                            : `${channelId}-${month.page}.html`
+                        }
                         className={month.page === index ? "current" : undefined}
                         title={month.month}
                       >
@@ -1210,12 +1283,16 @@ async function writePageIndex() {
   for (const plan of channelPlans) {
     if (!render.publishedChannels.has(plan.channelId)) continue;
 
-    const channelChunks = plan.chunksInfo.map((chunkInfo) => ({
-      oldestTs: chunkInfo.oldest || "",
-      newestTs: chunkInfo.newest || "",
-    }));
+    // Raw Slack timestamps, not the display strings in chunksInfo: the
+    // reader's browser compares them numerically against a `#timestamp`.
+    const channelChunks = plan.chunks
+      .filter((chunk) => chunk.oldestTs)
+      .map((chunk) => ({
+        oldestTs: chunk.oldestTs!,
+        newestTs: chunk.newestTs || "",
+      }));
 
-    chunks[plan.channelId] = channelChunks;
+    if (channelChunks.length > 0) chunks[plan.channelId] = channelChunks;
   }
 
   await write(
@@ -1709,7 +1786,7 @@ const ProfilePage: React.FunctionComponent<ProfilePageProps> = ({
             data={person.channels.slice(0, 30).map((channel) => ({
               label: `#${channel.name}`,
               value: channel.messages,
-              href: `${channel.id}-0.html`,
+              href: `${channel.id}.html`,
               estimate: inflateBy(channel.messages),
             }))}
           />
@@ -2172,7 +2249,7 @@ const ChannelPage: React.FunctionComponent<{ channel: ChannelStats }> = ({
         <h1>#{channel.name}</h1>
         <p className="topic">
           {formatDay(channel.first)} - {formatDay(channel.last)} ·{" "}
-          <a href={`${channel.id}-0.html`}>read the messages</a>
+          <a href={`${channel.id}.html`}>read the messages</a>
         </p>
 
         <GapNotice />
@@ -2765,6 +2842,21 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
         await writeChunk(HTML_DIR, channelId, chunkIndex, chunkData);
       },
     );
+  });
+
+  // The entry pages render here rather than in the workers: a worker only
+  // holds its own share of a channel's chunks, and these pages need the whole
+  // plan - and exactly one write, not one per worker.
+  await timed("channel entry pages", async () => {
+    const byId = new Map(channels.map((channel) => [channel.id!, channel]));
+
+    for (const plan of channelPlans) {
+      const channel = byId.get(plan.channelId);
+
+      if (!channel) continue;
+
+      await renderChannelEntry(channel, plan);
+    }
   });
 
   await timed("front page", async () => {
