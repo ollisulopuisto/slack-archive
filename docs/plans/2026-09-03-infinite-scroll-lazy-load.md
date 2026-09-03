@@ -15,16 +15,22 @@
 ### Task 1: Add chunk output paths to config
 
 **Files:**
+
 - Modify: `src/config.ts:338-340`
 
 **Step 1: Write failing test**
+
 ```typescript
 // src/config.test.ts
 import { getChunkFilePath, getChunkDirPath } from "./config.js";
 
 test("getChunkFilePath returns correct path", () => {
-  expect(getChunkFilePath("C123", 0)).toBe("/path/to/slack-archive/html/C123/chunk-0.json");
-  expect(getChunkFilePath("C123", 5)).toBe("/path/to/slack-archive/html/C123/chunk-5.json");
+  expect(getChunkFilePath("C123", 0)).toBe(
+    "/path/to/slack-archive/html/C123/chunk-0.json",
+  );
+  expect(getChunkFilePath("C123", 5)).toBe(
+    "/path/to/slack-archive/html/C123/chunk-5.json",
+  );
 });
 
 test("getChunkDirPath returns directory", () => {
@@ -35,6 +41,7 @@ test("getChunkDirPath returns directory", () => {
 **Step 2: Run test** — Expected: FAIL (functions don't exist)
 
 **Step 3: Add to config.ts**
+
 ```typescript
 // After getHTMLFilePath (line 338-340)
 export function getChunkDirPath(channelId: string) {
@@ -55,18 +62,28 @@ export function getChunkFilePath(channelId: string, chunkIndex: number) {
 ### Task 2: Create chunk data type and serializer
 
 **Files:**
+
 - Create: `src/chunk-types.ts`
 - Modify: `src/interfaces.ts` (add export)
 
 **Step 1: Write failing test**
+
 ```typescript
 // src/chunk-types.test.ts
 import { ChunkData, serializeChunk, deserializeChunk } from "./chunk-types.js";
 import { ArchiveMessage } from "./interfaces.js";
 
 test("serializeChunk produces valid JSON", () => {
-  const messages: ArchiveMessage[] = [{ ts: "123.456", text: "hi", user: "U1" }];
-  const chunk: ChunkData = { messages, oldestTs: "123.456", newestTs: "123.456", index: 0, total: 1 };
+  const messages: ArchiveMessage[] = [
+    { ts: "123.456", text: "hi", user: "U1" },
+  ];
+  const chunk: ChunkData = {
+    messages,
+    oldestTs: "123.456",
+    newestTs: "123.456",
+    index: 0,
+    total: 1,
+  };
   const json = serializeChunk(chunk);
   const parsed = JSON.parse(json);
   expect(parsed.messages).toHaveLength(1);
@@ -74,7 +91,13 @@ test("serializeChunk produces valid JSON", () => {
 });
 
 test("deserializeChunk round-trips", () => {
-  const original: ChunkData = { messages: [{ ts: "123.456", text: "hi", user: "U1" }], oldestTs: "123.456", newestTs: "123.456", index: 0, total: 1 };
+  const original: ChunkData = {
+    messages: [{ ts: "123.456", text: "hi", user: "U1" }],
+    oldestTs: "123.456",
+    newestTs: "123.456",
+    index: 0,
+    total: 1,
+  };
   const json = serializeChunk(original);
   const restored = deserializeChunk(json);
   expect(restored.messages[0].ts).toBe("123.456");
@@ -84,6 +107,7 @@ test("deserializeChunk round-trips", () => {
 **Step 2: Run test** — Expected: FAIL
 
 **Step 3: Create chunk-types.ts**
+
 ```typescript
 import { ArchiveMessage } from "./interfaces.js";
 
@@ -113,22 +137,29 @@ export function deserializeChunk(json: string): ChunkData {
 ### Task 3: Modify render-plan to output chunk plans (not HTML page plans)
 
 **Files:**
+
 - Modify: `src/render-plan.ts`
 
 **Step 1: Write failing test**
+
 ```typescript
 // src/render-plan.test.ts
 import { planChannel, ChannelPlan, PagePlan } from "./render-plan.js";
 
 test("planChannel returns ChunkPlan with correct structure", () => {
-  const messages = Array.from({ length: 2500 }, (_, i) => ({ ts: `${1000 + i}.000` }));
-  const spans = messages.map((_, i) => ({ start: i * 100, end: (i + 1) * 100 }));
-  
-  const plan = planChannel("C123", messages, spans, { 
-    chunkSize: 1000, 
-    formatTimestamp: (m) => m.ts || "" 
+  const messages = Array.from({ length: 2500 }, (_, i) => ({
+    ts: `${1000 + i}.000`,
+  }));
+  const spans = messages.map((_, i) => ({
+    start: i * 100,
+    end: (i + 1) * 100,
+  }));
+
+  const plan = planChannel("C123", messages, spans, {
+    chunkSize: 1000,
+    formatTimestamp: (m) => m.ts || "",
   });
-  
+
   expect(plan.chunksInfo).toHaveLength(3); // 2500 / 1000 = 3 chunks
   expect(plan.chunks[0].index).toBe(0);
   expect(plan.chunks[0].messages.length).toBe(1000); // Not tested here, but span is correct
@@ -138,6 +169,7 @@ test("planChannel returns ChunkPlan with correct structure", () => {
 **Step 2: Run test** — Expected: FAIL (type mismatch)
 
 **Step 3: Modify render-plan.ts**
+
 ```typescript
 // Replace PagePlan with ChunkPlan
 export interface ChunkPlan {
@@ -170,6 +202,7 @@ return { channelId, chunksInfo, chunks, months: monthsToPages(...) };
 ```
 
 **Step 4: Update shareOutPages to work with chunks**
+
 ```typescript
 // In shareOutPages, replace plan.pages with plan.chunks
 const heaviestFirst = plans
@@ -204,10 +237,12 @@ for (const { plan, chunk } of heaviestFirst) {
 ### Task 4: Create chunk writer (replaces HTML page writer)
 
 **Files:**
+
 - Create: `src/chunk-writer.ts`
 - Modify: `src/create-html.tsx` (import)
 
 **Step 1: Write failing test**
+
 ```typescript
 // src/chunk-writer.test.ts
 import { writeChunk, ensureChunkDir } from "./chunk-writer.js";
@@ -217,7 +252,7 @@ import path from "path";
 test("writeChunk creates JSON file with correct structure", async () => {
   const testDir = "/tmp/test-chunks";
   await fs.ensureDir(testDir);
-  
+
   const chunk = {
     messages: [{ ts: "123.456", text: "hello", user: "U1" }],
     oldestTs: "123.456",
@@ -225,10 +260,13 @@ test("writeChunk creates JSON file with correct structure", async () => {
     index: 0,
     total: 1,
   };
-  
+
   await writeChunk(testDir, "C123", 0, chunk);
-  
-  const content = await fs.readFile(path.join(testDir, "C123", "chunk-0.json"), "utf-8");
+
+  const content = await fs.readFile(
+    path.join(testDir, "C123", "chunk-0.json"),
+    "utf-8",
+  );
   const parsed = JSON.parse(content);
   expect(parsed.messages).toHaveLength(1);
   expect(parsed.index).toBe(0);
@@ -238,12 +276,16 @@ test("writeChunk creates JSON file with correct structure", async () => {
 **Step 2: Run test** — Expected: FAIL
 
 **Step 3: Create chunk-writer.ts**
+
 ```typescript
 import fs from "fs-extra";
 import path from "path";
 import { serializeChunk, ChunkData } from "./chunk-types.js";
 
-export async function ensureChunkDir(channelId: string, baseDir: string): Promise<string> {
+export async function ensureChunkDir(
+  channelId: string,
+  baseDir: string,
+): Promise<string> {
   const dir = path.join(baseDir, channelId);
   await fs.ensureDir(dir);
   return dir;
@@ -253,7 +295,7 @@ export async function writeChunk(
   baseDir: string,
   channelId: string,
   chunkIndex: number,
-  chunk: ChunkData
+  chunk: ChunkData,
 ): Promise<void> {
   const dir = await ensureChunkDir(channelId, baseDir);
   const filePath = path.join(dir, `chunk-${chunkIndex}.json`);
@@ -270,10 +312,12 @@ export async function writeChunk(
 ### Task 5: Update render-workers to write chunks instead of HTML
 
 **Files:**
+
 - Modify: `src/render-workers.ts`
 - Modify: `src/create-html.tsx` (renderPages function)
 
 **Step 1: Write failing test**
+
 ```typescript
 // src/render-workers.test.ts (add test)
 import { renderPagesInWorkers } from "./render-workers.js";
@@ -285,11 +329,16 @@ test("renderPagesInWorkers writes chunks not HTML", async () => {
 ```
 
 **Step 2: Modify render-workers.ts**
+
 ```typescript
 // Change renderPagesInWorkers to accept a chunk writer function
 export async function renderPagesInWorkers(
   plans: Array<Array<ChannelPlan>>,
-  writeChunkFn: (channelId: string, chunkIndex: number, chunk: ChunkData) => Promise<void>,
+  writeChunkFn: (
+    channelId: string,
+    chunkIndex: number,
+    chunk: ChunkData,
+  ) => Promise<void>,
   // ... other params
 ) {
   // Worker logic: instead of rendering HTML, build ChunkData and call writeChunkFn
@@ -297,11 +346,13 @@ export async function renderPagesInWorkers(
 ```
 
 **Step 3: In create-html.tsx, update renderPages to use chunk writer**
+
 ```typescript
 // In renderPages function (around line 563):
-for (const page of plan.pages) { // becomes: for (const chunk of plan.chunks)
+for (const page of plan.pages) {
+  // becomes: for (const chunk of plan.chunks)
   const messages = await getMessageSlice(plan.channelId, chunk.span);
-  
+
   const chunkData: ChunkData = {
     messages,
     oldestTs: chunk.oldestTs || messages[messages.length - 1]?.ts || "",
@@ -309,7 +360,7 @@ for (const page of plan.pages) { // becomes: for (const chunk of plan.chunks)
     index: chunk.index,
     total: plan.chunks.length,
   };
-  
+
   await writeChunk(HTML_DIR, plan.channelId, chunk.index, chunkData);
 }
 ```
@@ -325,6 +376,7 @@ for (const page of plan.pages) { // becomes: for (const chunk of plan.chunks)
 ### Task 6: Add react-window dependency
 
 **Files:**
+
 - Modify: `package.json`
 
 **Step 1: Run** `npm install react-window @types/react-window`
@@ -336,10 +388,12 @@ for (const page of plan.pages) { // becomes: for (const chunk of plan.chunks)
 ### Task 7: Create ChannelApp entry component
 
 **Files:**
+
 - Create: `src/ChannelApp.tsx`
 - Modify: `src/create-html.tsx` (add new render function)
 
 **Step 1: Write failing test**
+
 ```typescript
 // src/ChannelApp.test.tsx
 import { render, screen } from "@testing-library/react";
@@ -352,6 +406,7 @@ test("ChannelApp renders loading state initially", () => {
 ```
 
 **Step 2: Create ChannelApp.tsx**
+
 ```tsx
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { FixedSizeList as List } from "react-window";
@@ -373,55 +428,75 @@ interface ChunkData {
   total: number;
 }
 
-export const ChannelApp: React.FC<ChannelAppProps> = ({ channelId, base, chunksTotal }) => {
-  const { users, userNames, linkContext, profileIds, base: renderBase } = useRender();
+export const ChannelApp: React.FC<ChannelAppProps> = ({
+  channelId,
+  base,
+  chunksTotal,
+}) => {
+  const {
+    users,
+    userNames,
+    linkContext,
+    profileIds,
+    base: renderBase,
+  } = useRender();
   const effectiveBase = base || renderBase;
-  
-  const [loadedChunks, setLoadedChunks] = useState<Map<number, ChunkData>>(new Map());
+
+  const [loadedChunks, setLoadedChunks] = useState<Map<number, ChunkData>>(
+    new Map(),
+  );
   const [loadingChunk, setLoadingChunk] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Load initial chunk (index 0 = newest messages)
   useEffect(() => {
     loadChunk(0);
   }, []);
-  
-  const loadChunk = useCallback(async (index: number) => {
-    if (loadedChunks.has(index) || loadingChunk === index) return;
-    
-    setLoadingChunk(index);
-    try {
-      const response = await fetch(`${effectiveBase}${channelId}/chunk-${index}.json`);
-      if (!response.ok) throw new Error(`Failed to load chunk ${index}`);
-      const data: ChunkData = await response.json();
-      setLoadedChunks(prev => new Map(prev).set(index, data));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoadingChunk(null);
-    }
-  }, [channelId, effectiveBase, loadedChunks, loadingChunk]);
-  
+
+  const loadChunk = useCallback(
+    async (index: number) => {
+      if (loadedChunks.has(index) || loadingChunk === index) return;
+
+      setLoadingChunk(index);
+      try {
+        const response = await fetch(
+          `${effectiveBase}${channelId}/chunk-${index}.json`,
+        );
+        if (!response.ok) throw new Error(`Failed to load chunk ${index}`);
+        const data: ChunkData = await response.json();
+        setLoadedChunks((prev) => new Map(prev).set(index, data));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        setLoadingChunk(null);
+      }
+    },
+    [channelId, effectiveBase, loadedChunks, loadingChunk],
+  );
+
   // Flatten messages from loaded chunks (newest first)
   const allMessages: ArchiveMessage[] = [];
   for (let i = 0; i < chunksTotal; i++) {
     const chunk = loadedChunks.get(i);
     if (chunk) allMessages.push(...chunk.messages);
   }
-  
-  const ItemRenderer = ({ index, style }: { index: number; style: React.CSSProperties }) => (
+
+  const ItemRenderer = ({
+    index,
+    style,
+  }: {
+    index: number;
+    style: React.CSSProperties;
+  }) => (
     <div style={style}>
-      <ParentMessage
-        message={allMessages[index]}
-        channelId={channelId}
-      />
+      <ParentMessage message={allMessages[index]} channelId={channelId} />
     </div>
   );
-  
+
   if (allMessages.length === 0 && loadingChunk === 0) {
     return <div className="channel-loading">Loading messages…</div>;
   }
-  
+
   return (
     <div className="channel-app" style={{ height: "100vh", overflow: "auto" }}>
       <List
@@ -433,7 +508,9 @@ export const ChannelApp: React.FC<ChannelAppProps> = ({ channelId, base, chunksT
       >
         {ItemRenderer}
       </List>
-      {loadingChunk !== null && <div className="chunk-loading">Loading older messages…</div>}
+      {loadingChunk !== null && (
+        <div className="chunk-loading">Loading older messages…</div>
+      )}
       {error && <div className="chunk-error">{error}</div>}
     </div>
   );
@@ -449,10 +526,12 @@ export const ChannelApp: React.FC<ChannelAppProps> = ({ channelId, base, chunksT
 ### Task 8: Create channel entry HTML page (replaces channelId-0.html)
 
 **Files:**
+
 - Modify: `src/create-html.tsx` (add renderChannelEntry function)
 - Modify: `src/config.ts` (add CHANNEL_ENTRY_PATH)
 
 **Step 1: Write failing test**
+
 ```typescript
 // src/create-html.test.tsx (add test)
 test("renderChannelEntry generates single HTML with ChannelApp", async () => {
@@ -461,9 +540,14 @@ test("renderChannelEntry generates single HTML with ChannelApp", async () => {
 ```
 
 **Step 2: Add to create-html.tsx**
+
 ```tsx
 // New function to render the channel entry point
-async function renderChannelEntry(channel: Channel, plan: ChannelPlan, months: Array<MonthPage>) {
+async function renderChannelEntry(
+  channel: Channel,
+  plan: ChannelPlan,
+  months: Array<MonthPage>,
+) {
   const meta = channelPageMeta({
     name: channel.name || channel.id || "",
     first: plan.chunks[plan.chunks.length - 1]?.oldestTs, // Oldest message
@@ -473,7 +557,7 @@ async function renderChannelEntry(channel: Channel, plan: ChannelPlan, months: A
     messages: plan.chunks.reduce((sum, c) => sum + c.messages?.length || 0, 0), // Need to count
     team: slackArchiveData.auth?.team,
   });
-  
+
   const html = ReactDOMServer.renderToStaticMarkup(
     <HtmlPage meta={meta}>
       <div className="page">
@@ -492,9 +576,9 @@ async function renderChannelEntry(channel: Channel, plan: ChannelPlan, months: A
         </div>
         <script src={`${render.base}channel-app.js`} />
       </div>
-    </HtmlPage>
+    </HtmlPage>,
   );
-  
+
   await write(getChannelEntryPath(channel.id!), html);
 }
 
@@ -505,19 +589,20 @@ export function getChannelEntryPath(channelId: string) {
 ```
 
 **Step 3: Update renderPages to call renderChannelEntry once per channel**
+
 ```typescript
 // In renderPages function, replace the page loop:
 for (const plan of plans) {
   const channel = byId.get(plan.channelId);
   if (!channel) continue;
-  
+
   // Write all chunks first
   for (const chunk of plan.chunks) {
     const messages = await getMessageSlice(plan.channelId, chunk.span);
-    const chunkData: ChunkData = { /* build */ };
+    const chunkData: ChunkData = {/* build */};
     await writeChunk(HTML_DIR, plan.channelId, chunk.index, chunkData);
   }
-  
+
   // Then write single entry page
   await renderChannelEntry(channel, plan, plan.months);
 }
@@ -532,9 +617,11 @@ for (const plan of plans) {
 ### Task 9: Implement virtualized list with dynamic heights
 
 **Files:**
+
 - Modify: `src/ChannelApp.tsx`
 
 **Step 1: Write failing test**
+
 ```typescript
 // src/ChannelApp.test.tsx
 test("ChannelApp uses VariableSizeList for variable height messages", () => {
@@ -544,6 +631,7 @@ test("ChannelApp uses VariableSizeList for variable height messages", () => {
 ```
 
 **Step 2: Update ChannelApp to use VariableSizeList**
+
 ```tsx
 import { VariableSizeList as List } from "react-window";
 
@@ -554,16 +642,22 @@ const getItemSize = useCallback((index: number) => {
   return heightCache.current.get(index) || 200; // Default estimate
 }, []);
 
-const ItemRenderer = ({ index, style }: { index: number; style: React.CSSProperties }) => {
+const ItemRenderer = ({
+  index,
+  style,
+}: {
+  index: number;
+  style: React.CSSProperties;
+}) => {
   const ref = useRef<HTMLDivElement>(null);
-  
+
   useEffect(() => {
     if (ref.current) {
       const height = ref.current.getBoundingClientRect().height;
       heightCache.current.set(index, height);
     }
   }, [index]);
-  
+
   return (
     <div ref={ref} style={style}>
       <ParentMessage message={allMessages[index]} channelId={channelId} />
@@ -593,9 +687,11 @@ return (
 ### Task 10: Implement infinite scroll (load older chunks on scroll down)
 
 **Files:**
+
 - Modify: `src/ChannelApp.tsx`
 
 **Step 1: Write failing test**
+
 ```typescript
 // src/ChannelApp.test.tsx
 test("ChannelApp loads next chunk when scrolled near bottom", async () => {
@@ -604,6 +700,7 @@ test("ChannelApp loads next chunk when scrolled near bottom", async () => {
 ```
 
 **Step 2: Add scroll detection to ChannelApp**
+
 ```tsx
 const listRef = useRef<List>(null);
 const observerRef = useRef<IntersectionObserver | null>(null);
@@ -611,23 +708,25 @@ const sentinelRef = useRef<HTMLDivElement>(null);
 
 useEffect(() => {
   if (!sentinelRef.current) return;
-  
+
   observerRef.current = new IntersectionObserver(
     (entries) => {
       if (entries[0].isIntersecting) {
         // Load next older chunk
-        const loadedIndices = Array.from(loadedChunks.keys()).sort((a, b) => a - b);
+        const loadedIndices = Array.from(loadedChunks.keys()).sort(
+          (a, b) => a - b,
+        );
         const nextIndex = loadedIndices[loadedIndices.length - 1] + 1;
         if (nextIndex < chunksTotal) {
           loadChunk(nextIndex);
         }
       }
     },
-    { rootMargin: "200px" }
+    { rootMargin: "200px" },
   );
-  
+
   observerRef.current.observe(sentinelRef.current);
-  
+
   return () => observerRef.current?.disconnect();
 }, [loadedChunks, chunksTotal, loadChunk]);
 
@@ -644,7 +743,9 @@ return (
       {ItemRenderer}
     </List>
     <div ref={sentinelRef} style={{ height: "1px" }} />
-    {loadingChunk !== null && <div className="chunk-loading">Loading older messages…</div>}
+    {loadingChunk !== null && (
+      <div className="chunk-loading">Loading older messages…</div>
+    )}
   </div>
 );
 ```
@@ -660,10 +761,12 @@ return (
 ### Task 11: Update pages.js to map timestamp → chunk index
 
 **Files:**
+
 - Modify: `src/create-html.tsx` (writePageIndex function)
 - Modify: `src/search.js` (getPageIndex if needed)
 
 **Step 1: Write failing test**
+
 ```typescript
 // src/search.test.ts
 test("pages.js maps timestamp to chunk index", () => {
@@ -673,11 +776,12 @@ test("pages.js maps timestamp to chunk index", () => {
 ```
 
 **Step 2: Update writePageIndex to output chunk mapping**
+
 ```typescript
 async function writePageIndex() {
   const index = getPageIndex(); // This comes from search.ts - may need update
   const published: Record<string, Array<string>> = {};
-  
+
   for (const channelId of Object.keys(index)) {
     if (render.publishedChannels.has(channelId)) {
       // Convert page timestamps to chunk mapping
@@ -685,7 +789,7 @@ async function writePageIndex() {
       published[channelId] = index[channelId]; // Keep for backward compat, but note it's now chunks
     }
   }
-  
+
   await write(
     PAGES_INDEX_PATH,
     `window.ARCHIVE_CHUNKS = ${JSON.stringify(published)};\n`,
@@ -694,6 +798,7 @@ async function writePageIndex() {
 ```
 
 **Step 3: Update scroll.js (self-heal) to use new chunk index**
+
 ```javascript
 // In static/scroll.js - update to resolve via chunks
 // Check window.ARCHIVE_CHUNKS instead of ARCHIVE_PAGES
@@ -708,9 +813,11 @@ async function writePageIndex() {
 ### Task 12: Implement permalink resolution in ChannelApp
 
 **Files:**
+
 - Modify: `src/ChannelApp.tsx`
 
 **Step 1: Write failing test**
+
 ```typescript
 // src/ChannelApp.test.tsx
 test("ChannelApp scrolls to message on permalink load", async () => {
@@ -719,18 +826,19 @@ test("ChannelApp scrolls to message on permalink load", async () => {
 ```
 
 **Step 2: Add permalink handling to ChannelApp**
+
 ```tsx
 useEffect(() => {
   const hash = window.location.hash.slice(1); // Remove #
   if (!hash) return;
-  
+
   // Check if message already loaded
-  const targetMsg = allMessages.find(m => m.ts === hash);
+  const targetMsg = allMessages.find((m) => m.ts === hash);
   if (targetMsg) {
     scrollToMessage(targetMsg);
     return;
   }
-  
+
   // Need to find which chunk has this message
   resolvePermalink(hash);
 }, []);
@@ -739,18 +847,18 @@ const resolvePermalink = async (timestamp: string) => {
   // Use ARCHIVE_CHUNKS to find chunk index
   const chunks = window.ARCHIVE_CHUNKS?.[channelId];
   if (!chunks) return;
-  
+
   // chunks is array of { oldestTs, newestTs } or similar
   // Find chunk where timestamp falls in range
-  const chunkIndex = chunks.findIndex((c: any) => 
-    timestamp <= c.newestTs && timestamp >= c.oldestTs
+  const chunkIndex = chunks.findIndex(
+    (c: any) => timestamp <= c.newestTs && timestamp >= c.oldestTs,
   );
-  
+
   if (chunkIndex >= 0) {
     await loadChunk(chunkIndex);
     // After load, scroll to message
     setTimeout(() => {
-      const target = allMessages.find(m => m.ts === timestamp);
+      const target = allMessages.find((m) => m.ts === timestamp);
       if (target) scrollToMessage(target);
     }, 0);
   }
@@ -776,9 +884,11 @@ const scrollToMessage = (message: ArchiveMessage) => {
 ### Task 13: Implement URL sync on scroll (History API)
 
 **Files:**
+
 - Modify: `src/ChannelApp.tsx`
 
 **Step 1: Write failing test**
+
 ```typescript
 // src/ChannelApp.test.tsx
 test("URL updates with nearest message timestamp on scroll", () => {
@@ -787,6 +897,7 @@ test("URL updates with nearest message timestamp on scroll", () => {
 ```
 
 **Step 2: Add scroll listener for URL sync**
+
 ```tsx
 const lastUrlUpdate = useRef(0);
 
@@ -794,14 +905,15 @@ const handleScroll = useCallback(() => {
   const now = Date.now();
   if (now - lastUrlUpdate.current < 500) return; // Throttle
   lastUrlUpdate.current = now;
-  
+
   if (!listRef.current) return;
-  
+
   // Get visible range from react-window
-  const { visibleStartIndex, visibleStopIndex } = listRef.current.getVisibleRange();
+  const { visibleStartIndex, visibleStopIndex } =
+    listRef.current.getVisibleRange();
   const middleIndex = Math.floor((visibleStartIndex + visibleStopIndex) / 2);
   const message = allMessages[middleIndex];
-  
+
   if (message) {
     const newUrl = `${window.location.pathname}#${message.ts}`;
     window.history.replaceState(null, "", newUrl);
@@ -826,9 +938,11 @@ useEffect(() => {
 ### Task 14: Keep generating static HTML pages as fallback
 
 **Files:**
+
 - Modify: `src/create-html.tsx` (renderPages function)
 
 **Step 1: Write failing test**
+
 ```typescript
 // src/create-html.test.tsx
 test("static HTML pages still generated for fallback", async () => {
@@ -837,6 +951,7 @@ test("static HTML pages still generated for fallback", async () => {
 ```
 
 **Step 2: Update renderPages to generate BOTH chunks and static HTML**
+
 ```typescript
 // In renderPages:
 // 1. First pass: write all chunks (for infinite scroll)
@@ -845,13 +960,13 @@ test("static HTML pages still generated for fallback", async () => {
 for (const plan of plans) {
   const channel = byId.get(plan.channelId);
   if (!channel) continue;
-  
+
   // Write chunks
   for (const chunk of plan.chunks) {
     const messages = await getMessageSlice(plan.channelId, chunk.span);
     await writeChunk(HTML_DIR, plan.channelId, chunk.index, { /* ... */ });
   }
-  
+
   // Write static pages (reuse existing MessagesPage component)
   for (const page of plan.pages) { // Need to keep pages in ChannelPlan for this
     const messages = await getMessageSlice(plan.channelId, page.span);
@@ -860,7 +975,7 @@ for (const plan of plans) {
       getHTMLFilePath(plan.channelId, page.index)
     );
   }
-  
+
   // Write entry page (new)
   await renderChannelEntry(channel, plan, plan.months);
 }
@@ -877,11 +992,13 @@ for (const plan of plans) {
 ### Task 15: Update self-heal.js for new permalink format
 
 **Files:**
+
 - Modify: `static/self-heal.js`
 
 **Step 1: Write failing test** (manual verification)
 
 **Step 2: Update self-heal.js**
+
 ```javascript
 // Current: redirects to index.html?c=CHANNEL&ts=TS
 // New: also try channel.html#TS first (infinite scroll entry)
@@ -889,7 +1006,7 @@ for (const plan of plans) {
   var params = new URLSearchParams(window.location.search);
   var channel = params.get("c");
   var ts = params.get("ts");
-  
+
   if (channel && ts) {
     // Try new infinite scroll entry point first
     window.location.replace(`html/${channel}.html#${ts}&resolved=1`);
@@ -908,9 +1025,11 @@ for (const plan of plans) {
 ### Task 16: Update search results to link to new channel entry
 
 **Files:**
+
 - Modify: `src/search-app.tsx` (Message component href)
 
 **Step 1: Write failing test**
+
 ```typescript
 // src/search-app.test.tsx
 test("search result links to channel.html#timestamp", () => {
@@ -919,6 +1038,7 @@ test("search result links to channel.html#timestamp", () => {
 ```
 
 **Step 2: Update Message component in search-app.tsx**
+
 ```tsx
 // Line ~737: Change href from html/channel-page.html to channel.html
 const href = `${message.c}.html#${message.t}`; // Was: `html/${message.c}-${page}.html#${message.t}`
@@ -933,13 +1053,16 @@ const href = `${message.c}.html#${message.t}`; // Was: `html/${message.c}-${page
 ### Task 17: Update search page to use new sidebar fragment path
 
 **Files:**
+
 - Modify: `static/search.html` (sidebar path)
 
 **Step 1: Update sidebar script src**
+
 ```html
 <!-- Was: <script defer src="html/sidebar.js"></script> -->
 <script defer src="../html/sidebar.js"></script>
 ```
+
 (Adjust based on actual output structure)
 
 **Step 2: Commit**
@@ -951,12 +1074,20 @@ const href = `${message.c}.html#${message.t}`; // Was: `html/${message.c}-${page
 ### Task 18: Add loading skeletons for better UX
 
 **Files:**
+
 - Modify: `src/ChannelApp.tsx`
 - Modify: `static/style.css`
 
 **Step 1: Add skeleton renderers**
+
 ```tsx
-const SkeletonItem = ({ index, style }: { index: number; style: React.CSSProperties }) => (
+const SkeletonItem = ({
+  index,
+  style,
+}: {
+  index: number;
+  style: React.CSSProperties;
+}) => (
   <div style={style} className="message-skeleton">
     <div className="skeleton-avatar" />
     <div className="skeleton-text">
@@ -970,12 +1101,37 @@ const SkeletonItem = ({ index, style }: { index: number; style: React.CSSPropert
 ```
 
 **Step 2: Add CSS for skeletons**
+
 ```css
-.message-skeleton { padding: 12px; }
-.skeleton-avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(90deg, #eee 25%, #f5f5f5 50%, #eee 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
-.skeleton-line { height: 16px; background: linear-gradient(90deg, #eee 25%, #f5f5f5 50%, #eee 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; margin: 4px 0; }
-.skeleton-line.short { width: 60%; }
-@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.message-skeleton {
+  padding: 12px;
+}
+.skeleton-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, #eee 25%, #f5f5f5 50%, #eee 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+.skeleton-line {
+  height: 16px;
+  background: linear-gradient(90deg, #eee 25%, #f5f5f5 50%, #eee 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  margin: 4px 0;
+}
+.skeleton-line.short {
+  width: 60%;
+}
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
 ```
 
 **Step 3: Commit**
@@ -985,9 +1141,11 @@ const SkeletonItem = ({ index, style }: { index: number; style: React.CSSPropert
 ### Task 19: Handle scroll restoration on back/forward navigation
 
 **Files:**
+
 - Modify: `src/ChannelApp.tsx`
 
 **Step 1: Write failing test**
+
 ```typescript
 // src/ChannelApp.test.tsx
 test("scroll position restored on back navigation", () => {
@@ -996,6 +1154,7 @@ test("scroll position restored on back navigation", () => {
 ```
 
 **Step 2: Add scroll restoration**
+
 ```tsx
 const scrollPositionRef = useRef<number>(0);
 
@@ -1004,7 +1163,7 @@ useEffect(() => {
     const container = document.querySelector(".channel-app");
     if (container) scrollPositionRef.current = container.scrollTop;
   };
-  
+
   const handlePopState = () => {
     // Restore scroll after chunks load
     setTimeout(() => {
@@ -1012,10 +1171,10 @@ useEffect(() => {
       if (container) container.scrollTop = scrollPositionRef.current;
     }, 100);
   };
-  
+
   window.addEventListener("beforeunload", handleBeforeUnload);
   window.addEventListener("popstate", handlePopState);
-  
+
   return () => {
     window.removeEventListener("beforeunload", handleBeforeUnload);
     window.removeEventListener("popstate", handlePopState);
@@ -1032,26 +1191,42 @@ useEffect(() => {
 ### Task 20: Add keyboard navigation (j/k, g/G, ? for help)
 
 **Files:**
+
 - Modify: `src/ChannelApp.tsx`
 
 **Step 1: Add key handler**
+
 ```tsx
 useEffect(() => {
   const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-    
+    if (
+      e.target instanceof HTMLInputElement ||
+      e.target instanceof HTMLTextAreaElement
+    )
+      return;
+
     const container = document.querySelector(".channel-app");
     if (!container) return;
-    
+
     switch (e.key) {
-      case "j": container.scrollBy({ top: 100, behavior: "smooth" }); break;
-      case "k": container.scrollBy({ top: -100, behavior: "smooth" }); break;
-      case "g": container.scrollTo({ top: 0, behavior: "smooth" }); break;
-      case "G": container.scrollTo({ top: container.scrollHeight, behavior: "smooth" }); break;
-      case "?": showHelp(); break;
+      case "j":
+        container.scrollBy({ top: 100, behavior: "smooth" });
+        break;
+      case "k":
+        container.scrollBy({ top: -100, behavior: "smooth" });
+        break;
+      case "g":
+        container.scrollTo({ top: 0, behavior: "smooth" });
+        break;
+      case "G":
+        container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+        break;
+      case "?":
+        showHelp();
+        break;
     }
   };
-  
+
   window.addEventListener("keydown", handleKeyDown);
   return () => window.removeEventListener("keydown", handleKeyDown);
 }, []);
@@ -1066,9 +1241,11 @@ useEffect(() => {
 ### Task 21: Add integration tests for full flow
 
 **Files:**
+
 - Create: `src/integration.test.ts`
 
 **Step 1: Test chunk generation**
+
 ```typescript
 test("full render produces chunks + entry page + static pages", async () => {
   // Run mini render, verify output structure
@@ -1076,6 +1253,7 @@ test("full render produces chunks + entry page + static pages", async () => {
 ```
 
 **Step 2: Test permalink resolution**
+
 ```typescript
 test("permalink resolves to correct chunk and scrolls", async () => {
   // Load channel.html#timestamp, verify message visible
@@ -1083,6 +1261,7 @@ test("permalink resolves to correct chunk and scrolls", async () => {
 ```
 
 **Step 3: Test infinite scroll loads chunks**
+
 ```typescript
 test("scrolling loads next chunk", async () => {
   // Scroll sentinel, verify fetch called
@@ -1098,6 +1277,7 @@ test("scrolling loads next chunk", async () => {
 ### Task 22: Manual verification checklist
 
 **Manual tests (not automated):**
+
 - [ ] Open channel.html directly — loads first chunk, scroll works
 - [ ] Open channel.html#timestamp — loads correct chunk, scrolls to message
 - [ ] Scroll to bottom — loads next chunk seamlessly
@@ -1114,6 +1294,7 @@ test("scrolling loads next chunk", async () => {
 ## Rollback Plan
 
 If issues arise:
+
 1. Keep static HTML generation (Task 14) — always works
 2. Feature flag: `--infinite-scroll` to toggle new entry page generation
 3. Old `pages.js` format preserved for self-heal.js compatibility
@@ -1122,16 +1303,16 @@ If issues arise:
 
 ## Estimated Timeline
 
-| Phase | Tasks | Estimate |
-|-------|-------|----------|
-| 1: Data Layer | 1-5 | 3-4 days |
-| 2: Client App | 6-10 | 5-7 days |
-| 3: Permalinks/URL | 11-13 | 2-3 days |
-| 4: Fallback | 14-15 | 1-2 days |
-| 5: Search | 16-17 | 1 day |
-| 6: Polish | 18-20 | 2-3 days |
-| 7: Testing | 21-22 | 2-3 days |
-| **Total** | **22** | **~3-4 weeks** |
+| Phase             | Tasks  | Estimate       |
+| ----------------- | ------ | -------------- |
+| 1: Data Layer     | 1-5    | 3-4 days       |
+| 2: Client App     | 6-10   | 5-7 days       |
+| 3: Permalinks/URL | 11-13  | 2-3 days       |
+| 4: Fallback       | 14-15  | 1-2 days       |
+| 5: Search         | 16-17  | 1 day          |
+| 6: Polish         | 18-20  | 2-3 days       |
+| 7: Testing        | 21-22  | 2-3 days       |
+| **Total**         | **22** | **~3-4 weeks** |
 
 ---
 
@@ -1156,6 +1337,7 @@ the search page is the only React SPA, and even it runs as a UMD + stripped
 tsc output.
 
 Revised design:
+
 - Chunk JSON = `{ index, total, oldestTs, newestTs, html }` where `html` is
   server-rendered message markup (same components as the static pages, so
   emoji, link rewriting, avatars, name history and gap dividers all keep
@@ -1178,3 +1360,34 @@ Revised design:
 
 Status of the original task list: 1-5 done (chunk writer, render plan,
 workers), 6-10 replaced by the revision, 11-15 reworked as above.
+
+Final status (2026-09-03, feature complete pending manual checklist):
+
+- 11-14: done as reworked (pages.js raw timestamps, entry page, static pages
+  kept, writePageIndex from plan.chunks).
+- 15: done. self-heal.js and scroll.js redirect to `channelId.html#timestamp`.
+  The old `resolved=1` hop mark is gone: the entry page degrades to the
+  channel rather than redirecting, so the hand-off cannot loop.
+- 16: done. Search results link via `messageLink()` (src/search-query.ts) to
+  `html/CH.html#ts`; the browser app no longer computes or ships page numbers
+  (the entry page resolves the timestamp itself; a thread reply opens where
+  its parent renders).
+- 17: verified, no change needed. search.html sits at the root and every
+  asset path already carries the `html/` prefix.
+- 18: done in spirit - a "Loading…" indicator at the sentinel edge. The
+  skeleton concept only exists for a virtualized list, which the revision
+  dropped.
+- 19: done. `history.scrollRestoration = "manual"`; popstate re-resolves the
+  position from the hash, which is the position in a list that grows.
+- 20: done. j/k step, g/G jump to the edges, on the window - the page
+  scrolls, not a container.
+- 21: done in spirit. No jsdom in the revision, so the shipped
+  static/channel.js is tested structurally (src/channel-script.test.ts, the
+  self-heal pattern) and every seam it touches has unit coverage
+  (chunk-html, chunk-types, chunk-writer, render-plan, calendar-nav,
+  writePageIndex format, messageLink, self-heal).
+- 22: manual checklist remains, to run against the real archive.
+- Also: every "enter channel" link now opens the entry page (sidebar,
+  front-page Start reading, person-page drilldown, channel stats "read the
+  messages"); the static pages stay reachable as the noscript/file://
+  fallback and from the static pages' own pagination.
