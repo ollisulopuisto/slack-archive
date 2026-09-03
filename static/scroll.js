@@ -6,10 +6,12 @@
 // page that no longer holds its message. There is no error - the reader lands
 // at the top of roughly the right era and nothing says why.
 //
-// So a miss hands the timestamp to the front page, which resolves it against
-// the pages index shipped with THIS render and sends the reader on. A link
-// that has drifted repairs itself; one that was never valid ends up on a front
-// page rather than in a silence.
+// So a miss hands the reader to the channel's entry page, at the same
+// timestamp. The entry page resolves the timestamp against the chunk index
+// shipped with THIS render, and when the archive does not have the message it
+// degrades to the channel - it never redirects again - so the hand-off cannot
+// loop. A link that has drifted repairs itself; one that was never valid ends
+// up on a channel rather than in a silence.
 (function () {
   var id = (window.location.hash || "").slice(1);
 
@@ -35,15 +37,5 @@
 
   if (!/^[CDG][A-Z0-9]+$/.test(channel) || !/^\d+\.\d+$/.test(id)) return;
 
-  // Only once: if the front page sends us back here and the message still is
-  // not on the page, the archive does not have it and a loop helps nobody.
-  if (window.location.search.indexOf("resolved=1") !== -1) return;
-
-  window.location.replace(
-    "../index.html?c=" +
-      encodeURIComponent(channel) +
-      "&ts=" +
-      encodeURIComponent(id) +
-      "&from=page",
-  );
+  window.location.replace(channel + ".html#" + id);
 })();

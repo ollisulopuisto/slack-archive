@@ -229,6 +229,47 @@ video {
   /** i.e. replies in thread. Just here to be easily findable */
 }
 
+/* ==========================================================================
+   The channel entry page (channelId.html)
+   --------------------------------------------------------------------------
+   One page holding the whole channel, one chunk of pre-rendered messages at a
+   time. The static channelId-N.html pages are the same conversation without
+   JavaScript; this is the chrome around the list they share.
+   ========================================================================== */
+
+/* The page scrolls, not a box, so anchors and the back button behave. The
+   browser also tries to keep the reader put when content appears above the
+   viewport - channel.js makes that correction itself, so the browser must not
+   double it. */
+#channel-messages {
+  overflow-anchor: none;
+}
+
+/* The two edges of the loaded range. When one comes into view the next chunk
+   is fetched; while it is being fetched, the edge says so. */
+.chunk-sentinel {
+  height: 1px;
+}
+
+#channel-messages.chunk-loading .chunk-sentinel::before {
+  content: "Loading…";
+  display: block;
+  padding: 0.5rem 0;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.chunk-broken,
+.chunk-fallback {
+  margin: 1rem 10px;
+  padding: 0.75rem 1rem;
+  border-left: 4px solid var(--warn-edge);
+  background: var(--warn-surface);
+  color: var(--warn-ink);
+  line-height: 1.5;
+}
+
 .sender {
   font-weight: 800;
   margin-right: 10px;

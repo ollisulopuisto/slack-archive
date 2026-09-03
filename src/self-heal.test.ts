@@ -19,7 +19,10 @@ describe("the old-link redirect on the front page", () => {
     expect(script).not.toContain("${");
   });
 
-  it("marks the hop, so a page that still cannot find it stops there", () => {
-    expect(script).toContain("resolved=1");
+  it("sends the reader to the channel entry page, at the message", () => {
+    // The entry page owns its own permalink: the timestamp goes in the
+    // fragment, nothing in it, so the fragment is a clean timestamp.
+    expect(script).toContain('"html/" + channel + ".html#" + tsValue');
+    expect(script).not.toContain("resolved=1");
   });
 });
