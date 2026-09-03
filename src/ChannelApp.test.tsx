@@ -7,13 +7,28 @@ import { RenderContextProvider } from "./render-context.js";
 import { emptyRenderContext } from "./render-context.js";
 
 vi.mock("react-window", () => ({
-  List: function List({ children, itemCount, height, itemSize, overscanCount }: any) {
+  List: function List({
+    children,
+    itemCount,
+    height,
+    itemSize,
+    overscanCount,
+  }: any) {
     const items = [];
     for (let i = 0; i < itemCount; i++) {
-      const childElement = children({ index: i, style: { position: "absolute", top: itemSize(i), height: itemSize(i) } });
-      items.push(React.cloneElement(childElement as React.ReactElement, { key: i }));
+      const childElement = children({
+        index: i,
+        style: { position: "absolute", top: itemSize(i), height: itemSize(i) },
+      });
+      items.push(
+        React.cloneElement(childElement as React.ReactElement, { key: i }),
+      );
     }
-    return <div data-testid="virtual-list" style={{ height }}>{items}</div>;
+    return (
+      <div data-testid="virtual-list" style={{ height }}>
+        {items}
+      </div>
+    );
   },
 }));
 
@@ -29,7 +44,12 @@ const mockContext = {
   ...emptyRenderContext(),
   base: "/html/",
   root: "../",
-  users: { U1: { id: "U1", profile: { display_name: "user1", image_512: "avatar.png" } } },
+  users: {
+    U1: {
+      id: "U1",
+      profile: { display_name: "user1", image_512: "avatar.png" },
+    },
+  },
   userNames: {},
   userAvatars: {},
   userStatuses: {},
@@ -38,13 +58,27 @@ const mockContext = {
   profileIds: new Set(["U1"]),
   publishedChannels: new Set(["C123"]),
   channels: [],
-  linkContext: { teamUrl: "https://example.slack.com", teamId: "T123", files: {}, filesBaseUrl: "/files/", channels: new Set(["C123"]) },
+  linkContext: {
+    teamUrl: "https://example.slack.com",
+    teamId: "T123",
+    files: {},
+    filesBaseUrl: "/files/",
+    channels: new Set(["C123"]),
+  },
   gaps: [],
   estimates: {},
   stats: null,
   teamMeta: { title: "Test Workspace", description: "Test" },
   renderedAt: new Date().toISOString(),
-  slackArchiveData: { channels: {}, auth: { team: "Test Workspace", url: "https://example.slack.com", team_id: "T123", user_id: "U1" } },
+  slackArchiveData: {
+    channels: {},
+    auth: {
+      team: "Test Workspace",
+      url: "https://example.slack.com",
+      team_id: "T123",
+      user_id: "U1",
+    },
+  },
   me: { id: "U1", profile: { display_name: "user1" } },
 };
 
@@ -52,7 +86,7 @@ const renderWithContext = (component: React.ReactElement) => {
   return render(
     <RenderContextProvider.Provider value={mockContext}>
       {component}
-    </RenderContextProvider.Provider>
+    </RenderContextProvider.Provider>,
   );
 };
 
@@ -87,7 +121,9 @@ describe("ChannelApp", () => {
       json: async () => mockChunk,
     });
 
-    renderWithContext(<ChannelApp channelId="C123" base="/html/" chunksTotal={3} />);
+    renderWithContext(
+      <ChannelApp channelId="C123" base="/html/" chunksTotal={3} />,
+    );
 
     await waitFor(() => {
       expect(screen.queryByText(/loading messages/i)).not.toBeInTheDocument();
@@ -98,7 +134,9 @@ describe("ChannelApp", () => {
   it("shows error when chunk load fails", async () => {
     (global.fetch as vi.Mock).mockRejectedValueOnce(new Error("Network error"));
 
-    renderWithContext(<ChannelApp channelId="C123" base="/html/" chunksTotal={3} />);
+    renderWithContext(
+      <ChannelApp channelId="C123" base="/html/" chunksTotal={3} />,
+    );
 
     await waitFor(() => {
       expect(screen.getByText(/network error/i)).toBeInTheDocument();

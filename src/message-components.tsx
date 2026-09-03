@@ -100,7 +100,9 @@ interface ParentMessageProps {
   message: ArchiveMessage;
   channelId: string;
 }
-export const ParentMessage: React.FunctionComponent<ParentMessageProps> = (props) => {
+export const ParentMessage: React.FunctionComponent<ParentMessageProps> = (
+  props,
+) => {
   const { message, channelId } = props;
   const hasFiles = !!message.files;
 

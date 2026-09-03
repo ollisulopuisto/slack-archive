@@ -10,35 +10,52 @@ interface ChannelAppProps {
   chunksTotal: number;
 }
 
-export const ChannelApp: React.FC<ChannelAppProps> = ({ channelId, base, chunksTotal }) => {
-  const { users, userNames, linkContext, profileIds, base: renderBase } = useRender();
+export const ChannelApp: React.FC<ChannelAppProps> = ({
+  channelId,
+  base,
+  chunksTotal,
+}) => {
+  const {
+    users,
+    userNames,
+    linkContext,
+    profileIds,
+    base: renderBase,
+  } = useRender();
   const effectiveBase = base || renderBase;
 
-  const [loadedChunks, setLoadedChunks] = useState<Map<number, ChunkData>>(new Map());
+  const [loadedChunks, setLoadedChunks] = useState<Map<number, ChunkData>>(
+    new Map(),
+  );
   const [loadingChunk, setLoadingChunk] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const loadChunk = useCallback(async (index: number) => {
-    setLoadedChunks((prev) => {
-      if (prev.has(index)) return prev;
-      return prev;
-    });
-    setLoadingChunk((prev) => {
-      if (prev === index) return prev;
-      return index;
-    });
+  const loadChunk = useCallback(
+    async (index: number) => {
+      setLoadedChunks((prev) => {
+        if (prev.has(index)) return prev;
+        return prev;
+      });
+      setLoadingChunk((prev) => {
+        if (prev === index) return prev;
+        return index;
+      });
 
-    try {
-      const response = await fetch(`${effectiveBase}${channelId}/chunk-${index}.json`);
-      if (!response.ok) throw new Error(`Failed to load chunk ${index}`);
-      const data: ChunkData = await response.json();
-      setLoadedChunks((prev) => new Map(prev).set(index, data));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoadingChunk((prev) => (prev === index ? null : prev));
-    }
-  }, [channelId, effectiveBase]);
+      try {
+        const response = await fetch(
+          `${effectiveBase}${channelId}/chunk-${index}.json`,
+        );
+        if (!response.ok) throw new Error(`Failed to load chunk ${index}`);
+        const data: ChunkData = await response.json();
+        setLoadedChunks((prev) => new Map(prev).set(index, data));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        setLoadingChunk((prev) => (prev === index ? null : prev));
+      }
+    },
+    [channelId, effectiveBase],
+  );
 
   useEffect(() => {
     loadChunk(0);
@@ -56,7 +73,13 @@ export const ChannelApp: React.FC<ChannelAppProps> = ({ channelId, base, chunksT
     return heightCache.current.get(index) || 200;
   }, []);
 
-  const ItemRenderer = ({ index, style }: { index: number; style: React.CSSProperties }) => {
+  const ItemRenderer = ({
+    index,
+    style,
+  }: {
+    index: number;
+    style: React.CSSProperties;
+  }) => {
     const ref = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -88,7 +111,9 @@ export const ChannelApp: React.FC<ChannelAppProps> = ({ channelId, base, chunksT
       >
         {ItemRenderer}
       </List>
-      {loadingChunk !== null && <div className="chunk-loading">Loading older messages…</div>}
+      {loadingChunk !== null && (
+        <div className="chunk-loading">Loading older messages…</div>
+      )}
       {error && <div className="chunk-error">{error}</div>}
     </div>
   );
