@@ -116,3 +116,6 @@ export interface ChunkInfo {
 }
 
 export type ChunksInfo = Array<ChunkInfo>;
+
+export type { ChunkData } from "./chunk-types.js";
+export { serializeChunk, deserializeChunk } from "./chunk-types.js";
