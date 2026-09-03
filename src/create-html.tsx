@@ -25,6 +25,7 @@ import {
 import {
   ArchiveMessage,
   Channel,
+  ChunkData,
   ChunksInfo,
   Message,
   Reaction,
@@ -50,6 +51,7 @@ import {
   getChannelStatsFilePath,
   OUT_DIR,
   FORCE_HTML_GENERATION,
+  HTML_DIR,
 } from "./config.js";
 import { slackTimestampToJavaScriptTimestamp } from "./timestamp.js";
 import { getPageIndex, recordPage } from "./search.js";
@@ -66,6 +68,7 @@ import { ChannelPlan, planChannel, shareOutPages } from "./render-plan.js";
 import { pickStartChannel } from "./start-channel.js";
 import { skipsFiles } from "./file-owners.js";
 import { fillMonths, groupByYear, MonthPage } from "./calendar-nav.js";
+import { writeChunk } from "./chunk-writer.js";
 import {
   emptyRenderContext,
   RenderContext,
@@ -563,6 +566,11 @@ export function setRenderContext(context: RenderContext) {
 export async function renderPages(
   channels: Array<Channel>,
   plans: Array<ChannelPlan>,
+  writeChunkFn: (
+    channelId: string,
+    chunkIndex: number,
+    chunk: ChunkData,
+  ) => Promise<void>,
 ) {
   const byId = new Map(channels.map((channel) => [channel.id!, channel]));
   const total = plans.reduce((n, plan) => n + plan.chunks.length, 0);
@@ -585,25 +593,24 @@ export async function renderPages(
     for (const chunk of plan.chunks) {
       const messages = await getMessageSlice(plan.channelId, chunk.span);
 
-      await renderAndWrite(
-        <MessagesPage
-          channel={channel}
-          messages={messages}
-          index={chunk.index}
-          chunksInfo={plan.chunksInfo}
-          months={plan.months}
-        />,
-        getHTMLFilePath(plan.channelId, chunk.index),
-      );
+      const chunkData: ChunkData = {
+        messages,
+        oldestTs: chunk.oldestTs || messages[messages.length - 1]?.ts || "",
+        newestTs: messages[0]?.ts || "",
+        index: chunk.index,
+        total: plan.chunks.length,
+      };
+
+      await writeChunkFn(plan.channelId, chunk.index, chunkData);
 
       done++;
-      spinner.text = `Rendering pages: ${done}/${total}`;
+      spinner.text = `Rendering chunks: ${done}/${total}`;
       spinner.render();
     }
   }
 
   closeChannelFiles();
-  spinner.succeed(`Rendered ${done} pages`);
+  spinner.succeed(`Rendered ${done} chunks`);
 }
 
 /**
@@ -2629,7 +2636,13 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
     const workers = defaultWorkerCount(RENDER_WORKERS);
 
     if (workers < 2) {
-      await renderPages(channels, channelPlans);
+      await renderPages(
+        channels,
+        channelPlans,
+        async (channelId, chunkIndex, chunkData) => {
+          await writeChunk(HTML_DIR, channelId, chunkIndex, chunkData);
+        },
+      );
       return;
     }
 
@@ -2643,7 +2656,14 @@ export async function createHtmlForChannels(allChannels: Array<Channel> = []) {
     const pages = channelPlans.reduce((n, plan) => n + plan.chunks.length, 0);
     console.log(`\n Rendering ${pages} chunks on ${buckets.length} cores`);
 
-    await renderPagesInWorkers(render, channels, buckets);
+    await renderPagesInWorkers(
+      render,
+      channels,
+      buckets,
+      async (channelId, chunkIndex, chunkData) => {
+        await writeChunk(HTML_DIR, channelId, chunkIndex, chunkData);
+      },
+    );
   });
 
   await timed("front page", async () => {

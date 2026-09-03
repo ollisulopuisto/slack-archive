@@ -5,7 +5,9 @@ import { ArchiveMessage } from "./interfaces.js";
 
 describe("ChunkData", () => {
   it("serializeChunk produces valid JSON", () => {
-    const messages: ArchiveMessage[] = [{ ts: "123.456", text: "hi", user: "U1" }];
+    const messages: ArchiveMessage[] = [
+      { ts: "123.456", text: "hi", user: "U1" },
+    ];
     const chunk: ChunkData = {
       messages,
       oldestTs: "123.456",

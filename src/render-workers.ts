@@ -4,6 +4,7 @@ import { Worker } from "worker_threads";
 import { Channel } from "./interfaces.js";
 import { RenderContext } from "./render-context.js";
 import { ChannelPlan } from "./render-plan.js";
+import { ChunkData } from "./chunk-types.js";
 
 /**
  * The channel pages, rendered on more than one core.
@@ -27,10 +28,28 @@ export function defaultWorkerCount(requested?: number): number {
   return Math.max(1, Math.min(8, (os.cpus()?.length || 2) - 1));
 }
 
+interface WorkerChunkMessage {
+  type: "chunk";
+  channelId: string;
+  chunkIndex: number;
+  chunkData: ChunkData;
+}
+
+interface WorkerDoneMessage {
+  type: "done";
+}
+
+type WorkerMessage = WorkerChunkMessage | WorkerDoneMessage;
+
 export async function renderPagesInWorkers(
   context: RenderContext,
   channels: Array<Channel>,
   buckets: Array<Array<ChannelPlan>>,
+  writeChunkFn: (
+    channelId: string,
+    chunkIndex: number,
+    chunk: ChunkData,
+  ) => Promise<void>,
 ): Promise<void> {
   const workerUrl = new URL("./render-worker-entry.js", import.meta.url);
 
@@ -44,6 +63,22 @@ export async function renderPagesInWorkers(
             // written at all.
             argv: process.argv.slice(2),
             workerData: { context, channels, plans, worker: i },
+          });
+
+          worker.on("message", async (message: WorkerMessage) => {
+            if (message.type === "chunk") {
+              try {
+                await writeChunkFn(
+                  message.channelId,
+                  message.chunkIndex,
+                  message.chunkData,
+                );
+              } catch (err) {
+                reject(err);
+              }
+            } else if (message.type === "done") {
+              // Worker finished all its chunks
+            }
           });
 
           worker.on("error", reject);
