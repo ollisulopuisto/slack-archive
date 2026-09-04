@@ -38,6 +38,8 @@ describe("the channel entry page's infinite scroll", () => {
 
   it("keeps the reader put when older messages are inserted above", () => {
     expect(script).toContain("scrollBy");
+    expect(script).toContain("loadChunk(maxLoaded + 1)");
+    expect(script).toContain("loadChunk(minLoaded - 1)");
   });
 
   it("lands a bare visit on the newest message, as the static pages did", () => {

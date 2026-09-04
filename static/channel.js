@@ -63,8 +63,8 @@
 
   var loaded = {};
   var pending = {}; // chunk index -> the callbacks waiting for it to land
-  var minLoaded = Infinity; // the oldest chunk on screen (highest index)
-  var maxLoaded = -Infinity; // the newest (lowest index)
+  var minLoaded = Infinity; // the newest chunk on screen (lowest index)
+  var maxLoaded = -Infinity; // the oldest chunk on screen (highest index)
   var brokenOlder = false;
   var brokenNewer = false;
   var gutters = [];
@@ -145,7 +145,7 @@
         delete pending[i];
         loaded[i] = true;
         var wasEmpty = minLoaded === Infinity;
-        var isOlder = i < minLoaded;
+        var isOlder = i > maxLoaded;
         minLoaded = Math.min(minLoaded, i);
         maxLoaded = Math.max(maxLoaded, i);
 
@@ -172,13 +172,13 @@
           return;
         }
 
-        if (i < minLoaded) brokenOlder = true;
+        if (i > maxLoaded) brokenOlder = true;
         else brokenNewer = true;
 
         var note = document.createElement("p");
         note.className = "chunk-broken";
         note.textContent = "Some messages could not be loaded.";
-        if (i < minLoaded) list.insertBefore(note, olderSentinel.nextSibling);
+        if (i > maxLoaded) list.insertBefore(note, olderSentinel.nextSibling);
         else list.insertBefore(note, newerSentinel);
 
         for (var f = 0; f < dones.length; f++) dones[f](false);
@@ -191,9 +191,9 @@
         if (!entries[e].isIntersecting) continue;
 
         if (entries[e].target === olderSentinel && !brokenOlder) {
-          loadChunk(minLoaded - 1);
-        } else if (entries[e].target === newerSentinel && !brokenNewer) {
           loadChunk(maxLoaded + 1);
+        } else if (entries[e].target === newerSentinel && !brokenNewer) {
+          loadChunk(minLoaded - 1);
         }
       }
     },

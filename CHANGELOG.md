@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v26.09.04.239] - 2026-09-04
+
+### Fixed
+- **Infinite scroll chunk loading direction**: Corrected inverted chunk indexing logic in `static/channel.js` where `olderSentinel` attempted to load out-of-bounds negative indices and `newerSentinel` continuously appended older chunks below newer messages, hanging the "Loading…" sentinel state indefinitely.
+
 ## [v26.09.04.238] - 2026-09-04
 
 ### Fixed
