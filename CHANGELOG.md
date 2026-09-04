@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v26.09.04.240] - 2026-09-04
+
+### Added
+- **Auto-pull image in `nas-archive.sh`**: Explicitly pull `$IMAGE` before launching containers so `:latest` tags update automatically on the NAS without manual intervention.
+
 ## [v26.09.04.239] - 2026-09-04
 
 ### Fixed

@@ -157,6 +157,13 @@ trap on_signal INT TERM
 log "START $IMAGE (docker: $DOCKER)"
 heartbeat_start
 
+log "PULL $IMAGE"
+if "$DOCKER" pull "$IMAGE" >> "$LOG" 2>&1; then
+  log "PULL OK"
+else
+  log "PULL WARN: failed to pull $IMAGE, continuing with local cache"
+fi
+
 sweep_backups() {
   ls -1dt "$ARCHIVE"/data_backup_* 2>/dev/null | tail -n +3 | while read -r old; do
     log "removing old backup $(basename "$old")"
