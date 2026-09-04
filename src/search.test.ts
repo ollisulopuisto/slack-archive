@@ -117,3 +117,28 @@ describe("Search Logic", () => {
     expect(results.map((r) => r.t)).toEqual(["1", "2"]);
   });
 });
+
+describe("Vendored search dependencies", () => {
+  it("should have all vendored node_modules assets present on disk", async () => {
+    const fs = await import("fs-extra");
+    const path = await import("path");
+    const base = path.resolve(__dirname, "..", "node_modules");
+
+    const requiredFiles = [
+      ["react", "umd", "react.production.min.js"],
+      ["react-dom", "umd", "react-dom.production.min.js"],
+      ["minisearch", "dist", "umd", "index.js"],
+      ["sql.js-httpvfs", "dist", "index.js"],
+      ["sql.js-httpvfs", "dist", "sqlite.worker.js"],
+      ["sql.js-httpvfs", "dist", "sql-wasm.wasm"],
+    ];
+
+    for (const fileParts of requiredFiles) {
+      const filePath = path.join(base, ...fileParts);
+      expect(
+        fs.existsSync(filePath),
+        `Vendored file missing: ${filePath}`,
+      ).toBe(true);
+    }
+  });
+});

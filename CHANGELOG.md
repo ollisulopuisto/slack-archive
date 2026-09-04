@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v26.09.04.238] - 2026-09-04
+
+### Fixed
+- **Vendored MiniSearch file path in search page builder**: Corrected vendored file source from `minisearch/dist/umd/index.min.js` to `minisearch/dist/umd/index.js`, fixing a runtime crash when generating search HTML without `--search-index db`.
+- **NAS script config location**: `nas-archive.sh` now checks for `nas.conf` in the script directory if `/root/.slack-archive/nas.conf` is not found.
+
 ## [v26.09.03.237] - 2026-09-03
 
 ### Added

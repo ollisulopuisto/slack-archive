@@ -348,7 +348,7 @@ async function createSearchHTML() {
 
   if (SEARCH_INDEX.js) {
     copyNodeModuleFile(
-      ["minisearch", "dist", "umd", "index.min.js"],
+      ["minisearch", "dist", "umd", "index.js"],
       "minisearch.js",
     );
 

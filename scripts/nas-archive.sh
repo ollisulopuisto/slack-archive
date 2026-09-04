@@ -19,6 +19,10 @@ set -eu
 WORKSPACE="${1:?usage: nas-archive.sh <workspace-directory-name>}"
 CONF="${NAS_ARCHIVE_CONF:-/root/.slack-archive/nas.conf}"
 
+if [ ! -f "$CONF" ] && [ -f "$(dirname "$0")/nas.conf" ]; then
+  CONF="$(dirname "$0")/nas.conf"
+fi
+
 if [ ! -f "$CONF" ]; then
   echo "nas-archive.sh: no config at $CONF" >&2
   echo "Copy scripts/nas-archive.conf.example and fill it in." >&2
