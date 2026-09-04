@@ -212,7 +212,8 @@
     }
 
     if (found()) {
-      found().scrollIntoView({ block: "center" });
+      lastSyncedTs = ts;
+      found().scrollIntoView({ block: "start" });
       return;
     }
 
@@ -223,7 +224,8 @@
       if (i >= chunksTotal) return;
       loadChunk(i, function (ok) {
         if (found()) {
-          found().scrollIntoView({ block: "center" });
+          lastSyncedTs = ts;
+          found().scrollIntoView({ block: "start" });
         } else if (ok && i + 1 < chunksTotal) {
           tryAt(i + 1);
         }
@@ -275,10 +277,11 @@
     }
   });
 
-  // Scrolling writes the message nearest the top of the viewport into the URL,
-  // so a copied link reopens the reader where they left off. Throttled, and the
-  // walk starts where it last stopped, because a scroll crosses a few messages,
-  // not all of them.
+  // Scrolling writes the message spanning the reading line into the URL, so a
+  // copied link reopens the reader where they left off. The reading line sits at
+  // 140px, just past .message-gutter's scroll-margin-top (120px) where jump-to-
+  // anchor lands messages. Throttled, and the walk starts where it last stopped,
+  // because a scroll crosses a few messages, not all of them.
   var lastUrlUpdate = 0;
   window.addEventListener(
     "scroll",
@@ -288,16 +291,16 @@
       lastUrlUpdate = now;
 
       if (gutters.length === 0) return;
-      var line = window.innerHeight * 0.3;
+      var line = 140;
       var i = Math.min(syncIdx, gutters.length - 1);
 
       while (
         i + 1 < gutters.length &&
-        gutters[i + 1].getBoundingClientRect().top < line
+        gutters[i].getBoundingClientRect().bottom <= line
       ) {
         i++;
       }
-      while (i > 0 && gutters[i - 1].getBoundingClientRect().top > line) {
+      while (i > 0 && gutters[i].getBoundingClientRect().top > line) {
         i--;
       }
       syncIdx = i;

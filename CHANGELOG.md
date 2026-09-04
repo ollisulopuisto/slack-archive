@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v26.09.04.241] - 2026-09-04
+
+### Fixed
+- **Off-by-one active message in infinite scroll URL sync**: Corrected boundary calculation in `static/channel.js` where the scroll listener checked whether the next message's top had reached 30% of the viewport instead of checking whether the current message's bottom had scrolled past the reading line (140px, aligned with `.message-gutter`'s `scroll-margin-top`). This caused the address bar to prematurely advance to the next message's timestamp when reading or clicking a message.
+
 ## [v26.09.04.240] - 2026-09-04
 
 ### Added
