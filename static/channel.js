@@ -278,10 +278,10 @@
   });
 
   // Scrolling writes the message spanning the reading line into the URL, so a
-  // copied link reopens the reader where they left off. The reading line sits at
-  // 140px, just past .message-gutter's scroll-margin-top (120px) where jump-to-
-  // anchor lands messages. Throttled, and the walk starts where it last stopped,
-  // because a scroll crosses a few messages, not all of them.
+  // copied link reopens the reader where they left off. The reading line sits
+  // just past the sticky header's bottom where jump-to-anchor lands messages.
+  // Throttled, and the walk starts where it last stopped, because a scroll
+  // crosses a few messages, not all of them.
   var lastUrlUpdate = 0;
   window.addEventListener(
     "scroll",
@@ -291,7 +291,10 @@
       lastUrlUpdate = now;
 
       if (gutters.length === 0) return;
-      var line = 140;
+      var headerEl = document.querySelector(".header");
+      var line = headerEl
+        ? Math.ceil(headerEl.getBoundingClientRect().bottom + 15)
+        : 75;
       var i = Math.min(syncIdx, gutters.length - 1);
 
       while (
@@ -334,4 +337,14 @@
       window.scrollTo(0, document.documentElement.scrollHeight);
     }
   });
+
+  // Close the calendar dropdown when clicking outside or picking a month.
+  document.addEventListener("click", function (e) {
+    var cal = document.querySelector(".calendar[open]");
+    if (!cal) return;
+    if (!cal.contains(e.target) || e.target.closest(".calendar-months a")) {
+      cal.removeAttribute("open");
+    }
+  });
 })();
+

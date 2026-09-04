@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v26.09.04.242] - 2026-09-04
+
+### Changed
+- **Redesigned compact channel header**: Streamlined the sticky channel header from a ~140px, 5-row stacked column into a tight ~50px, 2-row CSS grid layout, saving over 60% vertical space while retaining all functionality:
+  - Row 1 combines the channel name, stats link badge ("Ten years of this channel"), and pagination/calendar controls on a single baseline.
+  - Row 2 displays the channel topic on the left (truncated with ellipsis, expandable on hover) and creator metadata on the right.
+  - Channels without topics collapse cleanly to a single-row header.
+  - The "Jump to a month" calendar dropdown now opens as an overlay popover with a custom caret rather than expanding the sticky header and reflowing messages. Clicking outside or clicking a month link automatically dismisses the calendar.
+  - Adjusted `scroll-padding-top` on `html` and `scroll-margin-top` on `.message-gutter` from 120px to 64px (96px on mobile), and made the reading line in `static/channel.js` dynamically measure the sticky header's bottom edge.
+
 ## [v26.09.04.241] - 2026-09-04
 
 ### Fixed

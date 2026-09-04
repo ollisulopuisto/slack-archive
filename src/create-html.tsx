@@ -1055,7 +1055,7 @@ const Header: React.FunctionComponent<HeaderProps> = (props) => {
 
     created =
       creator && time ? (
-        <span className="created">
+        <span className="created channel-creator">
           Created by {creator} on {time}
         </span>
       ) : null;
@@ -1068,11 +1068,15 @@ const Header: React.FunctionComponent<HeaderProps> = (props) => {
       {/* Only where there is one: a channel nobody ever posted in gets no
           numbers page, and this linked to it anyway. */}
       {(stats?.byChannel[channel.id!]?.messages || 0) > 0 ? (
-        <span className="created">
+        <span className="created channel-stats-link">
           <a href={`channel-${channel.id}.html`}>Ten years of this channel</a>
         </span>
       ) : null}
-      <p className="topic">{channel.topic?.value}</p>
+      {channel.topic?.value ? (
+        <p className="topic" title={channel.topic.value}>
+          {channel.topic.value}
+        </p>
+      ) : null}
       <Pagination
         channelId={channel.id!}
         index={index}
