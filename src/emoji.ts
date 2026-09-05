@@ -13,6 +13,25 @@ import { getWebClient } from "./web-client.js";
 const require = createRequire(import.meta.url);
 const emojiData = require("emoji-datasource");
 
+const TONE_MAP: Record<string, string> = {
+  "1F3FB": "skin-tone-2",
+  "1F3FC": "skin-tone-3",
+  "1F3FD": "skin-tone-4",
+  "1F3FE": "skin-tone-5",
+  "1F3FF": "skin-tone-6",
+};
+
+export function cleanEmojiName(name: string): string {
+  let cleaned = name.trim().toLowerCase();
+  if (cleaned.startsWith(":")) {
+    cleaned = cleaned.slice(1);
+  }
+  if (cleaned.endsWith(":")) {
+    cleaned = cleaned.slice(0, -1);
+  }
+  return cleaned;
+}
+
 let _unicodeEmoji: Record<string, string>;
 function getUnicodeEmoji() {
   if (_unicodeEmoji) {
@@ -21,24 +40,48 @@ function getUnicodeEmoji() {
 
   _unicodeEmoji = {};
   for (const emoji of emojiData) {
-    _unicodeEmoji[emoji.short_name as string] = emoji.unified;
+    const names =
+      (emoji.short_names as string[]) ||
+      (emoji.short_name ? [emoji.short_name as string] : []);
+
+    for (const name of names) {
+      _unicodeEmoji[name] = emoji.unified;
+    }
+
+    if (emoji.skin_variations) {
+      for (const [key, variation] of Object.entries(
+        emoji.skin_variations as Record<string, { unified: string }>,
+      )) {
+        const suffix = key
+          .split("-")
+          .map((tone) => TONE_MAP[tone])
+          .join("::");
+        if (suffix) {
+          for (const name of names) {
+            _unicodeEmoji[`${name}::${suffix}`] = variation.unified;
+          }
+        }
+      }
+    }
   }
 
   return _unicodeEmoji;
 }
 
 export function getEmojiFilePath(name: string, extension?: string) {
+  const cleaned = cleanEmojiName(name);
+
   // If we have an extension, return the correct path
   if (extension) {
-    return path.join(EMOJIS_DIR, `${name}${extension}`);
+    return path.join(EMOJIS_DIR, `${cleaned}${extension}`);
   }
 
   // If we don't have an extension, return the first path that exists
   // regardless of extension
   const extensions = [".png", ".jpg", ".gif"];
   for (const ext of extensions) {
-    if (fs.existsSync(path.join(EMOJIS_DIR, `${name}${ext}`))) {
-      return path.join(EMOJIS_DIR, `${name}${ext}`);
+    if (fs.existsSync(path.join(EMOJIS_DIR, `${cleaned}${ext}`))) {
+      return path.join(EMOJIS_DIR, `${cleaned}${ext}`);
     }
   }
 }
@@ -58,12 +101,15 @@ export function getEmojiRef(name: string) {
 
 export function isEmojiUnicode(name: string) {
   const unicodeEmoji = getUnicodeEmoji();
-  return !!unicodeEmoji[name];
+  return !!unicodeEmoji[cleanEmojiName(name)];
 }
 
 export function getEmojiUnicode(name: string) {
   const unicodeEmoji = getUnicodeEmoji();
-  const unified = unicodeEmoji[name];
+  const unified = unicodeEmoji[cleanEmojiName(name)];
+  if (!unified) {
+    return "";
+  }
   const split = unified.split("-");
 
   return split

@@ -57,6 +57,20 @@ describe("splitEmoji()", () => {
     ]);
   });
 
+  it("handles emoji with skin tone modifiers", () => {
+    expect(
+      splitEmoji("hei :male-police-officer::skin-tone-4:!", {
+        unicode: { "male-police-officer::skin-tone-4": "👮🏽‍♂️" },
+      }),
+    ).toEqual([{ kind: "text", text: "hei 👮🏽‍♂️!" }]);
+  });
+
+  it("handles back-to-back emoji shortcodes", () => {
+    expect(splitEmoji(":tada::tada:", INDEX)).toEqual([
+      { kind: "text", text: "🎉🎉" },
+    ]);
+  });
+
   it("knows nothing without an index, and says so by saying nothing", () => {
     // An archive built before html/emoji.js existed still opens; its search
     // results read the way they always did.
@@ -80,6 +94,13 @@ describe("getEmojiIndex()", () => {
 
   it("carries the standard emoji as the characters they mean", () => {
     expect(getEmojiIndex().unicode!["tada"]).toBe("🎉");
+  });
+
+  it("includes skin-tone variations in the unicode index", () => {
+    expect(getEmojiIndex().unicode!["male-police-officer::skin-tone-4"]).toBe(
+      "👮🏽‍♂️",
+    );
+    expect(getEmojiIndex().unicode!["+1::skin-tone-2"]).toBe("👍🏻");
   });
 });
 

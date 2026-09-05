@@ -64,4 +64,16 @@ describe("emoji in message text", () => {
       "<div>🎉 ja 🎉</div>",
     );
   });
+
+  it("renders emoji with skin tone modifiers", () => {
+    expect(
+      renderEmojiInHtml("<div>:male-police-officer::skin-tone-4:</div>", ""),
+    ).toBe("<div>👮🏽‍♂️</div>");
+  });
+
+  it("renders back-to-back emojis", () => {
+    expect(renderEmojiInHtml("<div>:tada::tada:</div>", "")).toBe(
+      "<div>🎉🎉</div>",
+    );
+  });
 });

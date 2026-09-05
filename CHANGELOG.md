@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v26.09.05.244] - 2026-09-05
+
+### Fixed
+- **Support skin tone modifiers on standard emojis**: Standard emojis with skin tone modifiers (such as `:male-police-officer::skin-tone-4:` or `:+1::skin-tone-2:`) were failing to display in reactions and message text because `getUnicodeEmoji` only indexed base `short_name` keys and omitted `skin_variations` from `emoji-datasource`.
+  - Indexed all skin tone modifier variations in `getUnicodeEmoji` using Slack's `::skin-tone-N` syntax (including combined modifiers).
+  - Added `cleanEmojiName` helper to normalize shortcode names by trimming colons, whitespace, and lowercasing.
+  - Indexed aliases from `emoji.short_names` (e.g. `thumbsup` alongside `+1`).
+  - Updated `SHORTCODE_SOURCE` regex in `emoji-render.ts` to recognize shortcodes with skin-tone modifiers (`(?:::skin-tone-[2-6])*`) and properly match back-to-back emoji shortcodes (`:tada::tada:`) in message text and search results.
+
 ## [v26.09.05.243] - 2026-09-05
 
 ### Fixed

@@ -18,14 +18,16 @@
  */
 
 /**
- * A shortcode as Slack writes one: `:tada:`, `:handshake-3d:`, `:+1:`.
+ * A shortcode as Slack writes one: `:tada:`, `:handshake-3d:`, `:+1:`,
+ * `:male-police-officer::skin-tone-4:`.
  *
  * The lookarounds are what keep a clock from becoming an emoji. `12:30:45`
  * contains `:30:`, which is the right shape and the wrong thing entirely; the
  * digits either side are the only evidence that it is a time, so a shortcode
  * is one only when it is not glued to a word or a number.
  */
-export const SHORTCODE_SOURCE = "(?<![\\w:])(:([a-z0-9_+'-]+):)(?![\\w:])";
+export const SHORTCODE_SOURCE =
+  "(?<!\\w)(:([a-z0-9_+'-]+(?:::skin-tone-[2-6])*):)(?!\\w)";
 
 /** A fresh regex every time: a shared /g one carries its lastIndex along. */
 export function shortcodePattern(): RegExp {

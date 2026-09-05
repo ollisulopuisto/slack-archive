@@ -10,7 +10,13 @@ const { downloadURL } = vi.hoisted(() => ({
 
 vi.mock("./download-files.js", () => ({ downloadURL }));
 
-import { downloadAllEmoji, getEmojiRef } from "./emoji.js";
+import {
+  cleanEmojiName,
+  downloadAllEmoji,
+  getEmojiRef,
+  getEmojiUnicode,
+  isEmojiUnicode,
+} from "./emoji.js";
 
 describe("getEmojiRef()", () => {
   const file = path.join(EMOJIS_DIR, "test-emoji-ref.png");
@@ -78,3 +84,46 @@ describe("downloadAllEmoji()", () => {
     expect(downloadURL).not.toHaveBeenCalled();
   });
 });
+
+describe("cleanEmojiName()", () => {
+  it("strips wrapping colons and lowercases", () => {
+    expect(cleanEmojiName(":Tada:")).toBe("tada");
+    expect(cleanEmojiName(":+1:")).toBe("+1");
+    expect(cleanEmojiName(":male-police-officer::skin-tone-4:")).toBe(
+      "male-police-officer::skin-tone-4",
+    );
+  });
+});
+
+describe("isEmojiUnicode() and getEmojiUnicode()", () => {
+  it("recognises standard emoji without skin tone modifiers", () => {
+    expect(isEmojiUnicode("tada")).toBe(true);
+    expect(isEmojiUnicode(":tada:")).toBe(true);
+    expect(getEmojiUnicode("tada")).toBe("🎉");
+  });
+
+  it("recognises aliases from short_names", () => {
+    expect(isEmojiUnicode("+1")).toBe(true);
+    expect(isEmojiUnicode("thumbsup")).toBe(true);
+    expect(getEmojiUnicode("+1")).toBe("👍");
+    expect(getEmojiUnicode("thumbsup")).toBe("👍");
+  });
+
+  it("recognises skin tone variations", () => {
+    expect(isEmojiUnicode("male-police-officer::skin-tone-4")).toBe(true);
+    expect(isEmojiUnicode(":male-police-officer::skin-tone-4:")).toBe(true);
+    expect(getEmojiUnicode("male-police-officer::skin-tone-4")).toBe("👮🏽‍♂️");
+    expect(getEmojiUnicode(":male-police-officer::skin-tone-4:")).toBe("👮🏽‍♂️");
+
+    expect(isEmojiUnicode("+1::skin-tone-2")).toBe(true);
+    expect(getEmojiUnicode("+1::skin-tone-2")).toBe("👍🏻");
+    expect(isEmojiUnicode("thumbsup::skin-tone-5")).toBe(true);
+    expect(getEmojiUnicode("thumbsup::skin-tone-5")).toBe("👍🏾");
+  });
+
+  it("returns false / empty string for unknown names", () => {
+    expect(isEmojiUnicode("not-an-emoji")).toBe(false);
+    expect(getEmojiUnicode("not-an-emoji")).toBe("");
+  });
+});
+
