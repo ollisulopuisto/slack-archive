@@ -28,4 +28,10 @@ describe("nas-archive.sh in this repository", () => {
     expect(script).toMatch(/SLACK_TOKEN_FILE|\/run\/secrets\/slack-token/);
     expect(script).not.toMatch(/ARCHIVE\/\.token/);
   });
+
+  it("includes incremental media sync to remote storage box", () => {
+    expect(script).toContain("sync_media");
+    expect(script).toContain("MEDIA_KEY");
+    expect(script).toContain("MEDIA_DEST");
+  });
 });

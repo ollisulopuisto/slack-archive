@@ -49,6 +49,10 @@ SYNC_HOST="${SYNC_HOST:-}"
 PUBLISH_DIR="${PUBLISH_DIR:-}"
 SITE="${SITE:-}"
 GROUP_ADD="${GROUP_ADD:-}"
+MEDIA_KEY="${MEDIA_KEY:-}"
+MEDIA_DEST="${MEDIA_DEST:-}"
+MEDIA_PORT="${MEDIA_PORT:-23}"
+MEDIA_KNOWN_HOSTS="${MEDIA_KNOWN_HOSTS:-}"
 
 HEARTBEAT_PID=""
 
@@ -217,6 +221,44 @@ sync_index() {
   fi
 }
 
+sync_media() {
+  if [ -z "$MEDIA_KEY" ] || [ ! -f "$MEDIA_KEY" ]; then
+    log "MEDIA SKIP: no key at ${MEDIA_KEY:-'(unset)'}, nothing uploaded"
+    return 0
+  fi
+
+  if [ -z "$MEDIA_DEST" ]; then
+    log "MEDIA SKIP: MEDIA_DEST is empty"
+    return 0
+  fi
+
+  if [ ! -d "$ARCHIVE/html/files" ]; then
+    log "MEDIA SKIP: no files directory at $ARCHIVE/html/files"
+    return 0
+  fi
+
+  log "MEDIA START"
+
+  ssh_cmd="ssh -p $MEDIA_PORT -i $MEDIA_KEY -o StrictHostKeyChecking=yes -o BatchMode=yes"
+  if [ -n "$MEDIA_KNOWN_HOSTS" ]; then
+    ssh_cmd="$ssh_cmd -o UserKnownHostsFile=$MEDIA_KNOWN_HOSTS"
+  fi
+
+  if rsync -rlt \
+      --exclude='@eaDir' \
+      --partial --partial-dir=.rsync-partial \
+      --stats --timeout=1800 \
+      -e "$ssh_cmd" \
+      "$ARCHIVE/html/files/" "$MEDIA_DEST" >> "$LOG" 2>&1
+  then
+    log "MEDIA OK"
+  else
+    status=$?
+    log "MEDIA FAIL: exit $status"
+    return "$status"
+  fi
+}
+
 publish_site() {
   if [ -z "$PUBLISH_DIR" ] || [ -z "$SITE" ]; then
     log "PUBLISH SKIP: PUBLISH_DIR or SITE unset"
@@ -286,6 +328,7 @@ then
   sweep_backups
   log "OK"
   sync_index
+  sync_media || true
   publish_site || true
   prune_images
 else

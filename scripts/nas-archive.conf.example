@@ -28,6 +28,12 @@ START_CHANNEL=""
 EXCLUDE_USER_FILES=""
 SEARCH_EXCLUDE_USERS=""
 
+# Media storage box sync. Uploads downloaded attachments to the storage box.
+MEDIA_KEY="/root/.ssh/slack-media-sync"
+MEDIA_DEST="user-subN@host.example:./"
+MEDIA_PORT="23"
+MEDIA_KNOWN_HOSTS=""
+
 # Optional. A URL in this file is POSTed every four minutes so a sleeping NAS
 # stays awake for the render.
 HEARTBEAT_URL_FILE="/root/.nas-heartbeat-url"

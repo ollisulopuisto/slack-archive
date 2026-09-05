@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v26.09.05.243] - 2026-09-05
+
+### Fixed
+- **Incremental media upload in `nas-archive.sh`**: Added `sync_media` step to sync downloaded attachments from `$ARCHIVE/html/files` to the remote storage box (Hetzner Storage Box) before site publishing. Previously, the initial 41 GB seeding in `upload-media.sh` had not been wired into the nightly automated archiver run, causing newly archived attachments to 404 on the public proxy.
+- **Uploaded missing media files**: Pushed 246 attachments archived since 2026-08-25 to the storage box, resolving 404s on recent messages.
+
 ## [v26.09.04.242] - 2026-09-04
 
 ### Changed
