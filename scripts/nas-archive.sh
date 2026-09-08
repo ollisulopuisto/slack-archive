@@ -244,7 +244,21 @@ sync_media() {
     ssh_cmd="$ssh_cmd -o UserKnownHostsFile=$MEDIA_KNOWN_HOSTS"
   fi
 
+  # --chmod, not --perms: --perms would COPY the source mode, and the source
+  # is whatever the archive downloaded a file with, unpredictable and beside
+  # the point. What the file needs on the far side is exactly "the public
+  # proxy can read it" - nothing more, nothing keyed to what it arrived as.
+  #
+  # Without either, the mode is left to rsync's own default for a new file:
+  # the source permissions moderated by the umask of the process that creates
+  # it - and that differs by how the upload was launched. Run by hand at a
+  # terminal against this box it came out 0775; run the same command from
+  # nas-archive.sh's cron-launched shell and it came out 0000. Every
+  # attachment archived since incremental sync went live (v26.09.05.243)
+  # uploaded unreadable - a 404 on the public proxy indistinguishable from a
+  # file that was never downloaded at all.
   if rsync -rlt \
+      --chmod=Da+rx,Fa+r \
       --exclude='@eaDir' \
       --partial --partial-dir=.rsync-partial \
       --stats --timeout=1800 \

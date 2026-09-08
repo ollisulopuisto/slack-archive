@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v26.09.08.245] - 2026-09-08
+
+### Fixed
+- **Uploaded media unreadable on the storage box**: `sync_media` in `nas-archive.sh` rsynced attachments to the Hetzner storage box with no explicit permissions. Run by hand at a terminal (the original 41 GB backfill) that came out `0775`; run from `nas-archive.sh`'s cron-launched shell it came out `0000` - every attachment archived since incremental sync went live (v26.09.05.243) uploaded unreadable, a 404 on the public proxy indistinguishable from a file that was never downloaded at all.
+  - Added `--chmod=Da+rx,Fa+r` to the `sync_media` rsync so the mode no longer depends on whichever umask happened to be in effect when it ran.
+  - Also missed an entire night: the 2026-09-06 scheduled run never started (no `START` line in the NAS log between 09-05 04:20 and 09-07 04:00), so that day's attachments were only archived - and uploaded unreadable - on the 09-07 run. Cause not identified; flagging in case it recurs.
+
 ## [v26.09.05.244] - 2026-09-05
 
 ### Fixed

@@ -34,4 +34,20 @@ describe("nas-archive.sh in this repository", () => {
     expect(script).toContain("MEDIA_KEY");
     expect(script).toContain("MEDIA_DEST");
   });
+
+  it("forces readable permissions on uploaded media", () => {
+    // Without -p/--chmod, rsync leaves a new file's mode up to the receiving
+    // side's umask. Interactively that was 0775; over the cron-launched
+    // nightly run against the Hetzner storage box it came out 0000 - every
+    // attachment archived since incremental sync went live was uploaded
+    // unreadable, a 404 on the public proxy indistinguishable from a file
+    // that was never downloaded at all.
+    const syncMedia = script.slice(
+      script.indexOf("sync_media() {"),
+      script.indexOf("\n}", script.indexOf("sync_media() {")),
+    );
+
+    expect(syncMedia).toContain("--chmod=");
+    expect(syncMedia).toMatch(/\+rX|a\+r/);
+  });
 });
