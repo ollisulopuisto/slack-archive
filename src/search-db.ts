@@ -141,6 +141,8 @@ export interface SearchDbInput {
   loadMessages: (channelId: string) => Promise<Array<SearchDbMessage>>;
   /** Called before a channel is indexed, for progress reporting */
   onChannel?: (channel: SearchDbChannel) => void;
+  /** Cutoff timestamp for messages_recent_fts (defaults to 1 year ago) */
+  recentCutoff?: number;
 }
 
 export interface SearchDbResult {
@@ -196,6 +198,7 @@ export async function buildSearchDatabase(
     loadMessages,
     onChannel,
     pages,
+    recentCutoff,
   }: SearchDbInput,
 ): Promise<void> {
   // Start fresh rather than update in place: the archive is rebuilt wholesale,
@@ -285,7 +288,10 @@ export async function buildSearchDatabase(
       message TEXT
     )`);
     db.exec(
-      "CREATE VIRTUAL TABLE messages_fts USING fts5(id UNINDEXED, channel_id UNINDEXED, message, prefix='2 3')",
+      "CREATE VIRTUAL TABLE messages_fts USING fts5(id UNINDEXED, channel_id UNINDEXED, user_id UNINDEXED, timestamp UNINDEXED, parent_timestamp UNINDEXED, message, prefix='2 3')",
+    );
+    db.exec(
+      "CREATE VIRTUAL TABLE messages_recent_fts USING fts5(id UNINDEXED, channel_id UNINDEXED, user_id UNINDEXED, timestamp UNINDEXED, parent_timestamp UNINDEXED, message, prefix='2 3')",
     );
 
     // The two questions the search page asks without any text to match on:
@@ -409,7 +415,9 @@ export async function buildSearchDatabase(
        VALUES (?, ?, ?, ?, ?, ?)`,
     );
     const ftsStmt = db.prepare(
-      "INSERT OR REPLACE INTO messages_fts (id, channel_id, message) VALUES (?, ?, ?)",
+      `INSERT OR REPLACE INTO messages_fts
+       (id, channel_id, user_id, timestamp, parent_timestamp, message)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     );
     // INSERT OR REPLACE because one file id can appear more than once: Slack
     // reuses it when a file is re-shared into another message. Last write
@@ -468,7 +476,15 @@ export async function buildSearchDatabase(
           message.p ?? null,
           text,
         ]);
-        ftsStmt.run([id, channel.id, indexableText(message)]);
+        const indexed = indexableText(message);
+        ftsStmt.run([
+          id,
+          channel.id,
+          message.u ?? null,
+          message.t,
+          message.p ?? null,
+          indexed,
+        ]);
 
         for (const reaction of message.reactions || []) {
           if (!reaction.name) continue;
@@ -509,6 +525,21 @@ export async function buildSearchDatabase(
     fileStmt.finalize();
     reactionStmt.finalize();
     reactionUserStmt.finalize();
+
+    const maxRow = db.get("SELECT MAX(timestamp) AS max_t FROM messages") as {
+      max_t: string | null;
+    } | null;
+    const maxTs = maxRow?.max_t ? Number(maxRow.max_t) : Date.now() / 1000;
+    const defaultCutoff = Math.max(0, Math.floor(maxTs - 365 * 24 * 3600));
+    const cutoff = recentCutoff !== undefined ? recentCutoff : defaultCutoff;
+    db.run(
+      `INSERT INTO messages_recent_fts
+       (id, channel_id, user_id, timestamp, parent_timestamp, message)
+       SELECT id, channel_id, user_id, timestamp, parent_timestamp, message
+       FROM messages_fts
+       WHERE timestamp >= ?`,
+      [String(cutoff)],
+    );
 
     // Only people who appear in this index. The workspace directory names
     // everyone, including those who only ever DMed, and that list used to
@@ -560,7 +591,13 @@ export async function buildSearchDatabase(
     }
     statusStmt.finalize();
 
+    db.exec("INSERT INTO messages_fts(messages_fts) VALUES ('optimize')");
+    db.exec(
+      "INSERT INTO messages_recent_fts(messages_recent_fts) VALUES ('optimize')",
+    );
+
     db.exec("COMMIT");
+    db.exec("VACUUM");
   } finally {
     db.close();
   }

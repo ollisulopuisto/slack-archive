@@ -162,6 +162,7 @@ beforeAll(async () => {
     channels: CHANNELS,
     loadMessages: async (channelId) => MESSAGES[channelId] || [],
     pages: PAGES,
+    recentCutoff: 1700000000,
   });
 });
 
@@ -866,13 +867,24 @@ describe("search optimization indexes", () => {
     db.close();
   });
 
-  it("stores channel_id in messages_fts for scoped prefix queries", () => {
+  it("stores channel_id and other fields in messages_fts for scoped prefix queries", () => {
     const db = openSearchDatabase(dbPath);
     const rows = db.all(
-      "SELECT id FROM messages_fts WHERE channel_id = ? AND messages_fts MATCH ?",
+      "SELECT id, user_id, timestamp, parent_timestamp FROM messages_fts WHERE channel_id = ? AND messages_fts MATCH ?",
       ["C1", '"pro"*'],
-    ) as Array<{ id: string }>;
+    ) as Array<{ id: string; user_id: string; timestamp: string }>;
     expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0].id).toBeDefined();
+    expect(rows[0].timestamp).toBeDefined();
+    db.close();
+  });
+
+  it("populates messages_recent_fts for fast scoped searches", () => {
+    const db = openSearchDatabase(dbPath);
+    const count = db.get(
+      "SELECT COUNT(*) AS n FROM messages_recent_fts",
+    ) as { n: number };
+    expect(count.n).toBeGreaterThan(0);
     db.close();
   });
 });

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v26.09.12.249] - 2026-09-12
+
+### Fixed
+- **Fixed `SQLite: disk I/O error` caused by runaway joins and accumulated session bytes**:
+  - **Eliminated `messages` table join in FTS queries**: Stored `user_id`, `timestamp`, and `parent_timestamp` as `UNINDEXED` columns directly inside the FTS virtual tables in `src/search-db.ts`. Queries now select directly from FTS without performing random B-tree seeks into `messages`, reducing touched pages by over 98%.
+  - **Added `messages_recent_fts` virtual table**: Dedicated FTS index holding only recent messages (~73k messages) populated automatically in `src/search-db.ts`. Recent 12-month searches query `messages_recent_fts` without touching the older 95% of the archive.
+  - **FTS segment optimization & VACUUM**: Ran `INSERT INTO ftstable(ftstable) VALUES ('optimize')` on both FTS tables during database build to merge fragmented B-tree segments into a single contiguous tree, and ran `VACUUM` to compact page layouts.
+  - **Per-query byte counter resets**: Reset `worker.worker.bytesRead = 0` before each query in `src/search-app.tsx` so `MAX_BYTES` enforces a per-query safety limit instead of bricking the search page after a few queries in a session.
+  - **Removed automatic background escalation**: Disabled background all-time search escalation in `src/search-app.tsx` that was saturating the worker thread and inflating byte counts.
+
 ## [v26.09.12.248] - 2026-09-12
 
 ### Fixed

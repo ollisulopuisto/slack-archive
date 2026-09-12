@@ -56,7 +56,7 @@ describe("the search query", () => {
     })!;
 
     expect(sql).toContain("f.channel_id = ?");
-    expect(sql).toContain("m.user_id = ?");
+    expect(sql).toContain("f.user_id = ?");
     expect(params).toEqual(['"kokous"*', "C1", "U1", 50]);
   });
 
@@ -86,12 +86,27 @@ describe("the search query", () => {
     expect(buildSearchSql({ query: "" })).toBeUndefined();
   });
 
-  it("selects message fields without scanning pages table", () => {
+  it("selects message fields directly from FTS without joining messages or scanning pages", () => {
     const { sql } = buildSearchSql({ query: "kokous" })!;
 
-    expect(sql).toContain("m.id id");
-    expect(sql).toContain("m.message m_text");
+    expect(sql).toContain("f.id id");
+    expect(sql).toContain("f.message m_text");
+    expect(sql).not.toContain("join messages");
     expect(sql).not.toContain("pages p");
+  });
+
+  it("routes recent searches to messages_recent_fts", () => {
+    const { sql } = buildSearchSql({ query: "kokous", recent: true })!;
+
+    expect(sql).toContain("from messages_recent_fts f");
+    expect(sql).toContain("f.messages_recent_fts match ?");
+  });
+
+  it("routes full archive searches to messages_fts", () => {
+    const { sql } = buildSearchSql({ query: "kokous", recent: false })!;
+
+    expect(sql).toContain("from messages_fts f");
+    expect(sql).toContain("f.messages_fts match ?");
   });
 
   it("asks for one page of results and no more", () => {
@@ -117,8 +132,8 @@ describe("the date range", () => {
       before: BEFORE,
     })!;
 
-    expect(sql).toContain("m.timestamp >= ?");
-    expect(sql).toContain("m.timestamp < ?");
+    expect(sql).toContain("f.timestamp >= ?");
+    expect(sql).toContain("f.timestamp < ?");
     expect(params).toEqual(['"kokous"*', "1735686000", "1738364400", 50]);
   });
 
@@ -166,13 +181,13 @@ describe("search result sorting", () => {
 
   it("sorts by newest first when requested with text query", () => {
     const { sql } = buildSearchSql({ query: "kokous", sort: "newest" })!;
-    expect(sql).toContain("order by m.timestamp desc");
+    expect(sql).toContain("order by f.timestamp desc");
     expect(sql).not.toContain("order by rank");
   });
 
   it("sorts by oldest first when requested with text query", () => {
     const { sql } = buildSearchSql({ query: "kokous", sort: "oldest" })!;
-    expect(sql).toContain("order by m.timestamp asc");
+    expect(sql).toContain("order by f.timestamp asc");
     expect(sql).not.toContain("order by rank");
   });
 
@@ -193,12 +208,12 @@ describe("search result sorting", () => {
 describe("the thread filter", () => {
   it("filters for channel topics / root messages only", () => {
     const query = buildSearchSql({ query: "kokous", threads: "roots" });
-    expect(query!.sql).toContain("m.parent_timestamp is null");
+    expect(query!.sql).toContain("f.parent_timestamp is null");
   });
 
   it("filters for thread replies only", () => {
     const query = buildSearchSql({ query: "kokous", threads: "replies" });
-    expect(query!.sql).toContain("m.parent_timestamp is not null");
+    expect(query!.sql).toContain("f.parent_timestamp is not null");
   });
 
   it("is a valid search query on its own with no text", () => {

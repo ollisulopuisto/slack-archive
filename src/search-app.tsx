@@ -566,53 +566,6 @@ class App extends React.PureComponent {
     );
   }
 
-  async expandSearchToAllTime(id, recentRows, textQuery) {
-    const {
-      selectedChannel,
-      selectedUser,
-      toDate,
-      sortOrder,
-      threadFilter,
-    } = this.state;
-
-    const before = startOfDay(toDate, 1);
-    const allTimeQuery = buildSearchSql({
-      query: textQuery,
-      channel: selectedChannel,
-      user: selectedUser,
-      before,
-      sort: sortOrder,
-      threads: threadFilter,
-    });
-
-    if (!allTimeQuery) return;
-
-    try {
-      const allRows = this.worker
-        ? await this.worker.db.query(allTimeQuery.sql, allTimeQuery.params)
-        : this.searchJsIndex(
-            textQuery,
-            selectedChannel,
-            selectedUser,
-            undefined,
-            before,
-            sortOrder,
-            threadFilter,
-          );
-
-      if (id !== this.queryId) return;
-
-      if (allRows && allRows.length > recentRows.length) {
-        this.setState({
-          matchingMessages: allRows,
-          autoExpanded: true,
-        });
-      }
-    } catch (err) {
-      console.warn("Background all-time expansion error", err);
-    }
-  }
-
   async updateResults() {
     const {
       searchValue,
@@ -636,8 +589,9 @@ class App extends React.PureComponent {
     const minLength = hasFilter ? 1 : 3;
     const textQuery = text.length >= minLength ? text : "";
 
+    const isRecent = timeRange === "12m" && !fromDate && !toDate;
     let after = startOfDay(fromDate);
-    if (!after && timeRange === "12m") {
+    if (!after && timeRange === "12m" && !isRecent) {
       after = Math.floor(Date.now() / 1000 - 365 * 24 * 3600);
     }
     const before = startOfDay(toDate, 1);
@@ -645,10 +599,11 @@ class App extends React.PureComponent {
       query: textQuery,
       channel: selectedChannel,
       user: selectedUser,
-      after,
+      after: isRecent ? undefined : after,
       before,
       sort: sortOrder,
       threads: threadFilter,
+      recent: isRecent,
     });
 
     this.syncUrlParams();
@@ -662,6 +617,12 @@ class App extends React.PureComponent {
     this.setState({ searching: true, autoExpanded: false });
 
     try {
+      if (this.worker && this.worker.worker) {
+        try {
+          this.worker.worker.bytesRead = 0;
+        } catch {}
+      }
+
       const rows = this.worker
         ? await this.worker.db.query(query.sql, query.params)
         : this.searchJsIndex(
@@ -677,18 +638,6 @@ class App extends React.PureComponent {
       if (id !== this.queryId) return;
 
       this.setState({ matchingMessages: rows, searching: false });
-
-      // Automatic progressive escalation:
-      // When searching the recent window with a text query, if fewer than 5 matches
-      // were found, seamlessly search the full archive in the background.
-      if (
-        timeRange === "12m" &&
-        !fromDate &&
-        textQuery &&
-        rows.length < 5
-      ) {
-        this.expandSearchToAllTime(id, rows, textQuery);
-      }
     } catch (error) {
       if (id !== this.queryId) return;
 

@@ -24,6 +24,7 @@ export interface SearchRequest {
   limit?: number;
   sort?: "score" | "relevance" | "newest" | "oldest" | string;
   threads?: "all" | "roots" | "replies";
+  recent?: boolean;
 }
 
 export interface SearchSql {
@@ -77,8 +78,11 @@ function bound(seconds: number) {
   return String(Math.floor(seconds)).padStart(10, "0");
 }
 
-const COLUMNS = `m.id id, m.channel_id c, m.user_id u, m.timestamp t,
+const MESSAGE_COLUMNS = `m.id id, m.channel_id c, m.user_id u, m.timestamp t,
       m.parent_timestamp p, m.message m_text`;
+
+const FTS_COLUMNS = `f.id id, f.channel_id c, f.user_id u, f.timestamp t,
+      f.parent_timestamp p, f.message m_text`;
 
 /**
  * The query for one search, or nothing when there is nothing to ask.
@@ -97,6 +101,7 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
     sort,
     threads = "all",
     limit = 50,
+    recent = false,
   } = request;
   const match = toMatchExpression(request.query || "");
   const hasFilter = Boolean(
@@ -109,16 +114,65 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
 
   const params: Array<string | number> = [];
   const where: string[] = [];
-  let from = "from messages m";
 
   if (match) {
-    from = `from messages_fts f join messages m on m.id = f.id`;
-    where.push("f.messages_fts match ?");
+    const ftsTable = recent ? "messages_recent_fts" : "messages_fts";
+    const from = `from ${ftsTable} f`;
+    where.push(`f.${ftsTable} match ?`);
     params.push(match);
+
+    if (channel) {
+      where.push("f.channel_id = ?");
+      params.push(channel);
+    }
+
+    if (user) {
+      where.push("f.user_id = ?");
+      params.push(user);
+    }
+
+    if (threads === "roots") {
+      where.push("f.parent_timestamp is null");
+    } else if (threads === "replies") {
+      where.push("f.parent_timestamp is not null");
+    }
+
+    if (after) {
+      where.push("f.timestamp >= ?");
+      params.push(bound(after));
+    }
+
+    if (before) {
+      where.push("f.timestamp < ?");
+      params.push(bound(before));
+    }
+
+    let orderBy = "rank";
+    if (sort === "newest") {
+      orderBy = "f.timestamp desc";
+    } else if (sort === "oldest") {
+      orderBy = "f.timestamp asc";
+    } else if (sort === "score" || sort === "relevance") {
+      orderBy = "rank";
+    }
+
+    params.push(limit);
+
+    return {
+      sql: `select ${FTS_COLUMNS}
+    ${from}
+   where ${where.join(" and ")}
+   order by ${orderBy}
+   limit ?`,
+      params,
+    };
   }
 
+  // Without text query, filter messages table directly using B-tree indexes
+  const from = "from messages m";
+
   if (channel) {
-    where.push(match ? "f.channel_id = ?" : "m.channel_id = ?");
+    where.push("m.channel_id = ?");
     params.push(channel);
   }
 
@@ -133,11 +187,6 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
     where.push("m.parent_timestamp is not null");
   }
 
-  // Compared as TEXT, deliberately. A Slack timestamp is ten digits, a dot and
-  // six more, so the string order and the numeric order are the same thing -
-  // and the index is on the text column, which `cast(timestamp as real)` would
-  // walk straight past. Over range requests, a scan is a download of the whole
-  // corpus, which is the one thing this page exists to avoid.
   if (after) {
     where.push("m.timestamp >= ?");
     params.push(bound(after));
@@ -148,19 +197,15 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
     params.push(bound(before));
   }
 
-  let orderBy = match ? "rank" : "m.timestamp desc";
-  if (sort === "newest") {
-    orderBy = "m.timestamp desc";
-  } else if (sort === "oldest") {
+  let orderBy = "m.timestamp desc";
+  if (sort === "oldest") {
     orderBy = "m.timestamp asc";
-  } else if (sort === "score" || sort === "relevance") {
-    orderBy = match ? "rank" : "m.timestamp desc";
   }
 
   params.push(limit);
 
   return {
-    sql: `select ${COLUMNS}
+    sql: `select ${MESSAGE_COLUMNS}
     ${from}
    where ${where.join(" and ")}
    order by ${orderBy}
