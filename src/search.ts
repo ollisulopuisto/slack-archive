@@ -311,11 +311,35 @@ async function createSearchHTML() {
     ["react-dom", "umd", "react-dom.production.min.js"],
     "react-dom.js",
   );
-  writeBrowserScript("search-app.js", compiledSearchApp());
+  const channels = await getChannels();
+  const users = await getUsers();
+  const hiddenUsers = new Set([
+    ...excludedUserIds(SEARCH_EXCLUDE_USERS, users),
+    ...(SEARCH_INCLUDE_BOTS ? [] : botUserIds(users)),
+  ]);
+  const searchableChannels = channels.filter((channel) =>
+    isChannelSearchable(channel, SEARCH_EXCLUDE_KINDS),
+  );
+
+  const metadataChannels: Record<string, string> = {};
+  for (const c of searchableChannels) {
+    if (c.id) metadataChannels[c.id] = getChannelName(c);
+  }
+
+  const metadataUsers: Record<string, string> = {};
+  for (const uId in users) {
+    if (!hiddenUsers.has(uId)) {
+      metadataUsers[uId] =
+        users[uId].name || users[uId].real_name || "Unknown";
+    }
+  }
+
   writeBrowserScript(
     "search-indexes.js",
-    `window.SEARCH_INDEXES = ${JSON.stringify(SEARCH_INDEX)};\n`,
+    `window.SEARCH_INDEXES = ${JSON.stringify(SEARCH_INDEX)};\n` +
+      `window.SEARCH_METADATA = ${JSON.stringify({ channels: metadataChannels, users: metadataUsers })};\n`,
   );
+  writeBrowserScript("search-app.js", compiledSearchApp());
 
   template = template.replace(
     "<!-- react -->",

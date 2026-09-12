@@ -1343,6 +1343,21 @@ mark.search-highlight {
   font-size: 15px;
 }
 
+.SearchActionLink {
+  background: none;
+  border: none;
+  color: var(--link);
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  font-size: inherit;
+  font-family: inherit;
+}
+
+.SearchActionLink:hover {
+  color: var(--ink-strong);
+}
+
 .MessageMeta {
   display: flex;
   align-items: center;

@@ -855,3 +855,24 @@ describe("searching by date alone", () => {
     db.close();
   });
 });
+
+describe("search optimization indexes", () => {
+  it("indexes pages by channel and oldest_ts for fast lookup", () => {
+    const db = openSearchDatabase(dbPath);
+    const indexes = db.all("PRAGMA index_list(pages)") as Array<{
+      name: string;
+    }>;
+    expect(indexes.map((idx) => idx.name)).toContain("pages_channel_ts");
+    db.close();
+  });
+
+  it("stores channel_id in messages_fts for scoped prefix queries", () => {
+    const db = openSearchDatabase(dbPath);
+    const rows = db.all(
+      "SELECT id FROM messages_fts WHERE channel_id = ? AND messages_fts MATCH ?",
+      ["C1", '"pro"*'],
+    ) as Array<{ id: string }>;
+    expect(rows.length).toBeGreaterThan(0);
+    db.close();
+  });
+});

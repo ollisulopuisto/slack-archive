@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v26.09.12.246] - 2026-09-12
+
+### Changed
+- **Search performance optimizations**:
+  - **32 KB HTTP range requests**: Bumped `CHUNK` from 4 KB to 32 KB in `src/search-app.tsx` to dramatically cut round-trips over `sql.js-httpvfs`.
+  - **Eliminated correlated page subquery**: Removed the unindexed `PAGE_OF_MESSAGE` subquery from `src/search-sql.ts` as `messageLink` resolves message locations using client chunk indices, and added index on `pages(channel_id, oldest_ts)` in `src/search-db.ts`.
+  - **Preloaded metadata**: Preloaded searchable channel and user directories directly into `search-indexes.js` (`window.SEARCH_METADATA`), removing startup SQLite database queries on page load.
+  - **FTS5 prefix index and channel scoping**: Added `prefix='2 3'` and unindexed `channel_id` to `messages_fts` in `src/search-db.ts` to accelerate wildcard queries and channel-scoped searches.
+  - **Default 12-month time range**: Added a "Past 12 months" default search scope with a 1-click "Search all time" expansion and quick dropdown filter, avoiding scanning the entire multi-year archive on initial queries.
+  - **Debounce & input tuning**: Increased search input debounce from 250ms to 350ms in `src/search-app.tsx`.
+
 ## [v26.09.08.245] - 2026-09-08
 
 ### Fixed

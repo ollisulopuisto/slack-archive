@@ -285,7 +285,7 @@ export async function buildSearchDatabase(
       message TEXT
     )`);
     db.exec(
-      "CREATE VIRTUAL TABLE messages_fts USING fts5(id UNINDEXED, message)",
+      "CREATE VIRTUAL TABLE messages_fts USING fts5(id UNINDEXED, channel_id UNINDEXED, message, prefix='2 3')",
     );
 
     // The two questions the search page asks without any text to match on:
@@ -376,6 +376,7 @@ export async function buildSearchDatabase(
       oldest_ts  TEXT,
       PRIMARY KEY (channel_id, page)
     )`);
+    db.exec("CREATE INDEX pages_channel_ts ON pages (channel_id, oldest_ts)");
 
     db.exec("BEGIN TRANSACTION");
 
@@ -408,7 +409,7 @@ export async function buildSearchDatabase(
        VALUES (?, ?, ?, ?, ?, ?)`,
     );
     const ftsStmt = db.prepare(
-      "INSERT OR REPLACE INTO messages_fts (id, message) VALUES (?, ?)",
+      "INSERT OR REPLACE INTO messages_fts (id, channel_id, message) VALUES (?, ?, ?)",
     );
     // INSERT OR REPLACE because one file id can appear more than once: Slack
     // reuses it when a file is re-shared into another message. Last write
@@ -467,7 +468,7 @@ export async function buildSearchDatabase(
           message.p ?? null,
           text,
         ]);
-        ftsStmt.run([id, indexableText(message)]);
+        ftsStmt.run([id, channel.id, indexableText(message)]);
 
         for (const reaction of message.reactions || []) {
           if (!reaction.name) continue;

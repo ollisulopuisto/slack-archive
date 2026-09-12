@@ -34,7 +34,7 @@ const MAX_BYTES = 64 * 1024 * 1024;
 
 // Big enough that one request covers several pages of the database,
 // small enough that a query is not a download.
-const CHUNK = 4096;
+const CHUNK = 32768;
 
 /**
  * A date from a picker as epoch seconds, in the reader's own timezone.
@@ -63,6 +63,8 @@ class App extends React.PureComponent {
     this.handleUserChange = this.handleUserChange.bind(this);
     this.handleFromChange = this.handleFromChange.bind(this);
     this.handleToChange = this.handleToChange.bind(this);
+    this.handleTimeRangeChange = this.handleTimeRangeChange.bind(this);
+    this.handleSearchAllTime = this.handleSearchAllTime.bind(this);
     this.handleSortChange = this.handleSortChange.bind(this);
     this.handleThreadChange = this.handleThreadChange.bind(this);
     this.handleResetFilters = this.handleResetFilters.bind(this);
@@ -81,6 +83,9 @@ class App extends React.PureComponent {
     const userParam = params.get("user") || params.get("u") || "";
     const fromParam = params.get("from") || "";
     const toParam = params.get("to") || "";
+    const rangeParam = params.get("range");
+    const initialRange =
+      rangeParam || (fromParam || toParam ? "custom" : "12m");
     const sortParam = params.get("sort");
     const threadParam = params.get("thread") || params.get("threads") || "all";
 
@@ -101,6 +106,7 @@ class App extends React.PureComponent {
       selectedUser: userParam,
       fromDate: fromParam,
       toDate: toParam,
+      timeRange: initialRange,
       sortOrder: initialSort,
       threadFilter: ["all", "roots", "replies"].includes(threadParam)
         ? threadParam
@@ -186,6 +192,9 @@ class App extends React.PureComponent {
       searchParams.get("user") || searchParams.get("u") || "";
     const fromDate = searchParams.get("from") || "";
     const toDate = searchParams.get("to") || "";
+    const rangeParam = searchParams.get("range");
+    const timeRange =
+      rangeParam || (fromDate || toDate ? "custom" : "12m");
     const sortParam = searchParams.get("sort");
     const threadParam =
       searchParams.get("thread") || searchParams.get("threads") || "all";
@@ -211,6 +220,7 @@ class App extends React.PureComponent {
         selectedUser,
         fromDate,
         toDate,
+        timeRange,
         sortOrder,
         threadFilter,
       },
@@ -225,6 +235,7 @@ class App extends React.PureComponent {
       selectedUser,
       fromDate,
       toDate,
+      timeRange,
       sortOrder,
       threadFilter,
     } = this.state;
@@ -235,6 +246,9 @@ class App extends React.PureComponent {
     if (selectedUser) params.set("user", selectedUser);
     if (fromDate) params.set("from", fromDate);
     if (toDate) params.set("to", toDate);
+    if (timeRange && timeRange !== "12m" && timeRange !== "custom") {
+      params.set("range", timeRange);
+    }
     if (sortOrder && sortOrder !== "relevance") params.set("sort", sortOrder);
     if (threadFilter && threadFilter !== "all")
       params.set("thread", threadFilter);
@@ -254,6 +268,7 @@ class App extends React.PureComponent {
       selectedUser,
       fromDate,
       toDate,
+      timeRange,
       threadFilter,
     } = this.state;
     return Boolean(
@@ -262,6 +277,7 @@ class App extends React.PureComponent {
       selectedUser ||
       fromDate ||
       toDate ||
+      timeRange === "all" ||
       (threadFilter && threadFilter !== "all"),
     );
   }
@@ -368,6 +384,18 @@ class App extends React.PureComponent {
 
   async openDatabase() {
     try {
+      let channels = {};
+      let users = {};
+
+      if (
+        window.SEARCH_METADATA &&
+        window.SEARCH_METADATA.channels &&
+        window.SEARCH_METADATA.users
+      ) {
+        channels = window.SEARCH_METADATA.channels;
+        users = window.SEARCH_METADATA.users;
+      }
+
       const worker = await createDbWorker(
         [
           {
@@ -384,17 +412,18 @@ class App extends React.PureComponent {
         MAX_BYTES,
       );
 
-      const channelRows = await worker.db.query(
-        "select id, name from channels order by name",
-      );
-      const userRows = await worker.db.query(
-        "select id, name from users order by name",
-      );
+      if (
+        Object.keys(channels).length === 0 ||
+        Object.keys(users).length === 0
+      ) {
+        const [channelRows, userRows] = await Promise.all([
+          worker.db.query("select id, name from channels order by name"),
+          worker.db.query("select id, name from users order by name"),
+        ]);
 
-      const channels = {};
-      for (const row of channelRows) channels[row.id] = row.name;
-      const users = {};
-      for (const row of userRows) users[row.id] = row.name;
+        for (const row of channelRows) channels[row.id] = row.name;
+        for (const row of userRows) users[row.id] = row.name;
+      }
 
       this.worker = worker;
       this.setState({ ready: true, channels, users }, () => {
@@ -415,7 +444,7 @@ class App extends React.PureComponent {
   handleSearchChange({ target: { value } }) {
     this.setState({ searchValue: value }, () => {
       clearTimeout(this.pending);
-      this.pending = setTimeout(() => this.updateResults(), 250);
+      this.pending = setTimeout(() => this.updateResults(), 350);
     });
   }
 
@@ -428,11 +457,33 @@ class App extends React.PureComponent {
   }
 
   handleFromChange({ target: { value } }) {
-    this.setState({ fromDate: value }, () => this.updateResults());
+    this.setState({ fromDate: value, timeRange: "custom" }, () =>
+      this.updateResults(),
+    );
   }
 
   handleToChange({ target: { value } }) {
-    this.setState({ toDate: value }, () => this.updateResults());
+    this.setState({ toDate: value, timeRange: "custom" }, () =>
+      this.updateResults(),
+    );
+  }
+
+  handleTimeRangeChange({ target: { value } }) {
+    if (value === "custom") {
+      this.setState({ timeRange: "custom" });
+    } else {
+      this.setState(
+        { timeRange: value, fromDate: "", toDate: "" },
+        () => this.updateResults(),
+      );
+    }
+  }
+
+  handleSearchAllTime() {
+    this.setState(
+      { timeRange: "all", fromDate: "", toDate: "" },
+      () => this.updateResults(),
+    );
   }
 
   handleSortChange({ target: { value } }) {
@@ -464,6 +515,7 @@ class App extends React.PureComponent {
         selectedUser: "",
         fromDate: "",
         toDate: "",
+        timeRange: "12m",
         sortOrder: "relevance",
         threadFilter: "all",
         searching: false,
@@ -484,12 +536,16 @@ class App extends React.PureComponent {
       selectedUser,
       fromDate,
       toDate,
+      timeRange,
       sortOrder,
       threadFilter,
     } = this.state;
 
     const text = searchValue.trim();
-    const after = startOfDay(fromDate);
+    let after = startOfDay(fromDate);
+    if (!after && timeRange === "12m") {
+      after = Math.floor(Date.now() / 1000 - 365 * 24 * 3600);
+    }
     const before = startOfDay(toDate, 1);
     const query = buildSearchSql({
       query: text.length > 1 ? text : "",
@@ -572,18 +628,22 @@ class App extends React.PureComponent {
       );
     }
 
+    const isRecentOnly = timeRange === "12m" && !fromDate;
+
     const asked =
       searchValue ||
       selectedChannel ||
       selectedUser ||
       fromDate ||
       toDate ||
+      timeRange === "all" ||
       threadFilter !== "all";
 
     const hasFiltersActive =
       Boolean(searchValue) ||
       Boolean(selectedChannel) ||
       Boolean(selectedUser) ||
+      timeRange !== "12m" ||
       Boolean(fromDate) ||
       Boolean(toDate) ||
       sortOrder !== "relevance" ||
@@ -599,6 +659,7 @@ class App extends React.PureComponent {
               onUserChange={this.handleUserChange}
               onFromChange={this.handleFromChange}
               onToChange={this.handleToChange}
+              onTimeRangeChange={this.handleTimeRangeChange}
               onSortChange={this.handleSortChange}
               onThreadChange={this.handleThreadChange}
               onSearchClear={this.handleSearchClear}
@@ -608,6 +669,7 @@ class App extends React.PureComponent {
               selectedUser={selectedUser}
               fromDate={fromDate}
               toDate={toDate}
+              timeRange={timeRange}
               sortOrder={sortOrder}
               threadFilter={threadFilter}
               hasFiltersActive={hasFiltersActive}
@@ -624,6 +686,8 @@ class App extends React.PureComponent {
               <ResultsMeta
                 count={matchingMessages.length}
                 searching={searching}
+                isRecentOnly={isRecentOnly}
+                onSearchAllTime={this.handleSearchAllTime}
               />
               <MessagesList
                 messages={matchingMessages}
@@ -634,11 +698,24 @@ class App extends React.PureComponent {
             </div>
           ) : (
             <p className="SearchSummary empty">
-              {searching
-                ? "Searching…"
-                : asked
-                  ? "No matches found."
-                  : "Start typing or apply filters to search messages."}
+              {searching ? (
+                "Searching…"
+              ) : asked ? (
+                <span>
+                  No matches found.{" "}
+                  {isRecentOnly && (
+                    <button
+                      type="button"
+                      className="SearchActionLink"
+                      onClick={this.handleSearchAllTime}
+                    >
+                      Search all time
+                    </button>
+                  )}
+                </span>
+              ) : (
+                "Start typing or apply filters to search messages."
+              )}
             </p>
           )}
         </article>
@@ -647,7 +724,12 @@ class App extends React.PureComponent {
   }
 }
 
-const ResultsMeta = ({ count, searching }) => {
+const ResultsMeta = ({
+  count,
+  searching,
+  isRecentOnly,
+  onSearchAllTime,
+}) => {
   if (searching || !count) return null;
   return (
     <div className="SearchSummary">
@@ -656,6 +738,19 @@ const ResultsMeta = ({ count, searching }) => {
           ? "Showing top 50 messages"
           : `Found ${count} ${count === 1 ? "message" : "messages"}`}
       </span>
+      {isRecentOnly && (
+        <span className="RecentScopeNote">
+          {" · Past 12 months · "}
+          <button
+            type="button"
+            className="SearchActionLink"
+            onClick={onSearchAllTime}
+            title="Search all time"
+          >
+            Search all time
+          </button>
+        </span>
+      )}
     </div>
   );
 };
@@ -778,6 +873,7 @@ const SearchBox = ({
   onUserChange,
   onFromChange,
   onToChange,
+  onTimeRangeChange,
   onSortChange,
   onThreadChange,
   onSearchClear,
@@ -787,6 +883,7 @@ const SearchBox = ({
   selectedUser,
   fromDate,
   toDate,
+  timeRange,
   sortOrder,
   threadFilter,
   hasFiltersActive,
@@ -870,14 +967,27 @@ const SearchBox = ({
           <option value="newest">Sort: Newest first</option>
           <option value="oldest">Sort: Oldest first</option>
         </select>
-        <label className="DateFilter">
-          <span>From</span>
-          <input type="date" value={fromDate} onChange={onFromChange} />
-        </label>
-        <label className="DateFilter">
-          <span>To</span>
-          <input type="date" value={toDate} onChange={onToChange} />
-        </label>
+        <select
+          value={timeRange}
+          onChange={onTimeRangeChange}
+          aria-label="Filter by time range"
+        >
+          <option value="12m">Past 12 months</option>
+          <option value="all">All time</option>
+          <option value="custom">Custom dates…</option>
+        </select>
+        {timeRange === "custom" && (
+          <React.Fragment>
+            <label className="DateFilter">
+              <span>From</span>
+              <input type="date" value={fromDate} onChange={onFromChange} />
+            </label>
+            <label className="DateFilter">
+              <span>To</span>
+              <input type="date" value={toDate} onChange={onToChange} />
+            </label>
+          </React.Fragment>
+        )}
         {hasFiltersActive && (
           <button
             type="button"

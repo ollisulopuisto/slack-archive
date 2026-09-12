@@ -75,14 +75,12 @@ describe("the search query", () => {
     expect(buildSearchSql({ query: "" })).toBeUndefined();
   });
 
-  it("finds the page a result is on, and a reply's parent's page", () => {
-    // The page index holds top-level timestamps only, so a reply's own
-    // timestamp would land on whatever page range contains it rather than on
-    // the page its thread is rendered in.
+  it("selects message fields without scanning pages table", () => {
     const { sql } = buildSearchSql({ query: "kokous" })!;
 
-    expect(sql).toContain("min(p.page)");
-    expect(sql).toContain("coalesce(m.parent_timestamp, m.timestamp)");
+    expect(sql).toContain("m.id id");
+    expect(sql).toContain("m.message m_text");
+    expect(sql).not.toContain("pages p");
   });
 
   it("asks for one page of results and no more", () => {

@@ -77,13 +77,8 @@ function bound(seconds: number) {
   return String(Math.floor(seconds)).padStart(10, "0");
 }
 
-/** Which page of the archive a message is rendered on. */
-const PAGE_OF_MESSAGE = `(select min(p.page) from pages p
-       where p.channel_id = m.channel_id
-          and p.oldest_ts < coalesce(m.parent_timestamp, m.timestamp))`;
-
 const COLUMNS = `m.id id, m.channel_id c, m.user_id u, m.timestamp t,
-      m.parent_timestamp p, m.message m_text, ${PAGE_OF_MESSAGE} page`;
+      m.parent_timestamp p, m.message m_text`;
 
 /**
  * The query for one search, or nothing when there is nothing to ask.
