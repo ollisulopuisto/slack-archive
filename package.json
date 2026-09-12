@@ -1,12 +1,12 @@
 {
   "name": "slack-archive",
-  "version": "26.9.12+246",
+  "version": "26.9.12+247",
   "description": "Create static HTML archives for your Slack workspaces",
   "scripts": {
     "prettier": "npx prettier --write src/*",
     "cli": "ts-node src/cli.ts",
     "html": "ts-node src/create-html.tsx",
-    "build-db": "ts-node src/build-db.ts",
+    "build-db": "npm run compile && node lib/build-db.js",
     "test": "vitest run",
     "smoke": "node --input-type=module -e \"import('./lib/search-db.js').then(({ openSearchDatabase }) => { openSearchDatabase(':memory:').close(); console.log('lib/ loads under node'); }).catch((error) => { console.error(error); process.exit(1); })\"",
     "compile": "tsc",

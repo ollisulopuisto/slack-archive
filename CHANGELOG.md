@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v26.09.12.247] - 2026-09-12
+
+### Changed
+- **Search progressive escalation and query gating**:
+  - **FTS channel filtering**: Updated `buildSearchSql` in `src/search-sql.ts` to filter `f.channel_id = ?` directly inside FTS5 when a text query is present.
+  - **Automatic background escalation**: If a recent-window search returns fewer than 5 matches, automatically queries the full archive in the background to populate older results seamlessly.
+  - **Minimum query length gate**: Unfiltered text searches require at least 3 characters before querying, avoiding expensive 1-2 character wildcard scans across the entire corpus.
+  - **Progressive client-side MiniSearch**: In `src/search-app.tsx`, `loadJsIndex` now indexes recent messages first for instant startup and indexes older messages in background idle chunks without blocking the UI.
+  - **Rebuilt production search database**: Regenerated `search.db` (552 MB) with FTS5 prefix index, unindexed `channel_id`, and `pages_channel_ts` index.
+
 ## [v26.09.12.246] - 2026-09-12
 
 ### Changed

@@ -118,7 +118,7 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
   }
 
   if (channel) {
-    where.push("m.channel_id = ?");
+    where.push(match ? "f.channel_id = ?" : "m.channel_id = ?");
     params.push(channel);
   }
 

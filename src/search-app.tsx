@@ -111,6 +111,7 @@ class App extends React.PureComponent {
       threadFilter: ["all", "roots", "replies"].includes(threadParam)
         ? threadParam
         : "all",
+      autoExpanded: false,
       ready: false,
       searching: false,
       error: null,
@@ -271,8 +272,7 @@ class App extends React.PureComponent {
       timeRange,
       threadFilter,
     } = this.state;
-    return Boolean(
-      (searchValue && searchValue.trim().length > 1) ||
+    const hasFilter = Boolean(
       selectedChannel ||
       selectedUser ||
       fromDate ||
@@ -280,10 +280,15 @@ class App extends React.PureComponent {
       timeRange === "all" ||
       (threadFilter && threadFilter !== "all"),
     );
+    const text = searchValue ? searchValue.trim() : "";
+    const minLength = hasFilter ? 1 : 3;
+    return Boolean((text && text.length >= minLength) || hasFilter);
   }
 
   /**
-   * The whole corpus in one script tag, indexed here in the browser.
+   * The whole corpus in one script tag, indexed progressively here in the browser.
+   * Recent messages are indexed immediately so search is ready in milliseconds;
+   * older messages are added in idle background chunks without blocking the UI.
    */
   loadJsIndex(reason) {
     if (reason) console.info(`Using the JavaScript index: ${reason}`);
@@ -294,16 +299,21 @@ class App extends React.PureComponent {
     }
 
     const { messages, channels, users } = window.search_data;
-    const allMessages = [];
+    const recentMessages = [];
+    const olderMessages = [];
+    const oneYearAgo = String(Math.floor(Date.now() / 1000 - 365 * 24 * 3600));
 
     for (const channel in messages) {
       for (const message of messages[channel]) {
-        allMessages.push(
-          Object.assign({}, message, {
-            c: channel,
-            id: `${channel}-${message.t}`,
-          }),
-        );
+        const item = Object.assign({}, message, {
+          c: channel,
+          id: `${channel}-${message.t}`,
+        });
+        if (!message.t || message.t >= oneYearAgo) {
+          recentMessages.push(item);
+        } else {
+          olderMessages.push(item);
+        }
       }
     }
 
@@ -312,12 +322,38 @@ class App extends React.PureComponent {
       fields: ["m"],
       storeFields: ["t", "u", "m", "c", "p"],
     });
-    miniSearch.addAll(allMessages);
 
+    // Step 1: index recent messages immediately
+    miniSearch.addAll(recentMessages);
     this.miniSearch = miniSearch;
     this.setState({ ready: true, channels, users }, () => {
       if (this.hasSearchCriteria()) this.updateResults();
     });
+
+    // Step 2: index older messages in background idle chunks
+    if (olderMessages.length > 0) {
+      const CHUNK_SIZE = 5000;
+      let offset = 0;
+      const indexNextChunk = () => {
+        if (offset >= olderMessages.length) return;
+        const slice = olderMessages.slice(offset, offset + CHUNK_SIZE);
+        offset += CHUNK_SIZE;
+        miniSearch.addAll(slice);
+        if (offset < olderMessages.length) {
+          if (typeof requestIdleCallback === "function") {
+            requestIdleCallback(indexNextChunk);
+          } else {
+            setTimeout(indexNextChunk, 50);
+          }
+        }
+      };
+
+      if (typeof requestIdleCallback === "function") {
+        requestIdleCallback(indexNextChunk);
+      } else {
+        setTimeout(indexNextChunk, 50);
+      }
+    }
   }
 
   /** The same rows the database returns, from the JavaScript index. */
@@ -518,6 +554,7 @@ class App extends React.PureComponent {
         timeRange: "12m",
         sortOrder: "relevance",
         threadFilter: "all",
+        autoExpanded: false,
         searching: false,
       },
       () => {
@@ -527,6 +564,53 @@ class App extends React.PureComponent {
         }
       },
     );
+  }
+
+  async expandSearchToAllTime(id, recentRows, textQuery) {
+    const {
+      selectedChannel,
+      selectedUser,
+      toDate,
+      sortOrder,
+      threadFilter,
+    } = this.state;
+
+    const before = startOfDay(toDate, 1);
+    const allTimeQuery = buildSearchSql({
+      query: textQuery,
+      channel: selectedChannel,
+      user: selectedUser,
+      before,
+      sort: sortOrder,
+      threads: threadFilter,
+    });
+
+    if (!allTimeQuery) return;
+
+    try {
+      const allRows = this.worker
+        ? await this.worker.db.query(allTimeQuery.sql, allTimeQuery.params)
+        : this.searchJsIndex(
+            textQuery,
+            selectedChannel,
+            selectedUser,
+            undefined,
+            before,
+            sortOrder,
+            threadFilter,
+          );
+
+      if (id !== this.queryId) return;
+
+      if (allRows && allRows.length > recentRows.length) {
+        this.setState({
+          matchingMessages: allRows,
+          autoExpanded: true,
+        });
+      }
+    } catch (err) {
+      console.warn("Background all-time expansion error", err);
+    }
   }
 
   async updateResults() {
@@ -542,13 +626,23 @@ class App extends React.PureComponent {
     } = this.state;
 
     const text = searchValue.trim();
+    const hasFilter = Boolean(
+      selectedChannel ||
+      selectedUser ||
+      fromDate ||
+      toDate ||
+      (threadFilter && threadFilter !== "all"),
+    );
+    const minLength = hasFilter ? 1 : 3;
+    const textQuery = text.length >= minLength ? text : "";
+
     let after = startOfDay(fromDate);
     if (!after && timeRange === "12m") {
       after = Math.floor(Date.now() / 1000 - 365 * 24 * 3600);
     }
     const before = startOfDay(toDate, 1);
     const query = buildSearchSql({
-      query: text.length > 1 ? text : "",
+      query: textQuery,
       channel: selectedChannel,
       user: selectedUser,
       after,
@@ -560,18 +654,18 @@ class App extends React.PureComponent {
     this.syncUrlParams();
 
     if (!query || (!this.worker && !this.miniSearch)) {
-      this.setState({ matchingMessages: [], searching: false });
+      this.setState({ matchingMessages: [], searching: false, autoExpanded: false });
       return;
     }
 
     const id = ++this.queryId;
-    this.setState({ searching: true });
+    this.setState({ searching: true, autoExpanded: false });
 
     try {
       const rows = this.worker
         ? await this.worker.db.query(query.sql, query.params)
         : this.searchJsIndex(
-            text.length > 1 ? text : "",
+            textQuery,
             selectedChannel,
             selectedUser,
             after,
@@ -583,6 +677,18 @@ class App extends React.PureComponent {
       if (id !== this.queryId) return;
 
       this.setState({ matchingMessages: rows, searching: false });
+
+      // Automatic progressive escalation:
+      // When searching the recent window with a text query, if fewer than 5 matches
+      // were found, seamlessly search the full archive in the background.
+      if (
+        timeRange === "12m" &&
+        !fromDate &&
+        textQuery &&
+        rows.length < 5
+      ) {
+        this.expandSearchToAllTime(id, rows, textQuery);
+      }
     } catch (error) {
       if (id !== this.queryId) return;
 
@@ -590,6 +696,7 @@ class App extends React.PureComponent {
       this.setState({
         matchingMessages: [],
         searching: false,
+        autoExpanded: false,
         error: String((error && error.message) || error),
       });
     }
@@ -610,6 +717,7 @@ class App extends React.PureComponent {
       error,
       channels,
       users,
+      autoExpanded,
     } = this.state;
 
     if (error) {
@@ -687,6 +795,7 @@ class App extends React.PureComponent {
                 count={matchingMessages.length}
                 searching={searching}
                 isRecentOnly={isRecentOnly}
+                autoExpanded={autoExpanded}
                 onSearchAllTime={this.handleSearchAllTime}
               />
               <MessagesList
@@ -728,6 +837,7 @@ const ResultsMeta = ({
   count,
   searching,
   isRecentOnly,
+  autoExpanded,
   onSearchAllTime,
 }) => {
   if (searching || !count) return null;
@@ -738,7 +848,9 @@ const ResultsMeta = ({
           ? "Showing top 50 messages"
           : `Found ${count} ${count === 1 ? "message" : "messages"}`}
       </span>
-      {isRecentOnly && (
+      {autoExpanded ? (
+        <span className="RecentScopeNote"> · Full archive</span>
+      ) : isRecentOnly ? (
         <span className="RecentScopeNote">
           {" · Past 12 months · "}
           <button
@@ -750,7 +862,7 @@ const ResultsMeta = ({
             Search all time
           </button>
         </span>
-      )}
+      ) : null}
     </div>
   );
 };

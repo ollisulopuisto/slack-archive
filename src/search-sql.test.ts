@@ -55,9 +55,20 @@ describe("the search query", () => {
       user: "U1",
     })!;
 
-    expect(sql).toContain("m.channel_id = ?");
+    expect(sql).toContain("f.channel_id = ?");
     expect(sql).toContain("m.user_id = ?");
     expect(params).toEqual(['"kokous"*', "C1", "U1", 50]);
+  });
+
+  it("filters by channel directly on messages when no text query is given", () => {
+    const { sql, params } = buildSearchSql({
+      query: "",
+      channel: "C1",
+    })!;
+
+    expect(sql).toContain("m.channel_id = ?");
+    expect(sql).not.toContain("messages_fts");
+    expect(params).toEqual(["C1", 50]);
   });
 
   it("lists newest first when only the filters are set", () => {
