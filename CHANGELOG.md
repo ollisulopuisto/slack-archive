@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v26.09.12.248] - 2026-09-12
+
+### Fixed
+- **Blank search page caused by undeclared `timeRange` in `App.render()`**: In `src/search-app.tsx`, `timeRange` was accessed in `render()` to evaluate `isRecentOnly` and configure time range UI controls without being destructured from `this.state`, causing an unhandled `ReferenceError` that crashed React at mount time. Added `timeRange` to state destructuring and added regression tests in `src/search-page.test.ts` executing the compiled search app across multiple render states.
+
 ## [v26.09.12.247] - 2026-09-12
 
 ### Changed

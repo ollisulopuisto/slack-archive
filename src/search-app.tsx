@@ -710,6 +710,7 @@ class App extends React.PureComponent {
       selectedUser,
       fromDate,
       toDate,
+      timeRange,
       sortOrder,
       threadFilter,
       ready,
