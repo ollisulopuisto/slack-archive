@@ -88,6 +88,28 @@ describe("the search page's scripts", () => {
       appInstance.render();
     }).not.toThrow();
 
+    // Media mode, before and after the database worker is open
+    appInstance.state.mode = "media";
+    expect(() => {
+      appInstance.render();
+    }).not.toThrow();
+
+    appInstance.worker = { db: { query: async () => [] } };
+    appInstance.state.mediaFiles = [
+      {
+        id: "F1",
+        c: "C1",
+        u: "U1",
+        t: "123.456",
+        filename: "F1.png",
+        is_image: 1,
+        name: "cat.png",
+      },
+    ];
+    expect(() => {
+      appInstance.render();
+    }).not.toThrow();
+
     // Error state
     appInstance.state.error = "test failure";
     expect(() => {

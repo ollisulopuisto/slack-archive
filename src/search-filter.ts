@@ -1,3 +1,4 @@
+import { archivedFileName } from "./archived-files.js";
 import { channelKind } from "./channels.js";
 import { ArchiveMessage, Channel, SearchMessage, Users } from "./interfaces.js";
 
@@ -217,6 +218,7 @@ export function toSearchMessages(
           title: file.title,
           filetype: file.filetype,
           mimetype: file.mimetype,
+          filename: archivedFileName(file),
         }));
 
       if (files.length > 0) searchMessage.files = files;

@@ -45,6 +45,8 @@ export interface SearchDbFile {
   title?: string;
   filetype?: string;
   mimetype?: string;
+  /** The name it was saved under, e.g. `F01QV8YFY5P.jpeg`. See archivedFileName. */
+  filename?: string;
 }
 
 export interface SearchDbReaction {
@@ -320,13 +322,30 @@ export async function buildSearchDatabase(
       id         TEXT PRIMARY KEY,
       message_id TEXT,
       channel_id TEXT,
+      user_id    TEXT,
+      timestamp  TEXT,
       name       TEXT,
       title      TEXT,
       filetype   TEXT,
       mimetype   TEXT,
+      -- What it was saved as, e.g. F01QV8YFY5P.jpeg - null for a file the
+      -- archive never downloaded (hidden by the free-plan limit, or a Google
+      -- Doc that was never a file), which the media browser has nothing to
+      -- show or link for.
+      filename   TEXT,
       is_image   INTEGER
     )`);
     db.exec("CREATE INDEX files_message_id ON files (message_id)");
+    // The media browser's three questions, the same shape as the messages
+    // table's: everything in this channel, everything from this person, and
+    // plain newest-first when neither is asked - all ordered by timestamp,
+    // which is also the order "Random" would rather not scan without an index
+    // for the filtered case being reasonably small to begin with.
+    db.exec(
+      "CREATE INDEX files_channel_ts ON files (channel_id, timestamp DESC)",
+    );
+    db.exec("CREATE INDEX files_user_ts ON files (user_id, timestamp DESC)");
+    db.exec("CREATE INDEX files_ts ON files (timestamp DESC)");
 
     // Reactions are two different facts, so they are two tables.
     //
@@ -437,8 +456,8 @@ export async function buildSearchDatabase(
     );
     const fileStmt = db.prepare(
       `INSERT OR REPLACE INTO files
-       (id, message_id, channel_id, name, title, filetype, mimetype, is_image)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, message_id, channel_id, user_id, timestamp, name, title, filetype, mimetype, filename, is_image)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
 
     const visibleUsers = new Set<string>();
@@ -509,10 +528,13 @@ export async function buildSearchDatabase(
             file.id,
             id,
             channel.id,
+            message.u ?? null,
+            message.t,
             file.name ?? null,
             file.title ?? null,
             file.filetype ?? null,
             file.mimetype ?? null,
+            file.filename ?? null,
             isImageFile(file) ? 1 : 0,
           ]);
         }

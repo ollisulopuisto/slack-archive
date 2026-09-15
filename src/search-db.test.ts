@@ -52,6 +52,7 @@ const UNCAPTIONED = {
       title: "Kissa katolla",
       filetype: "png",
       mimetype: "image/png",
+      filename: "F_CAT.png",
     },
     // The same message also carries a non-image attachment.
     {
@@ -120,7 +121,7 @@ type FixtureMessage = {
   t: string;
   u: string;
   m: string;
-  files?: Array<Record<string, string>>;
+  files?: Array<Record<string, string | undefined>>;
   reactions?: Array<{ name: string; users?: Array<string>; count?: number }>;
 };
 
@@ -368,6 +369,28 @@ describe("file attachments", () => {
       "SELECT is_image FROM files WHERE id = 'F_NOEXT'",
     ) as any;
     expect(row.is_image).toBe(1);
+    db.close();
+  });
+
+  // Who posted it and when, so the media browser can filter without joining
+  // back to messages - and so it can order "newest first" and pick "Random"
+  // on the files table alone.
+  it("carries who posted a file and when, for the media browser", () => {
+    const db = openSearchDatabase(dbPath);
+    const row = db.get("SELECT * FROM files WHERE id = 'F_CAT'") as any;
+
+    expect(row.user_id).toBe("U1");
+    expect(row.timestamp).toBe("1700000010.0001");
+    expect(row.filename).toBe("F_CAT.png");
+    db.close();
+  });
+
+  // A file the archive never downloaded - hidden by the free-plan limit, or
+  // never a file to begin with - has nothing for the media browser to link.
+  it("leaves filename NULL for a file that carries none", () => {
+    const db = openSearchDatabase(dbPath);
+    const row = db.get("SELECT filename FROM files WHERE id = 'F_DOC'") as any;
+    expect(row.filename).toBeNull();
     db.close();
   });
 });
@@ -881,9 +904,9 @@ describe("search optimization indexes", () => {
 
   it("populates messages_recent_fts for fast scoped searches", () => {
     const db = openSearchDatabase(dbPath);
-    const count = db.get(
-      "SELECT COUNT(*) AS n FROM messages_recent_fts",
-    ) as { n: number };
+    const count = db.get("SELECT COUNT(*) AS n FROM messages_recent_fts") as {
+      n: number;
+    };
     expect(count.n).toBeGreaterThan(0);
     db.close();
   });

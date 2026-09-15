@@ -9,6 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import {
   NO_SEARCH,
   EMOJI_INDEX_PATH,
+  FILES_BASE_URL,
   HTML_EXCLUDE_KINDS,
   SEARCH_EXCLUDE_KINDS,
   SEARCH_EXCLUDE_USERS,
@@ -329,15 +330,24 @@ async function createSearchHTML() {
   const metadataUsers: Record<string, string> = {};
   for (const uId in users) {
     if (!hiddenUsers.has(uId)) {
-      metadataUsers[uId] =
-        users[uId].name || users[uId].real_name || "Unknown";
+      metadataUsers[uId] = users[uId].name || users[uId].real_name || "Unknown";
     }
   }
 
   writeBrowserScript(
     "search-indexes.js",
     `window.SEARCH_INDEXES = ${JSON.stringify(SEARCH_INDEX)};\n` +
-      `window.SEARCH_METADATA = ${JSON.stringify({ channels: metadataChannels, users: metadataUsers })};\n`,
+      `window.SEARCH_METADATA = ${JSON.stringify({
+        channels: metadataChannels,
+        users: metadataUsers,
+        // Where the media browser links a file. The same rule the channel
+        // pages use: relative to "html/" when attachments sit beside the
+        // pages, or the proxy URL when they live somewhere else - see
+        // FILES_BASE_URL and Files in create-html.tsx. search.html sits at
+        // the archive root, not under html/, so the relative case needs the
+        // "html/" that a page under html/ already has for free.
+        filesBaseUrl: FILES_BASE_URL || "html/",
+      })};\n`,
   );
   writeBrowserScript("search-app.js", compiledSearchApp());
 

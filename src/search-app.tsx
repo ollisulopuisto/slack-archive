@@ -14,6 +14,7 @@ import ReactDOM from "react-dom";
 declare const MiniSearch: any;
 declare function createDbWorker(...args: any[]): Promise<any>;
 declare function buildSearchSql(request: any): any;
+declare function buildMediaSql(request: any): any;
 declare function parseSearchQuery(query: string): any;
 declare function getSearchFilter(filters: any): any;
 declare function filterResultsByPhrases(rows: any, phrases: any): any;
@@ -70,12 +71,20 @@ class App extends React.PureComponent {
     this.handleResetFilters = this.handleResetFilters.bind(this);
     this.handleKeyDown = this.handleKeyDown.bind(this);
     this.handlePopState = this.handlePopState.bind(this);
+    this.handleModeChange = this.handleModeChange.bind(this);
+    this.handleMediaChannelChange = this.handleMediaChannelChange.bind(this);
+    this.handleMediaUserChange = this.handleMediaUserChange.bind(this);
+    this.handleMediaFromChange = this.handleMediaFromChange.bind(this);
+    this.handleMediaToChange = this.handleMediaToChange.bind(this);
+    this.handleMediaReset = this.handleMediaReset.bind(this);
+    this.handleMediaRandom = this.handleMediaRandom.bind(this);
 
     this.searchInputRef = React.createRef();
     // Queries are answered over the network now, so they come back out
     // of order. Only the newest one is allowed to render.
     this.queryId = 0;
     this.pending = null;
+    this.mediaQueryId = 0;
 
     const params = new URLSearchParams(window.location.search);
     const query = params.get("q") || "";
@@ -88,6 +97,7 @@ class App extends React.PureComponent {
       rangeParam || (fromParam || toParam ? "custom" : "12m");
     const sortParam = params.get("sort");
     const threadParam = params.get("thread") || params.get("threads") || "all";
+    const modeParam = params.get("mode");
 
     const initialSort =
       sortParam === "oldest" ||
@@ -100,6 +110,7 @@ class App extends React.PureComponent {
         : "relevance";
 
     this.state = {
+      mode: modeParam === "media" ? "media" : "messages",
       matchingMessages: [],
       searchValue: query,
       selectedChannel: channelParam,
@@ -117,6 +128,13 @@ class App extends React.PureComponent {
       error: null,
       channels: {},
       users: {},
+      mediaFiles: [],
+      mediaChannel: params.get("mc") || "",
+      mediaUser: params.get("mu") || "",
+      mediaFrom: params.get("mfrom") || "",
+      mediaTo: params.get("mto") || "",
+      mediaSearching: false,
+      mediaRandom: false,
     };
   }
 
@@ -194,8 +212,7 @@ class App extends React.PureComponent {
     const fromDate = searchParams.get("from") || "";
     const toDate = searchParams.get("to") || "";
     const rangeParam = searchParams.get("range");
-    const timeRange =
-      rangeParam || (fromDate || toDate ? "custom" : "12m");
+    const timeRange = rangeParam || (fromDate || toDate ? "custom" : "12m");
     const sortParam = searchParams.get("sort");
     const threadParam =
       searchParams.get("thread") || searchParams.get("threads") || "all";
@@ -213,6 +230,11 @@ class App extends React.PureComponent {
     const threadFilter = ["all", "roots", "replies"].includes(threadParam)
       ? threadParam
       : "all";
+    const mode = searchParams.get("mode") === "media" ? "media" : "messages";
+    const mediaChannel = searchParams.get("mc") || "";
+    const mediaUser = searchParams.get("mu") || "";
+    const mediaFrom = searchParams.get("mfrom") || "";
+    const mediaTo = searchParams.get("mto") || "";
 
     this.setState(
       {
@@ -224,8 +246,17 @@ class App extends React.PureComponent {
         timeRange,
         sortOrder,
         threadFilter,
+        mode,
+        mediaChannel,
+        mediaUser,
+        mediaFrom,
+        mediaTo,
+        mediaRandom: false,
       },
-      () => this.updateResults(),
+      () => {
+        if (mode === "media") this.updateMedia();
+        else this.updateResults();
+      },
     );
   }
 
@@ -239,9 +270,15 @@ class App extends React.PureComponent {
       timeRange,
       sortOrder,
       threadFilter,
+      mode,
+      mediaChannel,
+      mediaUser,
+      mediaFrom,
+      mediaTo,
     } = this.state;
 
     const params = new URLSearchParams();
+    if (mode === "media") params.set("mode", "media");
     if (searchValue.trim()) params.set("q", searchValue.trim());
     if (selectedChannel) params.set("channel", selectedChannel);
     if (selectedUser) params.set("user", selectedUser);
@@ -253,6 +290,10 @@ class App extends React.PureComponent {
     if (sortOrder && sortOrder !== "relevance") params.set("sort", sortOrder);
     if (threadFilter && threadFilter !== "all")
       params.set("thread", threadFilter);
+    if (mediaChannel) params.set("mc", mediaChannel);
+    if (mediaUser) params.set("mu", mediaUser);
+    if (mediaFrom) params.set("mfrom", mediaFrom);
+    if (mediaTo) params.set("mto", mediaTo);
 
     const indexParam = new URLSearchParams(window.location.search).get("index");
     if (indexParam) params.set("index", indexParam);
@@ -464,6 +505,7 @@ class App extends React.PureComponent {
       this.worker = worker;
       this.setState({ ready: true, channels, users }, () => {
         if (this.hasSearchCriteria()) this.updateResults();
+        if (this.state.mode === "media") this.updateMedia();
       });
     } catch (error) {
       console.error("could not open the search database", error);
@@ -508,17 +550,15 @@ class App extends React.PureComponent {
     if (value === "custom") {
       this.setState({ timeRange: "custom" });
     } else {
-      this.setState(
-        { timeRange: value, fromDate: "", toDate: "" },
-        () => this.updateResults(),
+      this.setState({ timeRange: value, fromDate: "", toDate: "" }, () =>
+        this.updateResults(),
       );
     }
   }
 
   handleSearchAllTime() {
-    this.setState(
-      { timeRange: "all", fromDate: "", toDate: "" },
-      () => this.updateResults(),
+    this.setState({ timeRange: "all", fromDate: "", toDate: "" }, () =>
+      this.updateResults(),
     );
   }
 
@@ -566,6 +606,121 @@ class App extends React.PureComponent {
     );
   }
 
+  handleModeChange(mode) {
+    if (mode === this.state.mode) return;
+
+    this.setState({ mode }, () => {
+      this.syncUrlParams();
+      if (mode === "media" && this.worker) this.updateMedia();
+    });
+  }
+
+  handleMediaChannelChange({ target: { value } }) {
+    this.setState({ mediaChannel: value, mediaRandom: false }, () =>
+      this.updateMedia(),
+    );
+  }
+
+  handleMediaUserChange({ target: { value } }) {
+    this.setState({ mediaUser: value, mediaRandom: false }, () =>
+      this.updateMedia(),
+    );
+  }
+
+  handleMediaFromChange({ target: { value } }) {
+    this.setState({ mediaFrom: value, mediaRandom: false }, () =>
+      this.updateMedia(),
+    );
+  }
+
+  handleMediaToChange({ target: { value } }) {
+    this.setState({ mediaTo: value, mediaRandom: false }, () =>
+      this.updateMedia(),
+    );
+  }
+
+  handleMediaReset() {
+    this.setState(
+      {
+        mediaChannel: "",
+        mediaUser: "",
+        mediaFrom: "",
+        mediaTo: "",
+        mediaRandom: false,
+      },
+      () => {
+        this.syncUrlParams();
+        this.updateMedia();
+      },
+    );
+  }
+
+  /**
+   * The filters stay exactly what they were - "Random" picks one file out of
+   * whatever channel, sender or date range was already asked for, rather than
+   * out of the whole archive.
+   */
+  async handleMediaRandom() {
+    const { mediaChannel, mediaUser, mediaFrom, mediaTo } = this.state;
+
+    if (!this.worker) return;
+
+    const query = buildMediaSql({
+      channel: mediaChannel,
+      user: mediaUser,
+      after: startOfDay(mediaFrom),
+      before: startOfDay(mediaTo, 1),
+      random: true,
+    });
+
+    const id = ++this.mediaQueryId;
+    this.setState({ mediaSearching: true });
+
+    try {
+      const rows = await this.worker.db.query(query.sql, query.params);
+      if (id !== this.mediaQueryId) return;
+
+      this.setState({
+        mediaFiles: rows,
+        mediaSearching: false,
+        mediaRandom: true,
+      });
+    } catch (error) {
+      if (id !== this.mediaQueryId) return;
+      console.error("random media lookup failed", error);
+      this.setState({ mediaSearching: false });
+    }
+  }
+
+  async updateMedia() {
+    const { mediaChannel, mediaUser, mediaFrom, mediaTo } = this.state;
+
+    this.syncUrlParams();
+
+    if (!this.worker) return;
+
+    const query = buildMediaSql({
+      channel: mediaChannel,
+      user: mediaUser,
+      after: startOfDay(mediaFrom),
+      before: startOfDay(mediaTo, 1),
+    });
+
+    const id = ++this.mediaQueryId;
+    this.setState({ mediaSearching: true, mediaRandom: false });
+
+    try {
+      const rows = await this.worker.db.query(query.sql, query.params);
+      if (id !== this.mediaQueryId) return;
+
+      this.setState({ mediaFiles: rows, mediaSearching: false });
+    } catch (error) {
+      if (id !== this.mediaQueryId) return;
+      console.error("media lookup failed", error);
+      this.setState({ mediaFiles: [], mediaSearching: false });
+    }
+  }
+
   async updateResults() {
     const {
       searchValue,
@@ -609,7 +764,11 @@ class App extends React.PureComponent {
     this.syncUrlParams();
 
     if (!query || (!this.worker && !this.miniSearch)) {
-      this.setState({ matchingMessages: [], searching: false, autoExpanded: false });
+      this.setState({
+        matchingMessages: [],
+        searching: false,
+        autoExpanded: false,
+      });
       return;
     }
 
@@ -653,6 +812,7 @@ class App extends React.PureComponent {
 
   render() {
     const {
+      mode,
       matchingMessages,
       searchValue,
       selectedChannel,
@@ -668,6 +828,13 @@ class App extends React.PureComponent {
       channels,
       users,
       autoExpanded,
+      mediaFiles,
+      mediaChannel,
+      mediaUser,
+      mediaFrom,
+      mediaTo,
+      mediaSearching,
+      mediaRandom,
     } = this.state;
 
     if (error) {
@@ -681,6 +848,44 @@ class App extends React.PureComponent {
               Every message is still on the channel pages; only the search box
               needs it.
             </p>
+          </article>
+        </div>
+      );
+    }
+
+    if (mode === "media") {
+      return (
+        <div className="App">
+          <article className="main">
+            <ModeTabs mode={mode} onChange={this.handleModeChange} />
+            {ready ? (
+              this.worker ? (
+                <MediaView
+                  files={mediaFiles}
+                  channels={channels}
+                  users={users}
+                  selectedChannel={mediaChannel}
+                  selectedUser={mediaUser}
+                  fromDate={mediaFrom}
+                  toDate={mediaTo}
+                  searching={mediaSearching}
+                  random={mediaRandom}
+                  onChannelChange={this.handleMediaChannelChange}
+                  onUserChange={this.handleMediaUserChange}
+                  onFromChange={this.handleMediaFromChange}
+                  onToChange={this.handleMediaToChange}
+                  onReset={this.handleMediaReset}
+                  onRandom={this.handleMediaRandom}
+                />
+              ) : (
+                <p className="SearchSummary empty">
+                  The media browser needs the database index, which is only read
+                  when this archive is served over HTTP.
+                </p>
+              )
+            ) : (
+              <p>Opening the search index…</p>
+            )}
           </article>
         </div>
       );
@@ -710,6 +915,7 @@ class App extends React.PureComponent {
     return (
       <div className="App">
         <article className="main">
+          <ModeTabs mode={mode} onChange={this.handleModeChange} />
           {ready ? (
             <Header
               onChange={this.handleSearchChange}
@@ -1062,6 +1268,229 @@ const SearchBox = ({
         )}
       </div>
     </div>
+  );
+};
+
+const ModeTabs = ({ mode, onChange }) => (
+  <div className="ModeTabs" role="tablist">
+    <button
+      type="button"
+      role="tab"
+      aria-selected={mode === "messages"}
+      className={`ModeTab ${mode === "messages" ? "active" : ""}`}
+      onClick={() => onChange("messages")}
+    >
+      Messages
+    </button>
+    <button
+      type="button"
+      role="tab"
+      aria-selected={mode === "media"}
+      className={`ModeTab ${mode === "media" ? "active" : ""}`}
+      onClick={() => onChange("media")}
+    >
+      Media
+    </button>
+  </div>
+);
+
+const MediaView = ({
+  files,
+  channels,
+  users,
+  selectedChannel,
+  selectedUser,
+  fromDate,
+  toDate,
+  searching,
+  random,
+  onChannelChange,
+  onUserChange,
+  onFromChange,
+  onToChange,
+  onReset,
+  onRandom,
+}) => {
+  const hasFiltersActive = Boolean(
+    selectedChannel || selectedUser || fromDate || toDate,
+  );
+
+  return (
+    <div>
+      <header className="Header">
+        <h1>Media</h1>
+        <MediaFilters
+          selectedChannel={selectedChannel}
+          selectedUser={selectedUser}
+          fromDate={fromDate}
+          toDate={toDate}
+          hasFiltersActive={hasFiltersActive}
+          channels={channels}
+          users={users}
+          onChannelChange={onChannelChange}
+          onUserChange={onUserChange}
+          onFromChange={onFromChange}
+          onToChange={onToChange}
+          onReset={onReset}
+          onRandom={onRandom}
+        />
+      </header>
+      {random && files.length > 0 && (
+        <p className="SearchSummary">
+          One at random
+          {hasFiltersActive ? " from the current filters" : ""}.
+        </p>
+      )}
+      {files.length > 0 ? (
+        <MediaGrid files={files} channels={channels} users={users} />
+      ) : (
+        <p className="SearchSummary empty">
+          {searching
+            ? "Looking…"
+            : hasFiltersActive
+              ? "No media found for these filters."
+              : "This archive has no attachments to browse."}
+        </p>
+      )}
+    </div>
+  );
+};
+
+const MediaFilters = ({
+  selectedChannel,
+  selectedUser,
+  fromDate,
+  toDate,
+  hasFiltersActive,
+  channels,
+  users,
+  onChannelChange,
+  onUserChange,
+  onFromChange,
+  onToChange,
+  onReset,
+  onRandom,
+}) => {
+  const sortedChannels = Object.entries(channels).sort((a, b) =>
+    a[1].localeCompare(b[1]),
+  );
+  const sortedUsers = Object.entries(users).sort((a, b) =>
+    a[1].localeCompare(b[1]),
+  );
+
+  return (
+    <div className="Filters">
+      <select
+        value={selectedChannel}
+        onChange={onChannelChange}
+        aria-label="Filter by channel"
+      >
+        <option value="">All Channels</option>
+        {sortedChannels.map(([id, name]) => (
+          <option key={id} value={id}>
+            #{name}
+          </option>
+        ))}
+      </select>
+      <select
+        value={selectedUser}
+        onChange={onUserChange}
+        aria-label="Filter by sender"
+      >
+        <option value="">All Senders</option>
+        {sortedUsers.map(([id, name]) => (
+          <option key={id} value={id}>
+            @{name}
+          </option>
+        ))}
+      </select>
+      <label className="DateFilter">
+        <span>From</span>
+        <input type="date" value={fromDate} onChange={onFromChange} />
+      </label>
+      <label className="DateFilter">
+        <span>To</span>
+        <input type="date" value={toDate} onChange={onToChange} />
+      </label>
+      <button
+        type="button"
+        className="RandomButton"
+        onClick={onRandom}
+        title="Show one random file matching these filters"
+      >
+        🎲 Random
+      </button>
+      {hasFiltersActive && (
+        <button
+          type="button"
+          className="ResetFilters"
+          onClick={onReset}
+          title="Reset all filters"
+        >
+          Reset filters
+        </button>
+      )}
+    </div>
+  );
+};
+
+const MediaGrid = ({ files, channels, users }) => (
+  <ul className="MediaGrid">
+    {files.map((file) => (
+      <MediaItem key={file.id} file={file} channels={channels} users={users} />
+    ))}
+  </ul>
+);
+
+/**
+ * Where the media browser links a file, mirroring the rule the channel pages
+ * use for the same file (`Files` in create-html.tsx): relative to `html/`
+ * beside the pages, or wherever FILES_BASE_URL points when attachments live
+ * somewhere else. search.html sits at the archive root rather than under
+ * html/, so window.SEARCH_METADATA.filesBaseUrl already carries whichever of
+ * the two applies.
+ */
+function mediaFileUrl(channelId, filename) {
+  const base =
+    (window.SEARCH_METADATA && window.SEARCH_METADATA.filesBaseUrl) || "html/";
+  return `${base}files/${channelId}/${filename}`;
+}
+
+const MediaItem = ({ file, channels, users }) => {
+  const href = messageLink(file.c, file.t);
+  const src = mediaFileUrl(file.c, file.filename);
+  const isImage = Number(file.is_image) === 1;
+  const isVideo = !isImage && (file.mimetype || "").startsWith("video");
+  const label = file.title || file.name || file.filename;
+
+  return (
+    <li className="MediaItem">
+      <a
+        href={src}
+        target="_blank"
+        rel="noreferrer"
+        className="MediaThumb"
+        title={label}
+      >
+        {isImage ? (
+          <img src={src} alt={label || ""} loading="lazy" />
+        ) : isVideo ? (
+          <video src={src} muted preload="metadata" />
+        ) : (
+          <span className="MediaFileBadge">
+            {(file.filetype || "file").toUpperCase()}
+          </span>
+        )}
+      </a>
+      <p className="MediaMeta">
+        <a href={href} target="_blank" title="Open the message">
+          <span className="Channel">#{channels[file.c] || file.c}</span>
+          <span className="MetaSeparator">·</span>
+          <span>@{users[file.u] || file.u}</span>
+        </a>
+        <Timestamp timestamp={file.t} />
+      </p>
+    </li>
   );
 };
 

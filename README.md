@@ -11,6 +11,7 @@ can still enjoy in 20 years. This tool will help you do that.
 - **JSON included**: All data is also stored as JSON, so you can consume it with other tools later.
 - **No cloud, free**: Do all of this for free, without giving anyone your information.
 - **Advanced search**: Features a fast, browser-based search with keyword highlighting, result count summary, thread reply badges, deep-linkable URLs, keyboard shortcuts (`/`), channel/user/date filters, and exact phrase matching - thread replies included.
+- **A media browser**: The search page's other tab is every attachment the archive holds, as a grid rather than a list - filterable by channel, sender and date, with a Random button that picks one out of whatever is currently filtered for rather than out of the whole archive.
 - **Searchable from Slack**: the index is a plain SQLite file, so a bot can read it directly.
 - **It remembers what Slack forgets**: names people used to go by, and the profile pictures they used to have. Slack keeps no history of either.
 - **Statistics**: a page for the workspace, one per channel and one per person, with a year -> month -> day -> hour drill-down.

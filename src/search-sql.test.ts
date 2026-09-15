@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildSearchSql, toMatchExpression } from "./search-sql.js";
+import {
+  buildMediaSql,
+  buildSearchSql,
+  toMatchExpression,
+} from "./search-sql.js";
 
 describe("the FTS match expression", () => {
   it("ands the words together and matches on prefix", () => {
@@ -225,5 +229,49 @@ describe("the thread filter", () => {
   it("includes all messages when threads is all", () => {
     const query = buildSearchSql({ query: "kokous", threads: "all" });
     expect(query!.sql).not.toContain("m.parent_timestamp is");
+  });
+});
+
+describe("the media query", () => {
+  it("browses the files table, newest first, by default", () => {
+    const { sql, params } = buildMediaSql();
+
+    expect(sql).toContain("from files f");
+    expect(sql).toContain("f.filename is not null");
+    expect(sql).toContain("order by f.timestamp desc");
+    expect(params).toEqual([60]);
+  });
+
+  it("filters by channel and by sender", () => {
+    const { sql, params } = buildMediaSql({ channel: "C1", user: "U1" });
+
+    expect(sql).toContain("f.channel_id = ?");
+    expect(sql).toContain("f.user_id = ?");
+    expect(params).toEqual(["C1", "U1", 60]);
+  });
+
+  it("filters by date range", () => {
+    const { sql, params } = buildMediaSql({ after: 1000, before: 2000 });
+
+    expect(sql).toContain("f.timestamp >= ?");
+    expect(sql).toContain("f.timestamp < ?");
+    expect(params).toEqual(["0000001000", "0000002000", 60]);
+  });
+
+  it("orders randomly and asks for one row, when asked for one at random", () => {
+    const { sql, params } = buildMediaSql({
+      channel: "C1",
+      random: true,
+    });
+
+    expect(sql).toContain("order by random()");
+    expect(sql).not.toContain("order by f.timestamp desc");
+    // The filters still apply: random does not mean unfiltered.
+    expect(params).toEqual(["C1", 1]);
+  });
+
+  it("respects a custom limit", () => {
+    const { params } = buildMediaSql({ limit: 12 });
+    expect(params).toEqual([12]);
   });
 });

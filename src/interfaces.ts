@@ -96,6 +96,13 @@ export type SearchMessage = {
     title?: string;
     filetype?: string;
     mimetype?: string;
+    /**
+     * The name the file was actually saved under, e.g. `F01QV8YFY5P.jpeg` -
+     * the same rule `archivedFileName` uses, computed once here rather than
+     * by every reader, since it needs the download URL and nothing past this
+     * point keeps that around.
+     */
+    filename?: string;
   }>;
 };
 

@@ -1404,6 +1404,118 @@ mark.search-highlight {
   }
 }
 
+/* Messages / Media - the search page is really two browsers over the same
+   database, and this is the whole difference between them. */
+.ModeTabs {
+  display: flex;
+  gap: 4px;
+  max-width: 900px;
+  margin: 0 auto 4px;
+  padding: 0 16px;
+}
+
+.ModeTab {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 8px 8px 0 0;
+  background: none;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ModeTab.active {
+  background: var(--surface);
+  color: var(--ink-strong);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.ModeTab:hover:not(.active) {
+  color: var(--ink);
+}
+
+.RandomButton {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.RandomButton:hover {
+  background: var(--surface-sunken);
+}
+
+.MediaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.MediaItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.MediaThumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-sunken);
+}
+
+.MediaThumb img,
+.MediaThumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.MediaFileBadge {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink-muted);
+}
+
+.MediaMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--ink-muted);
+  overflow-wrap: anywhere;
+}
+
+.MediaMeta a {
+  text-decoration: none;
+  color: unset;
+}
+
+.MediaMeta a:hover .Channel {
+  text-decoration: underline;
+}
+
+@media (max-width: 600px) {
+  .MediaGrid {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  }
+}
+
 /* Somebody quoting something. Slack shows it as a bar down the left, and this
    archive showed it as a sentence with a stray angle bracket in front. */
 .text blockquote {

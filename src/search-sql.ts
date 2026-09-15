@@ -213,3 +213,67 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
     params,
   };
 }
+
+const FILE_COLUMNS = `f.id id, f.channel_id c, f.user_id u, f.timestamp t,
+      f.message_id message_id, f.name name, f.title title,
+      f.filetype filetype, f.mimetype mimetype, f.filename filename,
+      f.is_image is_image`;
+
+export interface MediaRequest {
+  channel?: string;
+  user?: string;
+  /** Epoch seconds; files posted at or after this moment. */
+  after?: number;
+  /** Epoch seconds; files posted strictly before this moment. */
+  before?: number;
+  limit?: number;
+  /** One file, in no particular order, rather than a page of them. */
+  random?: boolean;
+}
+
+/**
+ * The media browser's query: channel, sender and date are all optional, and
+ * "Random" is the same query with a different order rather than a different
+ * table scan - the filters it was already asked for still apply to the one
+ * row it returns.
+ *
+ * Only files the archive actually saved: a file Slack hid behind the
+ * free-plan limit, or a Google Doc that was never a file, has nothing to
+ * show or to link, and `filename` is NULL for exactly those.
+ */
+export function buildMediaSql(request: MediaRequest = {}): SearchSql {
+  const { channel, user, after, before, limit = 60, random = false } = request;
+  const params: Array<string | number> = [];
+  const where: string[] = ["f.filename is not null"];
+
+  if (channel) {
+    where.push("f.channel_id = ?");
+    params.push(channel);
+  }
+
+  if (user) {
+    where.push("f.user_id = ?");
+    params.push(user);
+  }
+
+  if (after) {
+    where.push("f.timestamp >= ?");
+    params.push(bound(after));
+  }
+
+  if (before) {
+    where.push("f.timestamp < ?");
+    params.push(bound(before));
+  }
+
+  params.push(random ? 1 : limit);
+
+  return {
+    sql: `select ${FILE_COLUMNS}
+    from files f
+   where ${where.join(" and ")}
+   order by ${random ? "random()" : "f.timestamp desc"}
+   limit ?`,
+    params,
+  };
+}
