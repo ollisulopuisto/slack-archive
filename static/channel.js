@@ -248,6 +248,24 @@
   // the wrong idea in a list that grows: the hash is the position.
   if (history.scrollRestoration) history.scrollRestoration = "manual";
 
+  // A jump lands its message scroll-padding-top below the top of the page.
+  // style.css guesses the sticky header's height; the header knows it - a
+  // long topic wraps, a narrow screen stacks the rows - and a guess that
+  // falls short puts the linked message under the header.
+  var stickyHeader = document.querySelector(".header");
+  function padForHeader() {
+    if (!stickyHeader) return;
+    var height = stickyHeader.getBoundingClientRect().height;
+    if (height > 0) {
+      document.documentElement.style.scrollPaddingTop =
+        Math.ceil(height + 8) + "px";
+    }
+  }
+  padForHeader();
+  if (stickyHeader && typeof ResizeObserver === "function") {
+    new ResizeObserver(padForHeader).observe(stickyHeader);
+  }
+
   window.addEventListener("popstate", function () {
     var ts = (location.hash || "").slice(1);
     if (ts) scrollPermalink(ts);
@@ -288,10 +306,11 @@
 
   // Scrolling writes the message spanning the reading line into the URL, so a
   // copied link reopens the reader where they left off. The reading line sits
-  // just past where jump-to-anchor lands messages (scroll-margin-top: 64px on
-  // desktop, 96px on mobile), clearing the sticky header. Throttled, and the
-  // walk starts where it last stopped, because a scroll crosses a few
-  // messages, not all of them.
+  // just past where jump-to-anchor lands messages - the html element's
+  // scroll-padding-top, read rather than repeated here - and below the sticky
+  // header. A line above the landing spot rewrites a permalink to the message
+  // before it the moment it is opened. Throttled, and the walk starts where it
+  // last stopped, because a scroll crosses a few messages, not all of them.
   var lastUrlUpdate = 0;
   window.addEventListener(
     "scroll",
@@ -305,7 +324,11 @@
       var headerBottom = headerEl
         ? headerEl.getBoundingClientRect().bottom
         : 0;
-      var line = Math.max(Math.ceil(headerBottom + 25), 80);
+      var landing =
+        Number.parseFloat(
+          getComputedStyle(document.documentElement).scrollPaddingTop,
+        ) || 0;
+      var line = Math.ceil(Math.max(headerBottom, landing) + 25);
       var i = Math.min(syncIdx, gutters.length - 1);
 
       while (

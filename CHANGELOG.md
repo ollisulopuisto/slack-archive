@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v26.09.29.254] - 2026-09-29
+
+### Fixed
+- **Search results and permalinks open on the wrong message**: opening a `#timestamp` link on a channel page rewrote the address to an earlier message (one earlier on desktop, two on mobile). A search hit therefore opened on a different message from the one found, and a copied link moved further back each time it was opened. The page now keeps the linked message in the URL, and linked messages land just below the sticky header instead of partly hidden under it. This applies to the static fallback pages too.
+
 ## [v26.09.17.253] - 2026-09-17
 
 ### Added

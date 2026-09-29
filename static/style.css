@@ -213,7 +213,6 @@ video {
 .message-gutter {
   display: flex;
   margin: 10px;
-  scroll-margin-top: 64px;
 }
 
 .message-gutter:target {
@@ -2119,10 +2118,6 @@ mark.search-highlight {
 
   .header {
     padding-top: 56px;
-  }
-
-  .message-gutter {
-    scroll-margin-top: 96px;
   }
 
   .page,

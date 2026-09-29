@@ -32,6 +32,9 @@ jobs:
           cache: npm
       # `npm ci` runs `prepare` (tsc), so this typechecks before it tests.
       - run: npm ci
+      # The permalink test drives a real Chromium: where a jump lands and what
+      # the scroll handler then writes into the URL is layout, not text.
+      - run: npx playwright-core install --with-deps chromium-headless-shell
       - run: npm test
       # vitest transforms the source; it does not prove the EMITTED ESM in lib/
       # loads. It does not: node-sqlite3-wasm is CommonJS, and `import

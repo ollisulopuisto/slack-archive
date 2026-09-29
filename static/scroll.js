@@ -23,6 +23,14 @@
   var target = document.getElementById(id);
 
   if (target) {
+    // Clear the sticky header by its real height, not style.css's guess at
+    // it: a wrapped topic or stacked mobile rows would hide the message.
+    var header = document.querySelector(".header");
+    var height = header ? header.getBoundingClientRect().height : 0;
+    if (height > 0) {
+      document.documentElement.style.scrollPaddingTop =
+        Math.ceil(height + 8) + "px";
+    }
     target.scrollIntoView();
     return;
   }
