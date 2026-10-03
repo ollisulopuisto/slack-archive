@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v26.10.03.255] - 2026-10-03
+
+### Fixed
+- **The search box at the top of the sidebar did nothing**: typing a word and pressing Enter on any archive page went nowhere, so search only worked through the "Search every message" link. The pages' security policy forbade all form submissions, including the box's own request to the search page. Forms may now submit to the archive's own address, and nowhere else.
+
 ## [v26.09.29.254] - 2026-09-29
 
 ### Fixed

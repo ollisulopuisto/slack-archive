@@ -3,7 +3,8 @@
  *
  * Scripts must be files. Inline script is how stored XSS in a message becomes
  * a session of whoever opens the page. Styles stay `unsafe-inline` because the
- * bar charts set width as a style; that is not an XSS path.
+ * bar charts set width as a style; that is not an XSS path. Forms may only
+ * submit to this origin: the one form is the sidebar's search box.
  */
 export function contentSecurityPolicy(options: {
   filesBaseUrl?: string;
@@ -23,7 +24,8 @@ export function contentSecurityPolicy(options: {
     "child-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
-    "form-action 'none'",
+    // The sidebar search box is a GET form to search.html on every page.
+    "form-action 'self'",
     "frame-ancestors 'none'",
   ].join("; ");
 }
