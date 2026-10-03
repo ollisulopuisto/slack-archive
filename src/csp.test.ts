@@ -24,4 +24,14 @@ describe("contentSecurityPolicy", () => {
   it("does not open img-src to the world when files stay beside the pages", () => {
     expect(contentSecurityPolicy({ filesBaseUrl: "" })).not.toContain("https:");
   });
+
+  it("lets the sidebar search box submit to the search page, and nowhere else", () => {
+    // Every page has a GET form to search.html. form-action 'none' blocked it,
+    // so typing in the box and pressing Enter did nothing.
+    const csp = contentSecurityPolicy({});
+
+    expect(csp).toMatch(/form-action 'self'(;|$)/);
+    expect(csp).not.toMatch(/form-action[^;]*'none'/);
+    expect(csp).not.toMatch(/form-action[^;]*https?:/);
+  });
 });
