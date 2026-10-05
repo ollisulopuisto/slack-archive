@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **`SQLite: disk I/O error` when sorting a text search by oldest or newest first**: the sort read the timestamp of every match, which for a common word is more than the page may fetch. The full-text indexes are now filled oldest first, so their row order is the age order and the page query stops after the first 50 matches. Takes effect once `search.db` is rebuilt.
+
 ## [v26.10.03.255] - 2026-10-03
 
 ### Fixed

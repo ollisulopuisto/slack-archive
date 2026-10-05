@@ -433,8 +433,17 @@ export async function buildSearchDatabase(
        (id, channel_id, user_id, timestamp, parent_timestamp, message)
        VALUES (?, ?, ?, ?, ?, ?)`,
     );
+    // Channels arrive one after another, but the full-text index must be
+    // filled oldest first: its rowid is then the message's age, and "oldest
+    // first" or "newest first" is a walk along the match list that stops
+    // after one page. Sorting by the unindexed timestamp column instead reads
+    // every match, which on a common word is more than the page may fetch.
+    // So rows wait here and move across in order once all channels are in.
+    db.exec(
+      "CREATE TEMP TABLE fts_stage (id TEXT, channel_id TEXT, user_id TEXT, timestamp TEXT, parent_timestamp TEXT, message TEXT)",
+    );
     const ftsStmt = db.prepare(
-      `INSERT OR REPLACE INTO messages_fts
+      `INSERT INTO fts_stage
        (id, channel_id, user_id, timestamp, parent_timestamp, message)
        VALUES (?, ?, ?, ?, ?, ?)`,
     );
@@ -548,6 +557,14 @@ export async function buildSearchDatabase(
     reactionStmt.finalize();
     reactionUserStmt.finalize();
 
+    db.exec(
+      `INSERT INTO messages_fts
+       (id, channel_id, user_id, timestamp, parent_timestamp, message)
+       SELECT id, channel_id, user_id, timestamp, parent_timestamp, message
+       FROM fts_stage ORDER BY CAST(timestamp AS REAL), id`,
+    );
+    db.exec("DROP TABLE fts_stage");
+
     const maxRow = db.get("SELECT MAX(timestamp) AS max_t FROM messages") as {
       max_t: string | null;
     } | null;
@@ -559,7 +576,8 @@ export async function buildSearchDatabase(
        (id, channel_id, user_id, timestamp, parent_timestamp, message)
        SELECT id, channel_id, user_id, timestamp, parent_timestamp, message
        FROM messages_fts
-       WHERE timestamp >= ?`,
+       WHERE timestamp >= ?
+       ORDER BY rowid`,
       [String(cutoff)],
     );
 

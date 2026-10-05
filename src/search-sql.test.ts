@@ -185,13 +185,13 @@ describe("search result sorting", () => {
 
   it("sorts by newest first when requested with text query", () => {
     const { sql } = buildSearchSql({ query: "kokous", sort: "newest" })!;
-    expect(sql).toContain("order by f.timestamp desc");
+    expect(sql).toContain("order by f.rowid desc");
     expect(sql).not.toContain("order by rank");
   });
 
   it("sorts by oldest first when requested with text query", () => {
     const { sql } = buildSearchSql({ query: "kokous", sort: "oldest" })!;
-    expect(sql).toContain("order by f.timestamp asc");
+    expect(sql).toContain("order by f.rowid asc");
     expect(sql).not.toContain("order by rank");
   });
 
@@ -267,7 +267,7 @@ describe("the media query", () => {
     });
 
     expect(sql).toContain("order by random()");
-    expect(sql).not.toContain("order by f.timestamp desc");
+    expect(sql).not.toContain("order by f.rowid desc");
     // The filters still apply: random does not mean unfiltered.
     expect(params).toEqual(["C1", 1]);
   });
