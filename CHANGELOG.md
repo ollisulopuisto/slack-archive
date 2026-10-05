@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v26.10.05.257] - 2026-10-05
+
+### Fixed
+- **A link to a thread reply opened with another message's address**: the page found the reply by loading chunks until the one holding its parent arrived, and each chunk inserted above the view scrolled the page, which wrote some other message into the address bar. The scroll that finally landed on the reply fell inside the handler's throttle, so the wrong address stayed. The address is now set to the linked message when it is found. A Chromium test opens a reply whose parent is a chunk older.
+
 ## [v26.10.05.256] - 2026-10-05
 
 ### Fixed

@@ -70,6 +70,7 @@
   var gutters = [];
   var syncIdx = 0;
   var lastSyncedTs = null;
+  var lastUrlUpdate = 0;
 
   // Rebuilt whenever a chunk lands: the rows whose position the URL tracks.
   function refreshGutters() {
@@ -219,6 +220,13 @@
           break;
         }
       }
+      // The walk to a reply's parent inserts chunks above the viewport, and
+      // each insertion scrolls - which writes whatever message was at the
+      // reading line into the URL. The scroll handler's throttle can then
+      // swallow the scroll that lands on the message, so the address bar is
+      // set here, to the message that was asked for.
+      history.replaceState(null, "", "#" + ts);
+      lastUrlUpdate = Date.now();
       el.scrollIntoView({ block: "start" });
     }
 
@@ -311,7 +319,6 @@
   // header. A line above the landing spot rewrites a permalink to the message
   // before it the moment it is opened. Throttled, and the walk starts where it
   // last stopped, because a scroll crosses a few messages, not all of them.
-  var lastUrlUpdate = 0;
   window.addEventListener(
     "scroll",
     function () {
