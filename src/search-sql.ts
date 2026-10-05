@@ -149,9 +149,9 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
 
     let orderBy = "rank";
     if (sort === "newest") {
-      orderBy = "f.timestamp desc";
+      orderBy = "f.rowid desc";
     } else if (sort === "oldest") {
-      orderBy = "f.timestamp asc";
+      orderBy = "f.rowid asc";
     } else if (sort === "score" || sort === "relevance") {
       orderBy = "rank";
     }

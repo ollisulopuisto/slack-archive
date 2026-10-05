@@ -936,6 +936,18 @@ describe("search optimization indexes", () => {
     db.close();
   });
 
+  it("fills the full-text indexes oldest first, so rowid order is age order", () => {
+    const db = openSearchDatabase(dbPath);
+    for (const table of ["messages_fts", "messages_recent_fts"]) {
+      const rows = db.all(
+        `SELECT timestamp FROM ${table} ORDER BY rowid`,
+      ) as Array<{ timestamp: string }>;
+      const times = rows.map((row) => Number(row.timestamp));
+      expect(times).toEqual([...times].sort((a, b) => a - b));
+    }
+    db.close();
+  });
+
   it("populates messages_recent_fts for fast scoped searches", () => {
     const db = openSearchDatabase(dbPath);
     const count = db.get("SELECT COUNT(*) AS n FROM messages_recent_fts") as {
