@@ -100,3 +100,70 @@ describe("opening a permalink on the channel entry page", () => {
     }, 20000);
   }
 });
+
+// A thread reply is drawn inside its parent, and the parent can be a chunk
+// older than the chunk its own timestamp falls in. The walk to find it loads
+// chunks - and every insertion above the viewport fires a scroll that writes
+// some other message into the URL. The link must still end up as clicked.
+describe("opening a permalink to a thread reply in an older chunk", () => {
+  const gutter = (ts: string, label: string, inner = "") =>
+    `<div class="message-gutter" id="${ts}"><div></div><div>` +
+    `<span class="sender">${label}</span> ` +
+    `<a class="timestamp" href="#${ts}">t</a><br>` +
+    `<div class="text"><div>${label}</div></div>${inner}</div></div>`;
+
+  const olderChunk = Array.from({ length: 100 }, (_, i) =>
+    gutter(
+      tsAt(i),
+      `old ${i}`,
+      i === 50 ? gutter(tsAt(150) + "1", "the reply") : "",
+    ),
+  ).join("");
+  const newerChunk = Array.from({ length: 100 }, (_, i) =>
+    gutter(tsAt(100 + i), `new ${i}`),
+  ).join("");
+  const replyTs = tsAt(150) + "1";
+
+  it("keeps the reply in the URL", async () => {
+    const tab = await browser.newPage({
+      viewport: { width: 1280, height: 800 },
+    });
+    await tab.route("http://archive.test/**", (route) => {
+      const url = route.request().url();
+      if (url.endsWith("chunk-0.json"))
+        return route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({ html: newerChunk }),
+        });
+      if (url.endsWith("chunk-1.json"))
+        return route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({ html: olderChunk }),
+        });
+      return route.fulfill({
+        contentType: "text/html",
+        body: page
+          .replace('data-chunks="1"', 'data-chunks="2"')
+          .replace(
+            JSON.stringify(boundaries),
+            JSON.stringify({
+              C1: [
+                { oldestTs: tsAt(100), newestTs: tsAt(199) },
+                { oldestTs: tsAt(0), newestTs: tsAt(99) },
+              ],
+            }),
+          ),
+      });
+    });
+
+    await tab.goto(`http://archive.test/C1.html#${replyTs}`);
+    await tab.waitForFunction(
+      (ts) => document.getElementById(ts) !== null,
+      replyTs,
+    );
+    await tab.waitForTimeout(800);
+
+    expect(await tab.evaluate(() => location.hash)).toBe(`#${replyTs}`);
+    await tab.close();
+  }, 20000);
+});
