@@ -25,6 +25,16 @@ export interface SearchRequest {
   sort?: "score" | "relevance" | "newest" | "oldest" | string;
   threads?: "all" | "roots" | "replies";
   recent?: boolean;
+  /**
+   * Only messages that carry a saved file, each with its first file described
+   * on the row so the page can show it.
+   *
+   * The text still matches what the full-text index holds for the message: its
+   * caption, the names and titles of its files, and what the OCR step read out
+   * of a picture. That is the point of the toggle - a screenshot with no
+   * caption is found by what it says.
+   */
+  media?: boolean;
 }
 
 export interface SearchSql {
@@ -85,6 +95,35 @@ const FTS_COLUMNS = `f.id id, f.channel_id c, f.user_id u, f.timestamp t,
       f.parent_timestamp p, f.message m_text`;
 
 /**
+ * A message that carries a file the archive saved.
+ *
+ * `filename` is NULL for exactly the files with nothing to show: hidden by the
+ * free-plan limit, or a Google Doc that was never a file. Such a message is not
+ * media, whatever its `files` rows say.
+ */
+function hasSavedFile(messageId: string) {
+  return `exists (select 1 from files mf where mf.message_id = ${messageId} and mf.filename is not null)`;
+}
+
+/**
+ * The first saved file of a message, as columns of the result row.
+ *
+ * Correlated subqueries rather than a join: a message with three pictures must
+ * stay one result, and `files_message_id` makes each lookup an index probe on
+ * the fifty rows the page asks for.
+ */
+function firstFileColumns(messageId: string) {
+  const first = (column: string) =>
+    `(select ${column} from files mf where mf.message_id = ${messageId} and mf.filename is not null order by mf.id limit 1)`;
+
+  return `,
+      ${first("mf.filename")} file_name,
+      ${first("mf.is_image")} file_is_image,
+      ${first("coalesce(nullif(mf.title, ''), mf.name)")} file_label,
+      (select count(*) from files mf where mf.message_id = ${messageId} and mf.filename is not null) file_count`;
+}
+
+/**
  * The query for one search, or nothing when there is nothing to ask.
  *
  * With text and default sort, the full-text index answers and orders by relevance.
@@ -102,10 +141,16 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
     threads = "all",
     limit = 50,
     recent = false,
+    media = false,
   } = request;
   const match = toMatchExpression(request.query || "");
   const hasFilter = Boolean(
-    channel || user || after || before || (threads && threads !== "all"),
+    channel ||
+    user ||
+    after ||
+    before ||
+    media ||
+    (threads && threads !== "all"),
   );
 
   if (!match && !hasFilter) {
@@ -147,6 +192,10 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
       params.push(bound(before));
     }
 
+    if (media) {
+      where.push(hasSavedFile("f.id"));
+    }
+
     let orderBy = "rank";
     if (sort === "newest") {
       orderBy = "f.rowid desc";
@@ -159,7 +208,7 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
     params.push(limit);
 
     return {
-      sql: `select ${FTS_COLUMNS}
+      sql: `select ${FTS_COLUMNS}${media ? firstFileColumns("f.id") : ""}
     ${from}
    where ${where.join(" and ")}
    order by ${orderBy}
@@ -197,6 +246,10 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
     params.push(bound(before));
   }
 
+  if (media) {
+    where.push(hasSavedFile("m.id"));
+  }
+
   let orderBy = "m.timestamp desc";
   if (sort === "oldest") {
     orderBy = "m.timestamp asc";
@@ -205,7 +258,7 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
   params.push(limit);
 
   return {
-    sql: `select ${MESSAGE_COLUMNS}
+    sql: `select ${MESSAGE_COLUMNS}${media ? firstFileColumns("m.id") : ""}
     ${from}
    where ${where.join(" and ")}
    order by ${orderBy}

@@ -68,6 +68,7 @@ class App extends React.PureComponent {
     this.handleSearchAllTime = this.handleSearchAllTime.bind(this);
     this.handleSortChange = this.handleSortChange.bind(this);
     this.handleThreadChange = this.handleThreadChange.bind(this);
+    this.handleSearchMediaChange = this.handleSearchMediaChange.bind(this);
     this.handleResetFilters = this.handleResetFilters.bind(this);
     this.handleKeyDown = this.handleKeyDown.bind(this);
     this.handlePopState = this.handlePopState.bind(this);
@@ -118,6 +119,7 @@ class App extends React.PureComponent {
 
     this.state = {
       mode: modeParam === "media" ? "media" : "messages",
+      searchMedia: params.get("withmedia") === "1",
       matchingMessages: [],
       searchValue: query,
       selectedChannel: channelParam,
@@ -265,6 +267,7 @@ class App extends React.PureComponent {
       ? threadParam
       : "all";
     const mode = searchParams.get("mode") === "media" ? "media" : "messages";
+    const searchMedia = searchParams.get("withmedia") === "1";
     const mediaChannel = searchParams.get("mc") || "";
     const mediaUser = searchParams.get("mu") || "";
     const mediaFrom = searchParams.get("mfrom") || "";
@@ -281,6 +284,7 @@ class App extends React.PureComponent {
         sortOrder,
         threadFilter,
         mode,
+        searchMedia,
         mediaChannel,
         mediaUser,
         mediaFrom,
@@ -305,6 +309,7 @@ class App extends React.PureComponent {
       sortOrder,
       threadFilter,
       mode,
+      searchMedia,
       mediaChannel,
       mediaUser,
       mediaFrom,
@@ -324,6 +329,7 @@ class App extends React.PureComponent {
     if (sortOrder && sortOrder !== "relevance") params.set("sort", sortOrder);
     if (threadFilter && threadFilter !== "all")
       params.set("thread", threadFilter);
+    if (searchMedia) params.set("withmedia", "1");
     if (mediaChannel) params.set("mc", mediaChannel);
     if (mediaUser) params.set("mu", mediaUser);
     if (mediaFrom) params.set("mfrom", mediaFrom);
@@ -346,6 +352,7 @@ class App extends React.PureComponent {
       toDate,
       timeRange,
       threadFilter,
+      searchMedia,
     } = this.state;
     const hasFilter = Boolean(
       selectedChannel ||
@@ -353,6 +360,7 @@ class App extends React.PureComponent {
       fromDate ||
       toDate ||
       timeRange === "all" ||
+      searchMedia ||
       (threadFilter && threadFilter !== "all"),
     );
     const text = searchValue ? searchValue.trim() : "";
@@ -604,6 +612,12 @@ class App extends React.PureComponent {
     this.setState({ threadFilter: value }, () => this.updateResults());
   }
 
+  handleSearchMediaChange({ target: { checked } }) {
+    this.setState({ searchMedia: Boolean(checked) }, () =>
+      this.updateResults(),
+    );
+  }
+
   handleSearchClear() {
     clearTimeout(this.pending);
     this.setState({ searchValue: "" }, () => {
@@ -628,6 +642,7 @@ class App extends React.PureComponent {
         timeRange: "12m",
         sortOrder: "relevance",
         threadFilter: "all",
+        searchMedia: false,
         autoExpanded: false,
         searching: false,
       },
@@ -650,26 +665,30 @@ class App extends React.PureComponent {
   }
 
   handleMediaChannelChange({ target: { value } }) {
-    this.setState({ mediaChannel: value, mediaRandom: false, activeMedia: null }, () =>
-      this.updateMedia(),
+    this.setState(
+      { mediaChannel: value, mediaRandom: false, activeMedia: null },
+      () => this.updateMedia(),
     );
   }
 
   handleMediaUserChange({ target: { value } }) {
-    this.setState({ mediaUser: value, mediaRandom: false, activeMedia: null }, () =>
-      this.updateMedia(),
+    this.setState(
+      { mediaUser: value, mediaRandom: false, activeMedia: null },
+      () => this.updateMedia(),
     );
   }
 
   handleMediaFromChange({ target: { value } }) {
-    this.setState({ mediaFrom: value, mediaRandom: false, activeMedia: null }, () =>
-      this.updateMedia(),
+    this.setState(
+      { mediaFrom: value, mediaRandom: false, activeMedia: null },
+      () => this.updateMedia(),
     );
   }
 
   handleMediaToChange({ target: { value } }) {
-    this.setState({ mediaTo: value, mediaRandom: false, activeMedia: null }, () =>
-      this.updateMedia(),
+    this.setState(
+      { mediaTo: value, mediaRandom: false, activeMedia: null },
+      () => this.updateMedia(),
     );
   }
 
@@ -842,14 +861,19 @@ class App extends React.PureComponent {
       timeRange,
       sortOrder,
       threadFilter,
+      searchMedia,
     } = this.state;
 
+    // The JavaScript fallback index holds messages only, so without the
+    // database the toggle has nothing to ask. The page hides it then.
+    const media = searchMedia && Boolean(this.worker);
     const text = searchValue.trim();
     const hasFilter = Boolean(
       selectedChannel ||
       selectedUser ||
       fromDate ||
       toDate ||
+      media ||
       (threadFilter && threadFilter !== "all"),
     );
     const minLength = hasFilter ? 1 : 3;
@@ -870,6 +894,7 @@ class App extends React.PureComponent {
       sort: sortOrder,
       threads: threadFilter,
       recent: isRecent,
+      media,
     });
 
     this.syncUrlParams();
@@ -933,6 +958,7 @@ class App extends React.PureComponent {
       timeRange,
       sortOrder,
       threadFilter,
+      searchMedia,
       ready,
       searching,
       error,
@@ -1023,6 +1049,7 @@ class App extends React.PureComponent {
       fromDate ||
       toDate ||
       timeRange === "all" ||
+      searchMedia ||
       threadFilter !== "all";
 
     const hasFiltersActive =
@@ -1033,6 +1060,7 @@ class App extends React.PureComponent {
       Boolean(fromDate) ||
       Boolean(toDate) ||
       sortOrder !== "relevance" ||
+      searchMedia ||
       threadFilter !== "all";
 
     return (
@@ -1049,6 +1077,7 @@ class App extends React.PureComponent {
               onTimeRangeChange={this.handleTimeRangeChange}
               onSortChange={this.handleSortChange}
               onThreadChange={this.handleThreadChange}
+              onSearchMediaChange={this.handleSearchMediaChange}
               onSearchClear={this.handleSearchClear}
               onResetFilters={this.handleResetFilters}
               value={searchValue}
@@ -1059,6 +1088,8 @@ class App extends React.PureComponent {
               timeRange={timeRange}
               sortOrder={sortOrder}
               threadFilter={threadFilter}
+              searchMedia={searchMedia}
+              canSearchMedia={Boolean(this.worker)}
               hasFiltersActive={hasFiltersActive}
               searchInputRef={this.searchInputRef}
               channels={channels}
@@ -1231,8 +1262,34 @@ const Message = ({ message, channels, users, query }) => {
           <strong>@{users[message.u] || message.u}: </strong>
           <EmojiText text={message.m_text} query={query} />
         </p>
+        {message.file_name && <MessageFile message={message} />}
       </li>
     </a>
+  );
+};
+
+/**
+ * The first file of a message found with "Search media" on: a thumbnail for a
+ * picture, its name for anything else, and how many more came with it.
+ */
+const MessageFile = ({ message }) => {
+  const isImage = Number(message.file_is_image) === 1;
+  const label = message.file_label || message.file_name;
+  const more = Number(message.file_count || 0) - 1;
+
+  return (
+    <p className="MessageFile">
+      {isImage ? (
+        <img
+          src={mediaFileUrl(message.c, message.file_name)}
+          alt={label}
+          loading="lazy"
+        />
+      ) : (
+        <span className="MediaFileBadge">{label}</span>
+      )}
+      {more > 0 && <span className="MessageFileMore">+{more} more</span>}
+    </p>
   );
 };
 
@@ -1277,6 +1334,9 @@ const SearchBox = ({
   timeRange,
   sortOrder,
   threadFilter,
+  onSearchMediaChange,
+  searchMedia,
+  canSearchMedia,
   hasFiltersActive,
   searchInputRef,
   channels,
@@ -1349,6 +1409,19 @@ const SearchBox = ({
           <option value="roots">Channel Topics Only</option>
           <option value="replies">Thread Replies Only</option>
         </select>
+        {canSearchMedia && (
+          <label
+            className="MediaToggle"
+            title="Only messages with a picture or file. Matches the caption, the file name and title, and text read from the picture."
+          >
+            <input
+              type="checkbox"
+              checked={Boolean(searchMedia)}
+              onChange={onSearchMediaChange}
+            />
+            <span>Search media</span>
+          </label>
+        )}
         <select
           value={sortOrder}
           onChange={onSortChange}
@@ -1625,14 +1698,7 @@ function mediaFileUrl(channelId, filename) {
   return `${base}files/${channelId}/${filename}`;
 }
 
-const MediaItem = ({
-  file,
-  channels,
-  users,
-  onSelect,
-  onCopy,
-  isCopied,
-}) => {
+const MediaItem = ({ file, channels, users, onSelect, onCopy, isCopied }) => {
   const href = messageLink(file.c, file.t);
   const src = mediaFileUrl(file.c, file.filename);
   const isImage = Number(file.is_image) === 1;

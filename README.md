@@ -128,6 +128,38 @@ because these pages get opened straight off a disk over `file://` where a CDN
 script tag renders an empty box and a module script is blocked outright. Every
 chart also carries its numbers as a table.
 
+### Searching pictures
+
+The search page has a **Search media** toggle. With it on, only messages that
+carry a saved picture or file are returned, each with its first file shown
+under the text. The words are matched against the caption, the file's name and
+title, and the text read out of the picture itself.
+
+Reading the pictures is a separate step, because it is slow and the search
+database is rebuilt from nothing every time:
+
+```bash
+apt install tesseract-ocr tesseract-ocr-fin   # Finnish and English models
+npm run ocr                                    # read what has not been read
+npm run build-db                               # index the readings
+```
+
+The readings are kept in `slack-archive/data/ocr.jsonl`, one line per file id,
+and a picture is never read twice. The file can be copied between machines, so
+the first pass over a large archive can run on a fast one and the nightly top-up
+on a slow one. A picture with nothing legible is remembered too, and a failure
+is not, so it is tried again next time.
+
+Only public and private channels are read. A picture in a direct message, or in
+a channel whose kind is unknown, is never opened, and the index refuses its text
+a second time even if a reading for it exists. Words Tesseract was not sure of
+are dropped, and a reading shorter than twelve characters counts as nothing, so
+a photograph does not match queries it has nothing to do with.
+
+The text read from a picture sits in its own column of the full-text index.
+A result shows the message as it was written, never a filename or a page of
+screenshot text as though somebody had typed it.
+
 ### What is missing, said out loud
 
 An archive is only as complete as its runs, and a run that never happened is

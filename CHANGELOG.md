@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Added
+- **"Search media" toggle on the search page**: limits a search to messages that carry a saved picture or file, and shows the first file under each result with a count of the rest. It can also list media with no text at all. The state is kept in the address as `withmedia=1`, and the toggle is hidden when the page has fallen back to the in-browser index, which holds messages only.
+- **Searching what a picture says**: `npm run ocr` reads the text out of pictures with Tesseract (`fin+eng`) and remembers each reading in `data/ocr.jsonl`; `npm run build-db` indexes them. Only public and private channels are read, and the index refuses the text of anything else.
+
+### Changed
+- **Search results show the message as written**: the names and titles of attached files used to be appended to the message text in the full-text index, and a result displayed that appended text. They are now in a column of their own, so a result no longer ends with a filename nobody typed. Takes effect once `search.db` is rebuilt.
+
 ## [v26.10.05.257] - 2026-10-05
 
 ### Fixed

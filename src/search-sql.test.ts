@@ -277,3 +277,55 @@ describe("the media query", () => {
     expect(params).toEqual([12]);
   });
 });
+
+describe("the media toggle", () => {
+  it("asks for nothing without text or a filter", () => {
+    expect(buildSearchSql({ query: "" })).toBeUndefined();
+  });
+
+  it("is a filter in its own right, so it can list media with no text", () => {
+    const built = buildSearchSql({ query: "", media: true })!;
+
+    expect(built.sql).toContain("from messages m");
+    expect(built.sql).toContain("mf.message_id = m.id");
+    expect(built.sql).toContain("mf.filename is not null");
+  });
+
+  it("limits a text search to messages that carry a saved file", () => {
+    const built = buildSearchSql({ query: "kokous", media: true })!;
+
+    expect(built.sql).toContain("from messages_fts f");
+    expect(built.sql).toContain("mf.message_id = f.id");
+  });
+
+  it("describes the first file on each row, and counts the rest", () => {
+    const { sql } = buildSearchSql({ query: "kokous", media: true })!;
+
+    for (const column of [
+      "file_name",
+      "file_is_image",
+      "file_label",
+      "file_count",
+    ]) {
+      expect(sql).toContain(column);
+    }
+  });
+
+  it("leaves an ordinary search exactly as it was", () => {
+    const { sql } = buildSearchSql({ query: "kokous" })!;
+
+    expect(sql).not.toContain("files");
+    expect(sql).not.toContain("file_name");
+  });
+
+  it("uses the recent index too", () => {
+    const { sql } = buildSearchSql({
+      query: "kokous",
+      media: true,
+      recent: true,
+    })!;
+
+    expect(sql).toContain("from messages_recent_fts f");
+    expect(sql).toContain("mf.message_id = f.id");
+  });
+});

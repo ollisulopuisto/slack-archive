@@ -103,6 +103,8 @@ export type SearchMessage = {
      * point keeps that around.
      */
     filename?: string;
+    /** Text read out of the picture. See ocr.ts. */
+    ocr?: string;
   }>;
 };
 

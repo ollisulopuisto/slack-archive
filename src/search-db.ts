@@ -15,6 +15,7 @@ export type SearchDatabase = InstanceType<typeof Database>;
 
 import { filterResultsByPhrases, parseSearchQuery } from "./search-query.js";
 import { ChannelKind } from "./interfaces.js";
+import { isOcrAllowedKind } from "./ocr.js";
 
 // The search database is SQLite compiled to WebAssembly, not a native addon.
 // It used to be `sqlite3`, which is node-gyp built: every new Node release
@@ -47,6 +48,11 @@ export interface SearchDbFile {
   mimetype?: string;
   /** The name it was saved under, e.g. `F01QV8YFY5P.jpeg`. See archivedFileName. */
   filename?: string;
+  /**
+   * What was legible in the picture, from the OCR step. Indexed, never stored:
+   * like a filename it is a way to find the message, not something anyone said.
+   */
+  ocr?: string;
 }
 
 export interface SearchDbReaction {
@@ -96,7 +102,7 @@ export interface SearchDbMessage {
  */
 const IMAGE_FILETYPES = new Set(["jpg", "jpeg", "png", "gif", "webp", "heic"]);
 
-function isImageFile(file: SearchDbFile): boolean {
+export function isImageFile(file: SearchDbFile): boolean {
   if (file.mimetype && file.mimetype.startsWith("image/")) return true;
   return IMAGE_FILETYPES.has((file.filetype || "").toLowerCase());
 }
@@ -109,19 +115,31 @@ function isImageFile(file: SearchDbFile): boolean {
  * caption. Such a message has an empty `message`, so no search term reaches
  * it - the filename is the only thing anybody could remember about it.
  *
- * This text goes into the INDEX only. `messages.message` keeps what was
- * actually written, because the bot echoes that back, and echoing a filename
- * as though someone had typed it would be a small lie in every result.
+ * Text read out of a picture goes in the same way, but only when the caller
+ * says the channel may have its pictures read (`allowOcr`). The OCR step
+ * already declines to read pictures in direct messages; refusing again here
+ * means a stale cache, or a file id that moved between channels, cannot put a
+ * private screenshot's text into the index.
+ *
+ * This text goes into the INDEX only, and into a column of its own. `message`
+ * in the index is what was actually written, so a search result can show it as
+ * the message without echoing a filename, or a page of text read from a
+ * screenshot, as though someone had typed it. A query without a column name
+ * matches both columns, which is what makes the picture findable.
  */
-function indexableText(message: SearchDbMessage): string {
-  const parts = [message.m || ""];
+function indexableText(
+  message: SearchDbMessage,
+  allowOcr: boolean,
+): { message: string; attached: string } {
+  const attached: Array<string> = [];
 
   for (const file of message.files || []) {
-    if (file.name) parts.push(file.name);
-    if (file.title) parts.push(file.title);
+    if (file.name) attached.push(file.name);
+    if (file.title) attached.push(file.title);
+    if (allowOcr && file.ocr) attached.push(file.ocr);
   }
 
-  return parts.filter((part) => part.length > 0).join(" ");
+  return { message: message.m || "", attached: attached.join(" ") };
 }
 
 export interface SearchDbInput {
@@ -290,10 +308,10 @@ export async function buildSearchDatabase(
       message TEXT
     )`);
     db.exec(
-      "CREATE VIRTUAL TABLE messages_fts USING fts5(id UNINDEXED, channel_id UNINDEXED, user_id UNINDEXED, timestamp UNINDEXED, parent_timestamp UNINDEXED, message, prefix='2 3')",
+      "CREATE VIRTUAL TABLE messages_fts USING fts5(id UNINDEXED, channel_id UNINDEXED, user_id UNINDEXED, timestamp UNINDEXED, parent_timestamp UNINDEXED, message, attached, prefix='2 3')",
     );
     db.exec(
-      "CREATE VIRTUAL TABLE messages_recent_fts USING fts5(id UNINDEXED, channel_id UNINDEXED, user_id UNINDEXED, timestamp UNINDEXED, parent_timestamp UNINDEXED, message, prefix='2 3')",
+      "CREATE VIRTUAL TABLE messages_recent_fts USING fts5(id UNINDEXED, channel_id UNINDEXED, user_id UNINDEXED, timestamp UNINDEXED, parent_timestamp UNINDEXED, message, attached, prefix='2 3')",
     );
 
     // The two questions the search page asks without any text to match on:
@@ -440,12 +458,12 @@ export async function buildSearchDatabase(
     // every match, which on a common word is more than the page may fetch.
     // So rows wait here and move across in order once all channels are in.
     db.exec(
-      "CREATE TEMP TABLE fts_stage (id TEXT, channel_id TEXT, user_id TEXT, timestamp TEXT, parent_timestamp TEXT, message TEXT)",
+      "CREATE TEMP TABLE fts_stage (id TEXT, channel_id TEXT, user_id TEXT, timestamp TEXT, parent_timestamp TEXT, message TEXT, attached TEXT)",
     );
     const ftsStmt = db.prepare(
       `INSERT INTO fts_stage
-       (id, channel_id, user_id, timestamp, parent_timestamp, message)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+       (id, channel_id, user_id, timestamp, parent_timestamp, message, attached)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
     // INSERT OR REPLACE because one file id can appear more than once: Slack
     // reuses it when a file is re-shared into another message. Last write
@@ -504,14 +522,15 @@ export async function buildSearchDatabase(
           message.p ?? null,
           text,
         ]);
-        const indexed = indexableText(message);
+        const indexed = indexableText(message, isOcrAllowedKind(channel.kind));
         ftsStmt.run([
           id,
           channel.id,
           message.u ?? null,
           message.t,
           message.p ?? null,
-          indexed,
+          indexed.message,
+          indexed.attached,
         ]);
 
         for (const reaction of message.reactions || []) {
@@ -559,8 +578,8 @@ export async function buildSearchDatabase(
 
     db.exec(
       `INSERT INTO messages_fts
-       (id, channel_id, user_id, timestamp, parent_timestamp, message)
-       SELECT id, channel_id, user_id, timestamp, parent_timestamp, message
+       (id, channel_id, user_id, timestamp, parent_timestamp, message, attached)
+       SELECT id, channel_id, user_id, timestamp, parent_timestamp, message, attached
        FROM fts_stage ORDER BY CAST(timestamp AS REAL), id`,
     );
     db.exec("DROP TABLE fts_stage");
@@ -573,8 +592,8 @@ export async function buildSearchDatabase(
     const cutoff = recentCutoff !== undefined ? recentCutoff : defaultCutoff;
     db.run(
       `INSERT INTO messages_recent_fts
-       (id, channel_id, user_id, timestamp, parent_timestamp, message)
-       SELECT id, channel_id, user_id, timestamp, parent_timestamp, message
+       (id, channel_id, user_id, timestamp, parent_timestamp, message, attached)
+       SELECT id, channel_id, user_id, timestamp, parent_timestamp, message, attached
        FROM messages_fts
        WHERE timestamp >= ?
        ORDER BY rowid`,
