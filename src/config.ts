@@ -279,6 +279,14 @@ export const PAGES_INDEX_PATH = path.join(HTML_DIR, "pages.js");
  */
 export const SIDEBAR_PATH = path.join(DATA_DIR, "sidebar.html");
 /**
+ * What the OCR step has read out of the pictures, one line per file.
+ *
+ * In data/ for the same reason as the sidebar: a build input, not a page. It is
+ * kept apart from search.db because that is rebuilt from nothing every time and
+ * reading the pictures is the slow part. See ocr.ts.
+ */
+export const OCR_CACHE_PATH = path.join(DATA_DIR, "ocr.jsonl");
+/**
  * Every shortcode this archive can turn into an emoji, for the search page.
  *
  * Beside the pages rather than in data/ because it is one of them: the search

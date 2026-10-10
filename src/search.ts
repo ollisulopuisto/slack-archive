@@ -14,6 +14,7 @@ import {
   SEARCH_EXCLUDE_KINDS,
   SEARCH_EXCLUDE_USERS,
   SEARCH_INCLUDE_BOTS,
+  OCR_CACHE_PATH,
   SEARCH_DATA_PATH,
   SEARCH_DB_PATH,
   SEARCH_PATH,
@@ -32,6 +33,7 @@ import {
   getUsers,
 } from "./data-load.js";
 import { getEmojiIndex } from "./emoji.js";
+import { loadOcrCache, withOcr } from "./ocr.js";
 import { buildSearchDatabase } from "./search-db.js";
 import {
   botUserIds,
@@ -111,6 +113,7 @@ export async function createSearchDatabase(spinner: Ora) {
   const existingData = await getSearchFile();
   const users = await getUsers();
   const channels = await getChannels();
+  const ocr = await loadOcrCache(OCR_CACHE_PATH);
 
   const names: Record<string, string> = {};
   for (const userId in users) {
@@ -158,10 +161,13 @@ export async function createSearchDatabase(spinner: Ora) {
       spinner.render();
     },
     loadMessages: async (channelId) => {
-      const messages = toSearchMessages(await getMessages(channelId, true), {
-        hiddenUsers,
-        includeBots: SEARCH_INCLUDE_BOTS,
-      });
+      const messages = withOcr(
+        toSearchMessages(await getMessages(channelId, true), {
+          hiddenUsers,
+          includeBots: SEARCH_INCLUDE_BOTS,
+        }),
+        ocr,
+      );
 
       // Fall back to existing search data if the raw channel JSON file is
       // empty or missing - filtered the same way. The fallback reads the
