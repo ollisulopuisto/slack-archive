@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [v26.10.12.258] - 2026-10-12
 
 ### Added
 - **"Search media" toggle on the search page**: limits a search to messages that carry a saved picture or file, and shows the first file under each result with a count of the rest. It can also list media with no text at all. The state is kept in the address as `withmedia=1`, and the toggle is hidden when the page has fallen back to the in-browser index, which holds messages only.
