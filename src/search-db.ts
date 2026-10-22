@@ -332,6 +332,14 @@ export async function buildSearchDatabase(
     // answer it - they are keyed on the column that is not being filtered.
     db.exec("CREATE INDEX messages_ts ON messages (timestamp DESC)");
 
+    // The replies to a message, found by the message they answer. The search
+    // page counts them for every result it shows, and without this each count
+    // is a walk of the whole table. Partial, because most messages are not
+    // replies and the index ships in the file the browser downloads.
+    db.exec(
+      "CREATE INDEX messages_thread ON messages (channel_id, parent_timestamp) WHERE parent_timestamp IS NOT NULL",
+    );
+
     // Attachments in their own table, tied to the message that carried them.
     // Channel kind reaches a file through its message, so the one gate that
     // withholds direct messages withholds their attachments too. A second

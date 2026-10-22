@@ -124,6 +124,25 @@ function firstFileColumns(messageId: string) {
 }
 
 /**
+ * How many reacted to a message, and how many replied in its thread, as
+ * columns of the result row.
+ *
+ * The reaction total is the sum of the per-emoji counts, which are Slack's own
+ * (see search-db.ts). Replies are the messages whose parent is this one. Both
+ * are correlated subqueries, so each row shown costs an index probe and a
+ * message with three reactions is still one result.
+ */
+function signalColumns(
+  messageId: string,
+  channelId: string,
+  timestamp: string,
+) {
+  return `,
+      (select coalesce(sum(sr.count), 0) from reactions sr where sr.message_id = ${messageId}) reaction_count,
+      (select count(*) from messages tr where tr.channel_id = ${channelId} and tr.parent_timestamp is not null and tr.parent_timestamp = ${timestamp}) reply_count`;
+}
+
+/**
  * The query for one search, or nothing when there is nothing to ask.
  *
  * With text and default sort, the full-text index answers and orders by relevance.
@@ -208,7 +227,7 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
     params.push(limit);
 
     return {
-      sql: `select ${FTS_COLUMNS}${media ? firstFileColumns("f.id") : ""}
+      sql: `select ${FTS_COLUMNS}${signalColumns("f.id", "f.channel_id", "f.timestamp")}${media ? firstFileColumns("f.id") : ""}
     ${from}
    where ${where.join(" and ")}
    order by ${orderBy}
@@ -258,7 +277,7 @@ export function buildSearchSql(request: SearchRequest): SearchSql | undefined {
   params.push(limit);
 
   return {
-    sql: `select ${MESSAGE_COLUMNS}${media ? firstFileColumns("m.id") : ""}
+    sql: `select ${MESSAGE_COLUMNS}${signalColumns("m.id", "m.channel_id", "m.timestamp")}${media ? firstFileColumns("m.id") : ""}
     ${from}
    where ${where.join(" and ")}
    order by ${orderBy}

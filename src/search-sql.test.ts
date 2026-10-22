@@ -329,3 +329,29 @@ describe("the media toggle", () => {
     expect(sql).toContain("mf.message_id = f.id");
   });
 });
+
+describe("reactions and replies on each result", () => {
+  it("counts both for a text search", () => {
+    const { sql } = buildSearchSql({ query: "kokous" })!;
+
+    expect(sql).toContain("reaction_count");
+    expect(sql).toContain("reply_count");
+    expect(sql).toContain("tr.parent_timestamp = f.timestamp");
+  });
+
+  it("counts both for a search by person or channel alone", () => {
+    const { sql } = buildSearchSql({ query: "", user: "U1" })!;
+
+    expect(sql).toContain("reaction_count");
+    expect(sql).toContain("tr.parent_timestamp = m.timestamp");
+    expect(sql).toContain("sr.message_id = m.id");
+  });
+
+  it("keeps the replies of one channel apart from another's", () => {
+    // A timestamp is only unique within its channel, so a reply count that
+    // ignored the channel would add up the threads of unrelated conversations.
+    const { sql } = buildSearchSql({ query: "kokous" })!;
+
+    expect(sql).toContain("tr.channel_id = f.channel_id");
+  });
+});

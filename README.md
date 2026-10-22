@@ -160,6 +160,13 @@ The text read from a picture sits in its own column of the full-text index.
 A result shows the message as it was written, never a filename or a page of
 screenshot text as though somebody had typed it.
 
+### Reactions and replies on results
+
+Each result shows how many people reacted to the message and how many replied
+in its thread, after the timestamp. The reaction total is Slack's own count, the
+sum over every emoji. A reply counts only if it is in the archive, so a thread
+whose replies were withheld or excluded shows fewer than Slack did.
+
 ### What is missing, said out loud
 
 An archive is only as complete as its runs, and a run that never happened is
