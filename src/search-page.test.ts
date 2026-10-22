@@ -117,3 +117,85 @@ describe("the search page's scripts", () => {
     }).not.toThrow();
   });
 });
+
+describe("the reactions and replies on a result", () => {
+  async function renderResult(message: Record<string, unknown>) {
+    const React = await import("react");
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const vm = await import("vm");
+    const appSource = fs.readFileSync(
+      path.join(here, "../lib/search-app.js"),
+      "utf8",
+    );
+    const stripped = appSource
+      .replace(/^import .+;?\n/gm, "")
+      .replace(/export \{\};\n?/g, "");
+
+    const context = vm.createContext({
+      React: React.default || React,
+      ReactDOM: { render: () => {} },
+      window: {
+        location: { search: "" },
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        SEARCH_INDEXES: { db: true },
+        SEARCH_METADATA: { channels: {}, users: {} },
+      },
+      URLSearchParams: globalThis.URLSearchParams,
+      document: {
+        getElementById: () => ({}),
+        baseURI: "http://localhost/",
+      },
+      splitEmoji: () => [],
+      splitSearchHighlight: () => [],
+      messageLink: () => "#",
+      console,
+    });
+    vm.runInContext(stripped, context);
+
+    const Message = vm.runInContext("Message", context);
+    return renderToStaticMarkup(
+      React.createElement(Message, {
+        message: {
+          id: "1",
+          c: "C1",
+          u: "U1",
+          t: "123.456",
+          m_text: "hei",
+          ...message,
+        },
+        channels: { C1: "general" },
+        users: { U1: "alice" },
+        query: "",
+      }),
+    );
+  }
+
+  it("shows how many reacted and how many replied", async () => {
+    const html = await renderResult({ reaction_count: 5, reply_count: 2 });
+
+    expect(html).toContain("5 reactions");
+    expect(html).toContain("2 replies");
+  });
+
+  it("says one reaction and one reply in the singular", async () => {
+    const html = await renderResult({ reaction_count: 1, reply_count: 1 });
+
+    expect(html).toContain("1 reaction<");
+    expect(html).toContain("1 reply<");
+  });
+
+  it("shows nothing for a message nobody reacted to or replied to", async () => {
+    const html = await renderResult({ reaction_count: 0, reply_count: 0 });
+
+    expect(html).not.toContain("reaction");
+    expect(html).not.toContain("repl");
+  });
+
+  it("shows nothing from a search that did not count them", async () => {
+    // The fallback index in the browser has no counts to give.
+    const html = await renderResult({});
+
+    expect(html).not.toContain("MessageSignal");
+  });
+});

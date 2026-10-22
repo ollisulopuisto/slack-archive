@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Reactions and replies on each search result**: a result shows how many people reacted to its message and how many replied in its thread, next to the timestamp. The database gains an index on replies (`messages_thread`) so the counts stay cheap to read over range requests. Takes effect once `search.db` is rebuilt.
+
 ## [v26.10.12.258] - 2026-10-12
 
 ### Added

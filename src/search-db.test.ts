@@ -957,3 +957,104 @@ describe("search optimization indexes", () => {
     db.close();
   });
 });
+
+// The counts shown on each search result. A reply names the message it answers
+// by timestamp, and a timestamp means something only inside its channel, so the
+// fixture reuses one timestamp in two channels on purpose.
+describe("reaction and reply counts on results", () => {
+  const ROOT = { t: "1700000600.0001", u: "U1", m: "ketjun alku kokous" };
+  const SAME_TS_OTHER_CHANNEL = {
+    t: "1700000600.0001",
+    u: "U2",
+    m: "toisen kanavan viesti kokous",
+  };
+
+  let countsPath: string;
+
+  beforeAll(async () => {
+    countsPath = path.join(dir, "counts.db");
+    await buildSearchDatabase(countsPath, {
+      users: USERS,
+      channels: [
+        { id: "CA", name: "alpha", kind: "public" },
+        { id: "CB", name: "beta", kind: "public" },
+      ],
+      loadMessages: async (channelId) => {
+        if (channelId === "CA") {
+          return [
+            {
+              ...ROOT,
+              reactions: [
+                { name: "cat", users: ["U1", "U2"], count: 2 },
+                { name: "joy", count: 3 },
+              ],
+            },
+            { t: "1700000601.0001", u: "U2", m: "vastaus yksi", p: ROOT.t },
+            { t: "1700000602.0001", u: "U1", m: "vastaus kaksi", p: ROOT.t },
+            { t: "1700000603.0001", u: "U1", m: "ei vastausta kokous" },
+          ];
+        }
+        return [SAME_TS_OTHER_CHANNEL];
+      },
+    });
+  });
+
+  // The counts as the search page reads them: the row for one message, out of
+  // the messages one person wrote, which is the query the page runs for them.
+  function countsFor(user: string, channelId: string, timestamp: string) {
+    const { sql, params } = buildSearchSql({ query: "", user, limit: 50 })!;
+    const db = openSearchDatabase(countsPath);
+    const rows = db.all(sql, params) as unknown as Array<{
+      c: string;
+      t: string;
+      reaction_count: number;
+      reply_count: number;
+    }>;
+    db.close();
+
+    const row = rows.find((r) => r.c === channelId && r.t === timestamp);
+    return {
+      reaction_count: row?.reaction_count,
+      reply_count: row?.reply_count,
+    };
+  }
+
+  it("sums the reactions on a message across emoji", () => {
+    expect(countsFor("U1", "CA", ROOT.t).reaction_count).toBe(5);
+  });
+
+  it("counts the replies to a message", () => {
+    expect(countsFor("U1", "CA", ROOT.t).reply_count).toBe(2);
+  });
+
+  it("gives zero, not nothing, when there is nothing to count", () => {
+    expect(countsFor("U1", "CA", "1700000603.0001")).toEqual({
+      reaction_count: 0,
+      reply_count: 0,
+    });
+  });
+
+  it("does not count another channel's replies at the same timestamp", () => {
+    // U2's message in CB shares ROOT's timestamp; CA's two replies must not
+    // be counted against it.
+    expect(countsFor("U2", "CB", ROOT.t)).toEqual({
+      reaction_count: 0,
+      reply_count: 0,
+    });
+  });
+
+  it("finds the replies to a message without reading the whole table", () => {
+    const db = openSearchDatabase(countsPath);
+    const plan = db.all(
+      `explain query plan select count(*) from messages tr
+        where tr.channel_id = ? and tr.parent_timestamp is not null
+          and tr.parent_timestamp = ?`,
+      ["CA", ROOT.t],
+    ) as Array<{ detail: string }>;
+    db.close();
+
+    expect(plan.map((row) => row.detail).join(" ")).toMatch(
+      /using (covering )?index messages_thread/i,
+    );
+  });
+});

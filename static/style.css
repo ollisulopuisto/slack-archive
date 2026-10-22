@@ -1264,6 +1264,19 @@ mark.search-highlight {
   color: var(--badge-ink);
 }
 
+/* How many reacted and how many replied, after the timestamp. Plain text in
+   the muted ink: it is a signal to weigh a result by, not a second heading. */
+.MessageSignal {
+  color: var(--ink-muted);
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+.MessageSignal + .MessageSignal::before {
+  content: "·";
+  margin-right: 6px;
+}
+
 /* "From" and "To" beside their pickers. A bare date box says nothing about
    which end of the range it is, and two of them side by side say less. */
 .DateFilter {

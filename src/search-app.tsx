@@ -1257,6 +1257,16 @@ const Message = ({ message, channels, users, query }) => {
           )}
           <span className="MetaSeparator">·</span>
           <Timestamp timestamp={message.t} />
+          {Number(message.reaction_count) > 0 && (
+            <span className="MessageSignal">
+              {plural(message.reaction_count, "reaction")}
+            </span>
+          )}
+          {Number(message.reply_count) > 0 && (
+            <span className="MessageSignal">
+              {plural(message.reply_count, "reply", "replies")}
+            </span>
+          )}
         </p>
         <p className="MessageBody">
           <strong>@{users[message.u] || message.u}: </strong>
@@ -1292,6 +1302,10 @@ const MessageFile = ({ message }) => {
     </p>
   );
 };
+
+/** "1 reaction", "2 reactions": the count is what the page shows, the word follows it. */
+const plural = (count, one, many = `${one}s`) =>
+  `${count} ${Number(count) === 1 ? one : many}`;
 
 const Timestamp = ({ timestamp }) => {
   const splitTs = timestamp.split(".") || [];
