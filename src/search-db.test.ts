@@ -999,37 +999,44 @@ describe("reaction and reply counts on results", () => {
     });
   });
 
-  // The counts as the search page reads them: the row for one message, out of
+  // What the search page reads off a result: the row for one message, out of
   // the messages one person wrote, which is the query the page runs for them.
-  function countsFor(user: string, channelId: string, timestamp: string) {
+  function resultFor(user: string, channelId: string, timestamp: string) {
     const { sql, params } = buildSearchSql({ query: "", user, limit: 50 })!;
     const db = openSearchDatabase(countsPath);
     const rows = db.all(sql, params) as unknown as Array<{
       c: string;
       t: string;
-      reaction_count: number;
+      reaction_list: string | null;
       reply_count: number;
     }>;
     db.close();
 
     const row = rows.find((r) => r.c === channelId && r.t === timestamp);
+
     return {
-      reaction_count: row?.reaction_count,
+      // The order of a group_concat is not promised, and the page sorts.
+      reactions: row?.reaction_list
+        ? row.reaction_list.split("\u001e").sort()
+        : null,
       reply_count: row?.reply_count,
     };
   }
 
-  it("sums the reactions on a message across emoji", () => {
-    expect(countsFor("U1", "CA", ROOT.t).reaction_count).toBe(5);
+  it("lists every emoji on a message with its count", () => {
+    expect(resultFor("U1", "CA", ROOT.t).reactions).toEqual([
+      "cat\u001f2",
+      "joy\u001f3",
+    ]);
   });
 
   it("counts the replies to a message", () => {
-    expect(countsFor("U1", "CA", ROOT.t).reply_count).toBe(2);
+    expect(resultFor("U1", "CA", ROOT.t).reply_count).toBe(2);
   });
 
-  it("gives zero, not nothing, when there is nothing to count", () => {
-    expect(countsFor("U1", "CA", "1700000603.0001")).toEqual({
-      reaction_count: 0,
+  it("gives no reactions, and zero replies, when there is nothing to show", () => {
+    expect(resultFor("U1", "CA", "1700000603.0001")).toEqual({
+      reactions: null,
       reply_count: 0,
     });
   });
@@ -1037,8 +1044,8 @@ describe("reaction and reply counts on results", () => {
   it("does not count another channel's replies at the same timestamp", () => {
     // U2's message in CB shares ROOT's timestamp; CA's two replies must not
     // be counted against it.
-    expect(countsFor("U2", "CB", ROOT.t)).toEqual({
-      reaction_count: 0,
+    expect(resultFor("U2", "CB", ROOT.t)).toEqual({
+      reactions: null,
       reply_count: 0,
     });
   });

@@ -146,7 +146,10 @@ describe("the reactions and replies on a result", () => {
         getElementById: () => ({}),
         baseURI: "http://localhost/",
       },
-      splitEmoji: () => [],
+      splitEmoji: (text: string) =>
+        text === ":party:"
+          ? [{ kind: "image", name: "party", ref: "emojis/party.png" }]
+          : [{ kind: "text", text }],
       splitSearchHighlight: () => [],
       messageLink: () => "#",
       console,
@@ -171,31 +174,69 @@ describe("the reactions and replies on a result", () => {
     );
   }
 
-  it("shows how many reacted and how many replied", async () => {
-    const html = await renderResult({ reaction_count: 5, reply_count: 2 });
+  const PAIR = "\u001e";
+  const FIELD = "\u001f";
+  const reactions = (...pairs: Array<[string, number]>) =>
+    pairs.map(([name, count]) => `${name}${FIELD}${count}`).join(PAIR);
 
-    expect(html).toContain("5 reactions");
-    expect(html).toContain("2 replies");
+  it("shows each emoji with how many reacted with it", async () => {
+    const html = await renderResult({
+      reaction_list: reactions(["cat", 2], ["joy", 1]),
+    });
+
+    expect(html).toContain("MessageReaction");
+    expect(html).toContain(":cat:");
+    expect(html).toContain(">2<");
+    expect(html).toContain(":joy:");
+    expect(html).toContain(">1<");
   });
 
-  it("says one reaction and one reply in the singular", async () => {
-    const html = await renderResult({ reaction_count: 1, reply_count: 1 });
+  it("puts the most reacted emoji first, whatever order the query gave", async () => {
+    const html = await renderResult({
+      reaction_list: reactions(["joy", 1], ["cat", 5], ["eyes", 5]),
+    });
 
-    expect(html).toContain("1 reaction<");
-    expect(html).toContain("1 reply<");
+    // Equal counts fall back to the name, so the order is the same each time.
+    expect(html.indexOf(":cat:")).toBeLessThan(html.indexOf(":eyes:"));
+    expect(html.indexOf(":eyes:")).toBeLessThan(html.indexOf(":joy:"));
+  });
+
+  it("draws a custom emoji as its picture", async () => {
+    const html = await renderResult({
+      reaction_list: reactions(["party", 3]),
+    });
+
+    expect(html).toContain('src="html/emojis/party.png"');
+    expect(html).toContain(">3<");
+  });
+
+  it("keeps a skin tone in the emoji's name", async () => {
+    // The colons in the name are why the list is not split on a colon.
+    const html = await renderResult({
+      reaction_list: reactions(["+1::skin-tone-3", 2]),
+    });
+
+    expect(html).toContain(":+1::skin-tone-3:");
+    expect(html).toContain(">2<");
+  });
+
+  it("shows how many replied, in the singular for one", async () => {
+    expect(await renderResult({ reply_count: 2 })).toContain("2 replies");
+    expect(await renderResult({ reply_count: 1 })).toContain("1 reply<");
   });
 
   it("shows nothing for a message nobody reacted to or replied to", async () => {
-    const html = await renderResult({ reaction_count: 0, reply_count: 0 });
+    const html = await renderResult({ reaction_list: null, reply_count: 0 });
 
-    expect(html).not.toContain("reaction");
+    expect(html).not.toContain("MessageReaction");
     expect(html).not.toContain("repl");
   });
 
-  it("shows nothing from a search that did not count them", async () => {
-    // The fallback index in the browser has no counts to give.
+  it("shows nothing from a search that did not ask", async () => {
+    // The fallback index in the browser has neither to give.
     const html = await renderResult({});
 
+    expect(html).not.toContain("MessageReaction");
     expect(html).not.toContain("MessageSignal");
   });
 });

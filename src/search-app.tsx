@@ -1257,11 +1257,6 @@ const Message = ({ message, channels, users, query }) => {
           )}
           <span className="MetaSeparator">·</span>
           <Timestamp timestamp={message.t} />
-          {Number(message.reaction_count) > 0 && (
-            <span className="MessageSignal">
-              {plural(message.reaction_count, "reaction")}
-            </span>
-          )}
           {Number(message.reply_count) > 0 && (
             <span className="MessageSignal">
               {plural(message.reply_count, "reply", "replies")}
@@ -1273,8 +1268,58 @@ const Message = ({ message, channels, users, query }) => {
           <EmojiText text={message.m_text} query={query} />
         </p>
         {message.file_name && <MessageFile message={message} />}
+        <MessageReactions list={message.reaction_list} />
       </li>
     </a>
+  );
+};
+
+/**
+ * The reactions of a result as the search query hands them over: emoji name,
+ * character 31, count, with character 30 between emoji. See signalColumns in
+ * search-sql.ts for why those two. Most reacted first, then by name, so the
+ * order is the same on every search.
+ */
+function parseReactions(list) {
+  if (!list) return [];
+
+  return String(list)
+    .split("\u001e")
+    .map((pair) => {
+      const [name, count] = pair.split("\u001f");
+
+      return { name, count: Number(count) };
+    })
+    .filter((reaction) => reaction.name && reaction.count > 0)
+    .sort(
+      (a, b) =>
+        b.count - a.count || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
+    );
+}
+
+/**
+ * What people reacted with, drawn the way Slack draws it: the emoji, then how
+ * many. A custom emoji is its picture where the archive has one, and its
+ * shortcode where it does not, which is what the channel pages do too.
+ */
+const MessageReactions = ({ list }) => {
+  const reactions = parseReactions(list);
+
+  if (reactions.length === 0) return null;
+
+  return (
+    <p className="MessageReactions">
+      {reactions.map((reaction) => (
+        <span
+          key={reaction.name}
+          className="MessageReaction"
+          title={`:${reaction.name}:`}
+        >
+          <EmojiText text={`:${reaction.name}:`} query="" />
+          <span className="MessageReactionCount">{reaction.count}</span>
+        </span>
+      ))}
+    </p>
   );
 };
 

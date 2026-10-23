@@ -124,13 +124,19 @@ function firstFileColumns(messageId: string) {
 }
 
 /**
- * How many reacted to a message, and how many replied in its thread, as
- * columns of the result row.
+ * What people reacted with and how many replied in the thread, as columns of
+ * the result row.
  *
- * The reaction total is the sum of the per-emoji counts, which are Slack's own
- * (see search-db.ts). Replies are the messages whose parent is this one. Both
- * are correlated subqueries, so each row shown costs an index probe and a
- * message with three reactions is still one result.
+ * `reaction_list` is every emoji on the message with its count, which is
+ * Slack's own (see search-db.ts), joined into one string so a message with
+ * three reactions is still one result: `name`, character 31, `count`, and
+ * character 30 between emoji. Control characters, because an emoji name can
+ * hold a colon (`+1::skin-tone-3`) and a printable separator could turn up in
+ * one. The page splits on the same two; see parseReactions in search-app.tsx.
+ * It is not ordered here: group_concat promises no order, so the page sorts.
+ *
+ * Replies are the messages whose parent is this one. Both are correlated
+ * subqueries, so each row shown costs an index probe.
  */
 function signalColumns(
   messageId: string,
@@ -138,7 +144,7 @@ function signalColumns(
   timestamp: string,
 ) {
   return `,
-      (select coalesce(sum(sr.count), 0) from reactions sr where sr.message_id = ${messageId}) reaction_count,
+      (select group_concat(sr.name || char(31) || sr.count, char(30)) from reactions sr where sr.message_id = ${messageId}) reaction_list,
       (select count(*) from messages tr where tr.channel_id = ${channelId} and tr.parent_timestamp is not null and tr.parent_timestamp = ${timestamp}) reply_count`;
 }
 

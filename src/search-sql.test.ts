@@ -331,18 +331,18 @@ describe("the media toggle", () => {
 });
 
 describe("reactions and replies on each result", () => {
-  it("counts both for a text search", () => {
+  it("lists the reactions and counts the replies for a text search", () => {
     const { sql } = buildSearchSql({ query: "kokous" })!;
 
-    expect(sql).toContain("reaction_count");
+    expect(sql).toContain("reaction_list");
     expect(sql).toContain("reply_count");
     expect(sql).toContain("tr.parent_timestamp = f.timestamp");
   });
 
-  it("counts both for a search by person or channel alone", () => {
+  it("does the same for a search by person or channel alone", () => {
     const { sql } = buildSearchSql({ query: "", user: "U1" })!;
 
-    expect(sql).toContain("reaction_count");
+    expect(sql).toContain("reaction_list");
     expect(sql).toContain("tr.parent_timestamp = m.timestamp");
     expect(sql).toContain("sr.message_id = m.id");
   });
