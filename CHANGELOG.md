@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v26.10.23.260] - 2026-10-23
+
+### Changed
+- **Reactions on search results are drawn as reactions**: under a result, each emoji is a pill with its own count, the way Slack shows them, instead of a single total in the header line. A custom emoji is its picture where the archive has one, and its shortcode where it does not. The number of replies stays in the header line. Takes effect with the next render; the database itself is unchanged.
+
 ## [v26.10.22.259] - 2026-10-22
 
 ### Added
