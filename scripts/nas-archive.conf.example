@@ -41,3 +41,19 @@ HEARTBEAT_URL_FILE="/root/.nas-heartbeat-url"
 # Slack tokens live here as <workspace>, not in the archive tree. The archive
 # tree is often on a share; this directory must not be.
 TOKEN_DIR="/root/.slack-archive/tokens"
+
+# Optional. Read the pictures on another machine (scripts/vps-ocr.sh) instead
+# of never. With OCR_HOST empty the two steps that talk to it do nothing.
+#
+# The NAS sends channels.json and the message files of public and private
+# channels - not the direct messages - to OCR_DIR/data there, and fetches
+# OCR_DIR/data/ocr.jsonl back before it builds the search indexes. Make the
+# directory first (mkdir -p DIR/data); the key should be one that machine
+# accepts for nothing but this.
+OCR_HOST=""
+OCR_KEY="/root/.ssh/slack-ocr-sync"
+# Relative to the account's home directory there, and the same place WORK points
+# to in vps-ocr.conf.
+OCR_DIR="slack-archive-ocr"
+OCR_PORT="22"
+OCR_KNOWN_HOSTS=""

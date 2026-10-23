@@ -66,10 +66,19 @@ export async function ocrImages() {
   );
   spinner.start();
 
+  // One picture at a time unless told otherwise. On a machine with cores to
+  // spare, OCR_CONCURRENCY=2 reads two at once, each Tesseract held to one
+  // thread so they do not take the cores from each other.
+  const concurrency = Math.max(
+    1,
+    Math.floor(Number(process.env.OCR_CONCURRENCY) || 1),
+  );
+
   const result = await readPending(candidates(), {
     cache,
     cachePath: OCR_CACHE_PATH,
-    reader: createTesseractReader(),
+    concurrency,
+    reader: createTesseractReader({ singleThread: concurrency > 1 }),
     onProgress: (done, candidate) => {
       spinner.text = `Reading pictures... ${done} (${candidate.id})`;
     },

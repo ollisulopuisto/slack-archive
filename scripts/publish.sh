@@ -142,8 +142,14 @@ say "2/7  staging"
 # they are 1.5 GB and only read.
 # The work directory itself survives: it holds the lock this run is using.
 rm -rf "$WORK/slack-archive"; mkdir -p "$WORK/slack-archive/data"
+#
+# ocr.jsonl is the text read out of the pictures, and the render builds the
+# search database from this directory. Without it the website's index is built
+# with no picture text in it however many pictures have been read. Missing is
+# fine - nothing has been read yet - and the index only uses it for the
+# channels this site publishes.
 for f in channels.json users.json slack-archive.json emojis.json \
-         user-names.json user-avatars.json user-status.json; do
+         user-names.json user-avatars.json user-status.json ocr.jsonl; do
   cp "$ARCHIVE/data/$f" "$WORK/slack-archive/data/$f" 2>/dev/null || true
 done
 # ONLY the channels this site publishes. The renderer already refuses to write

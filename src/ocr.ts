@@ -99,16 +99,28 @@ export type OcrReader = (imagePath: string) => Promise<string>;
  * than reading with the wrong one.
  */
 export function createTesseractReader(
-  options: { languages?: string; timeoutMs?: number } = {},
+  options: {
+    languages?: string;
+    timeoutMs?: number;
+    /**
+     * Keep each Tesseract process to one thread. It takes up to four on its
+     * own, so several of them at once on a small machine fight over the same
+     * cores and each runs slower than one alone would.
+     */
+    singleThread?: boolean;
+  } = {},
 ): OcrReader {
   const languages = options.languages ?? "fin+eng";
   const timeout = options.timeoutMs ?? 120_000;
+  const env = options.singleThread
+    ? { ...process.env, OMP_THREAD_LIMIT: "1" }
+    : process.env;
 
   return async (imagePath) => {
     const { stdout } = await execFileAsync(
       "tesseract",
       [imagePath, "stdout", "-l", languages, "tsv"],
-      { timeout, maxBuffer: 64 * 1024 * 1024 },
+      { timeout, maxBuffer: 64 * 1024 * 1024, env },
     );
 
     return parseTesseractTsv(stdout);
@@ -168,6 +180,11 @@ export interface OcrRunResult {
  * An empty reading is recorded too. "Nothing legible" is an answer, and
  * without it every photograph in the archive would be read again on every run.
  * A failure is not recorded: that may work next time.
+ *
+ * `concurrency` pictures are read at once, one worker each, all drawing from
+ * the same list. The default of one is the old behaviour. Readings are written
+ * one at a time whatever the number of workers, so two of them finishing
+ * together cannot leave half a line in the file.
  */
 export async function readPending(
   candidates: AsyncIterable<OcrCandidate> | Iterable<OcrCandidate>,
@@ -175,37 +192,69 @@ export async function readPending(
     cache: OcrCache;
     cachePath: string;
     reader: OcrReader;
+    concurrency?: number;
     onProgress?: (done: number, candidate: OcrCandidate) => void;
   },
 ): Promise<OcrRunResult> {
   const result: OcrRunResult = { read: 0, empty: 0, failed: 0, skipped: 0 };
+  const workers = Math.max(1, Math.floor(options.concurrency ?? 1));
   let done = 0;
 
-  for await (const candidate of candidates) {
-    if (options.cache.has(candidate.id)) {
-      result.skipped++;
-      continue;
+  const source = candidates as Partial<AsyncIterable<OcrCandidate>> &
+    Partial<Iterable<OcrCandidate>>;
+  const iterator: AsyncIterator<OcrCandidate> | Iterator<OcrCandidate> = source[
+    Symbol.asyncIterator
+  ]
+    ? source[Symbol.asyncIterator]!()
+    : source[Symbol.iterator]!();
+
+  // Each write waits for the one before it. A failed write rejects only the
+  // reading that asked for it, and the chain carries on.
+  let writes: Promise<unknown> = Promise.resolve();
+  const append = (record: OcrRecord) => {
+    const written = writes.then(() =>
+      appendOcrRecord(options.cachePath, record),
+    );
+    writes = written.catch(() => undefined);
+
+    return written;
+  };
+
+  const work = async () => {
+    for (;;) {
+      const next = await iterator.next();
+
+      if (next.done) return;
+
+      const candidate = next.value;
+
+      if (options.cache.has(candidate.id)) {
+        result.skipped++;
+        continue;
+      }
+
+      if (candidate.size !== undefined && candidate.size > OCR_MAX_BYTES) {
+        result.skipped++;
+        continue;
+      }
+
+      try {
+        const text = await options.reader(candidate.imagePath);
+
+        await append({ id: candidate.id, text });
+        options.cache.set(candidate.id, text);
+
+        if (text) result.read++;
+        else result.empty++;
+      } catch {
+        result.failed++;
+      }
+
+      options.onProgress?.(++done, candidate);
     }
+  };
 
-    if (candidate.size !== undefined && candidate.size > OCR_MAX_BYTES) {
-      result.skipped++;
-      continue;
-    }
-
-    try {
-      const text = await options.reader(candidate.imagePath);
-
-      await appendOcrRecord(options.cachePath, { id: candidate.id, text });
-      options.cache.set(candidate.id, text);
-
-      if (text) result.read++;
-      else result.empty++;
-    } catch {
-      result.failed++;
-    }
-
-    options.onProgress?.(++done, candidate);
-  }
+  await Promise.all(Array.from({ length: workers }, work));
 
   return result;
 }

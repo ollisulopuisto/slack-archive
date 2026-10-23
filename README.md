@@ -162,10 +162,45 @@ screenshot text as though somebody had typed it.
 
 ### Reactions and replies on results
 
-Each result shows how many people reacted to the message and how many replied
-in its thread, after the timestamp. The reaction total is Slack's own count, the
-sum over every emoji. A reply counts only if it is in the archive, so a thread
-whose replies were withheld or excluded shows fewer than Slack did.
+Under each result the reactions are drawn the way Slack draws them: a pill for
+each emoji with its count, the most reacted first. A custom emoji is its picture
+where the archive has one, and its shortcode where it does not. The number of
+replies in the thread is in the line above the message. The counts are Slack's
+own; a reply is counted only if it is in the archive, so a thread whose replies
+were withheld or excluded shows fewer than Slack did.
+
+### Reading the pictures on another machine
+
+`npm run ocr` reads one picture at a time and takes hours for a large archive,
+which is the one thing a NAS has least of. `OCR_CONCURRENCY=2 npm run ocr` reads
+two at once, each Tesseract held to one thread, and is safe to stop and start
+again: every reading is kept as it is made.
+
+To do the reading somewhere else and have the NAS use it, three scripts do the
+carrying and nothing in the archive changes:
+
+- `scripts/nas-archive.sh` sends `channels.json` and the message files of the
+  public and private channels - never the direct messages - to the other
+  machine, and fetches `ocr.jsonl` back before it builds the indexes. It does
+  both only if `OCR_HOST` is set in `nas.conf`; see `nas-archive.conf.example`.
+  It will not replace its readings with a shorter file.
+- `scripts/vps-ocr.sh` runs on the other machine, from cron or a timer. It
+  mounts the storage box the pictures are on, read only, builds a copy of the
+  release image with Tesseract added (once per version), and reads what has not
+  been read. It needs `podman`, `sshfs` and `fuse3`; see `vps-ocr.conf.example`.
+- `scripts/publish.sh` copies `ocr.jsonl` into the render, so the website's
+  index has the picture text too.
+
+Set it up in this order: make the directory the NAS sends to
+(`mkdir -p ~/slack-archive-ocr/data` on the other machine), give the NAS a key
+for that machine, give the other machine a read-only key for the storage box,
+fill in both config files, and run `vps-ocr.sh` once by hand after the NAS has
+sent. Name a version in `IMAGE`, not `:latest`: the other machine may be ARM,
+and only a tagged release is certain to carry an image for it.
+
+The message files of private channels end up on the machine that reads. They
+are the same files the NAS holds, and the same channels the search index for
+the bot already contains, but it is a second place they live.
 
 ### What is missing, said out loud
 
