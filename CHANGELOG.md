@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v26.10.23.261] - 2026-10-23
+
+### Added
+- **Reading the pictures on another machine**: `scripts/vps-ocr.sh` runs on a machine that is not the NAS, mounts the storage box the pictures are on (read only), adds Tesseract to a local copy of the release image, and reads what has not been read. `scripts/nas-archive.sh` sends it `channels.json` and the message files of public and private channels - never direct messages - and fetches `ocr.jsonl` back before it builds the indexes, but only if `OCR_HOST` is set in `nas.conf`. The NAS will not replace its readings with a shorter file. See the README and the two `.conf.example` files.
+- **`OCR_CONCURRENCY`**: `npm run ocr` can read several pictures at once, each Tesseract held to one thread, with the readings written one at a time. The default is still one.
+
+### Fixed
+- **The website's search index never had the text of pictures**: `publish.sh` builds the index from a staged directory and did not copy `ocr.jsonl` into it, so however many pictures had been read, only the NAS's own index used them. It is copied now. Takes effect once there are readings and the site is next published.
+
 ## [v26.10.23.260] - 2026-10-23
 
 ### Changed

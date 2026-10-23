@@ -1,0 +1,28 @@
+# Copy to ~/.slack-archive/vps-ocr.conf (or set VPS_OCR_CONF) and fill it in.
+# This file is the machine-specific half; the script in the repository is not.
+
+# The release to run, by version. Not :latest: the script builds a copy with
+# Tesseract added once per version, and only a tagged release is certain to
+# carry an image for this machine's architecture.
+IMAGE="ghcr.io/ollisulopuisto/slack-archive:VERSION"
+
+# Where the NAS puts channels.json and the message files (in WORK/data), where
+# the readings are written (WORK/data/ocr.jsonl), and where the pictures are
+# mounted while they are read (WORK/files). The NAS's OCR_DIR is this path
+# relative to the account's home directory.
+WORK="$HOME/slack-archive-ocr"
+
+# The storage box the pictures are on, and a key for it. Make a sub-account for
+# this that can only read: the script mounts read only, but the account is the
+# part that cannot be talked out of it.
+BOX="user-subN@host.example"
+BOX_KEY="$HOME/.ssh/slack-ocr-box"
+BOX_PORT="23"
+# Where the pictures start on the box: the directory that holds one directory
+# per channel.
+BOX_PATH="."
+BOX_KNOWN_HOSTS=""
+
+# How many pictures are read at once. One per core is the most that helps;
+# the default is every core this machine has.
+CONCURRENCY="2"

@@ -54,6 +54,14 @@ MEDIA_DEST="${MEDIA_DEST:-}"
 MEDIA_PORT="${MEDIA_PORT:-23}"
 MEDIA_KNOWN_HOSTS="${MEDIA_KNOWN_HOSTS:-}"
 
+# Reading the pictures on another machine. All optional: with OCR_HOST empty the
+# two steps below do nothing and say nothing.
+OCR_HOST="${OCR_HOST:-}"
+OCR_KEY="${OCR_KEY:-}"
+OCR_DIR="${OCR_DIR:-slack-archive-ocr}"
+OCR_PORT="${OCR_PORT:-22}"
+OCR_KNOWN_HOSTS="${OCR_KNOWN_HOSTS:-}"
+
 HEARTBEAT_PID=""
 
 LOG="$ROOT/logs/$WORKSPACE.log"
@@ -274,6 +282,103 @@ sync_media() {
   fi
 }
 
+# Reading the pictures is slow, and this machine is the wrong one to do it on:
+# the readings are made elsewhere (scripts/vps-ocr.sh) from files this machine
+# sends, and come back as ocr.jsonl. The search index is still built HERE, so
+# the file has to be here before it is.
+#
+# What follows is the ssh the OCR machine is reached with. The key is one that
+# machine accepts for nothing but this.
+ocr_configured() {
+  [ -n "$OCR_HOST" ] || return 1
+
+  if [ -z "$OCR_KEY" ] || [ ! -f "$OCR_KEY" ]; then
+    log "$1 SKIP: no key at ${OCR_KEY:-'(unset)'}"
+    return 1
+  fi
+
+  ocr_ssh="ssh -p $OCR_PORT -i $OCR_KEY -o StrictHostKeyChecking=yes -o BatchMode=yes"
+  if [ -n "$OCR_KNOWN_HOSTS" ]; then
+    ocr_ssh="$ocr_ssh -o UserKnownHostsFile=$OCR_KNOWN_HOSTS"
+  fi
+}
+
+# Fetch what the OCR machine has read. It is the only place the file is
+# written, so its copy is the one to keep - unless it is SHORTER than ours, in
+# which case something is wrong over there (a restored backup, an empty disk)
+# and replacing ours would throw away readings that took hours to make.
+fetch_ocr() {
+  ocr_configured "OCR FETCH" || return 0
+
+  fetched="$ARCHIVE/data/ocr.jsonl.fetched"
+
+  if rsync -t --timeout=300 -e "$ocr_ssh" \
+      "$OCR_HOST:$OCR_DIR/data/ocr.jsonl" "$fetched" >> "$LOG" 2>&1
+  then
+    have=0
+    [ -f "$ARCHIVE/data/ocr.jsonl" ] && have=$(wc -l < "$ARCHIVE/data/ocr.jsonl" | tr -d ' ')
+    got=$(wc -l < "$fetched" | tr -d ' ')
+
+    if [ "$got" -ge "$have" ]; then
+      mv "$fetched" "$ARCHIVE/data/ocr.jsonl"
+      log "OCR FETCH OK: $got readings"
+    else
+      rm -f "$fetched"
+      log "OCR FETCH KEPT: the OCR machine has $got readings and this one has $have; kept ours"
+    fi
+  else
+    status=$?
+    rm -f "$fetched"
+    # Not a failure of the archive: nothing has been read yet, or the machine
+    # is off. The index is built with whatever readings are already here.
+    log "OCR FETCH SKIP: exit $status (nothing read yet, or the machine is unreachable)"
+  fi
+
+  return 0
+}
+
+# Send what reading needs: channels.json and the message files of the channels
+# that may be read. Direct messages are not in the list, so they are not sent.
+# The list comes from the image because the NAS has no jq, and a list built in
+# shell from JSON is how a direct message ends up on another machine.
+#
+# The remote directory has to exist (mkdir -p DIR/data there once): the oldest
+# rsync this runs against creates only the last component of a path.
+push_ocr_inputs() {
+  ocr_configured "OCR PUSH" || return 0
+
+  if [ ! -f "$ARCHIVE/data/channels.json" ]; then
+    log "OCR PUSH SKIP: no channels.json in $ARCHIVE/data"
+    return 0
+  fi
+
+  list="$ROOT/logs/$WORKSPACE.ocr-inputs"
+
+  if ! "$DOCKER" run --rm \
+      --user "$RUN_AS" \
+      $GROUP_ADD_ARGS \
+      --entrypoint node \
+      -v "$ARCHIVE:/archive:ro" \
+      "$IMAGE" \
+      scripts/list-ocr-inputs.mjs /archive > "$list" 2>> "$LOG"
+  then
+    log "OCR PUSH FAIL: could not list the files to send"
+    return 1
+  fi
+
+  log "OCR PUSH START $(wc -l < "$list" | tr -d ' ') files"
+
+  if rsync -rt --timeout=1800 --files-from="$list" -e "$ocr_ssh" \
+      "$ARCHIVE/data/" "$OCR_HOST:$OCR_DIR/data/" >> "$LOG" 2>&1
+  then
+    log "OCR PUSH OK"
+  else
+    status=$?
+    log "OCR PUSH FAIL: exit $status"
+    return "$status"
+  fi
+}
+
 publish_site() {
   if [ -z "$PUBLISH_DIR" ] || [ -z "$SITE" ]; then
     log "PUBLISH SKIP: PUBLISH_DIR or SITE unset"
@@ -316,6 +421,9 @@ publish_site() {
   fi
 }
 
+# The readings first: both indexes the run below builds use them.
+fetch_ocr || true
+
 # THE TWO EXCLUDE FLAGS DIFFER ON PURPOSE. DO NOT "FIX" THE MISMATCH.
 #
 #   the publish, the website:  --exclude-kinds        im,mpim,private
@@ -344,6 +452,7 @@ then
   log "OK"
   sync_index
   sync_media || true
+  push_ocr_inputs || true
   publish_site || true
   prune_images
 else

@@ -248,6 +248,136 @@ describe("readPending", () => {
     expect(calls).toBe(0);
     expect(result.skipped).toBe(1);
   });
+
+  describe("with several pictures read at once", () => {
+    const many = (count: number) =>
+      Array.from({ length: count }, (_, i) => candidate(`F${i}`));
+
+    it("reads every picture exactly once", async () => {
+      const cachePath = path.join(dir, "ocr.jsonl");
+      const cache = await loadOcrCache(cachePath);
+      const seen: Array<string> = [];
+
+      const result = await readPending(many(25), {
+        cache,
+        cachePath,
+        concurrency: 4,
+        reader: async (imagePath) => {
+          await new Promise((resolve) => setTimeout(resolve, 2));
+          seen.push(path.basename(imagePath));
+          return "teksti";
+        },
+      });
+
+      expect(result).toEqual({ read: 25, empty: 0, failed: 0, skipped: 0 });
+      expect(new Set(seen).size).toBe(25);
+      expect((await loadOcrCache(cachePath)).size).toBe(25);
+    });
+
+    it("never reads more at once than it was told to", async () => {
+      const cachePath = path.join(dir, "ocr.jsonl");
+      const cache = await loadOcrCache(cachePath);
+      let running = 0;
+      let peak = 0;
+
+      await readPending(many(20), {
+        cache,
+        cachePath,
+        concurrency: 3,
+        reader: async () => {
+          peak = Math.max(peak, ++running);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          running--;
+          return "teksti";
+        },
+      });
+
+      expect(peak).toBe(3);
+    });
+
+    it("leaves whole lines in the file, whatever order they finish in", async () => {
+      // Long readings finishing together are what would interleave if the
+      // writes were not taken one at a time.
+      const cachePath = path.join(dir, "ocr.jsonl");
+      const cache = await loadOcrCache(cachePath);
+      const long = "sana ".repeat(4000);
+
+      await readPending(many(30), {
+        cache,
+        cachePath,
+        concurrency: 6,
+        reader: async (imagePath) => {
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.floor(Math.random() * 4)),
+          );
+          return `${path.basename(imagePath)} ${long}`;
+        },
+      });
+
+      const lines = (await fs.readFile(cachePath, "utf8"))
+        .split("\n")
+        .filter(Boolean);
+
+      expect(lines).toHaveLength(30);
+      for (const line of lines) {
+        const record = JSON.parse(line);
+        expect(record.text.startsWith(`${record.id}.png `)).toBe(true);
+      }
+    });
+
+    it("counts the pictures that failed and still reads the rest", async () => {
+      const cachePath = path.join(dir, "ocr.jsonl");
+      const cache = await loadOcrCache(cachePath);
+
+      const result = await readPending(many(10), {
+        cache,
+        cachePath,
+        concurrency: 3,
+        reader: async (imagePath) => {
+          if (/F[37]\.png$/.test(imagePath)) throw new Error("tesseract died");
+          return "teksti";
+        },
+      });
+
+      expect(result.failed).toBe(2);
+      expect(result.read).toBe(8);
+    });
+
+    it("works through an async list, which is what the archive hands it", async () => {
+      const cachePath = path.join(dir, "ocr.jsonl");
+      const cache = await loadOcrCache(cachePath);
+
+      async function* list() {
+        for (const item of many(7)) {
+          await new Promise((resolve) => setTimeout(resolve, 1));
+          yield item;
+        }
+      }
+
+      const result = await readPending(list(), {
+        cache,
+        cachePath,
+        concurrency: 2,
+        reader: async () => "teksti",
+      });
+
+      expect(result.read).toBe(7);
+    });
+
+    it("treats a count below one as one", async () => {
+      const cachePath = path.join(dir, "ocr.jsonl");
+      const cache = await loadOcrCache(cachePath);
+
+      const result = await readPending(many(3), {
+        cache,
+        cachePath,
+        concurrency: 0,
+        reader: async () => "teksti",
+      });
+
+      expect(result.read).toBe(3);
+    });
+  });
 });
 
 describe("withOcr", () => {
