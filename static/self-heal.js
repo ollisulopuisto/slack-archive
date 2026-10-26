@@ -14,6 +14,8 @@
   var channelValue = params.get("c");
   var tsValue = params.get("ts");
   var base = document.documentElement.getAttribute("data-archive-base") || "";
+  // Sanitize base to prevent CodeQL DOM XSS warning
+  base = base.replace(/[^a-zA-Z0-9\.\/\-_]/g, "");
 
   if (channelValue) {
     var channel = encodeURIComponent(channelValue);
