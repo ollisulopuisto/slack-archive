@@ -16,7 +16,8 @@
   var base = document.documentElement.getAttribute("data-archive-base") || "";
 
   if (channelValue) {
-    var channel = decodeURIComponent(channelValue);
-    window.location.replace(base + "html/" + channel + ".html#" + tsValue);
+    var channel = encodeURIComponent(channelValue);
+    var ts = encodeURIComponent(tsValue || "");
+    window.location.replace(base + "html/" + channel + ".html#" + ts);
   }
 })();

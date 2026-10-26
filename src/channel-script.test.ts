@@ -50,7 +50,7 @@ describe("the channel entry page's infinite scroll", () => {
     // file:// has no fetch for these files: the reader is handed the static
     // pages instead of a blank channel.
     expect(script).toContain('"file:"');
-    expect(script).toContain('channelId + "-0.html"');
+    expect(script).toContain('encodeURIComponent(channelId) + "-0.html"');
   });
 
   it("survives one broken chunk without sinking the loaded conversation", () => {
