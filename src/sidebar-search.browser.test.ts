@@ -11,8 +11,15 @@ import { contentSecurityPolicy } from "./csp.js";
 // and pressing Enter did nothing. That is the browser's decision, so it is
 // tested in a real browser with the policy the pages ship with.
 function page(csp: string): string {
+  const escapedCsp = csp
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
   return `<!doctype html><html><head>
-<meta http-equiv="Content-Security-Policy" content="${csp}">
+<meta http-equiv="Content-Security-Policy" content="${escapedCsp}">
 </head><body>
 <form class="channel-search" action="search.html" method="get" role="search">
 <input type="search" name="q" aria-label="Search every message">

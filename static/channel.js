@@ -38,7 +38,7 @@
     p.className = "chunk-fallback";
     p.textContent = "The scrolling view could not load this channel. ";
     var a = document.createElement("a");
-    a.href = channelId + "-0.html";
+    a.href = encodeURIComponent(channelId) + "-0.html";
     a.textContent = "Read the channel as static pages instead.";
     p.appendChild(a);
     list.appendChild(p);
