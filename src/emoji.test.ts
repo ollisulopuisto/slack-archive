@@ -12,7 +12,9 @@ vi.mock("./download-files.js", () => ({ downloadURL }));
 
 import {
   cleanEmojiName,
+  clearEmojiCache,
   downloadAllEmoji,
+  getEmojiFilePath,
   getEmojiRef,
   getEmojiUnicode,
   isEmojiUnicode,
@@ -21,8 +23,14 @@ import {
 describe("getEmojiRef()", () => {
   const file = path.join(EMOJIS_DIR, "test-emoji-ref.png");
 
-  beforeEach(() => fs.outputFileSync(file, "x"));
-  afterEach(() => fs.removeSync(file));
+  beforeEach(() => {
+    clearEmojiCache();
+    fs.outputFileSync(file, "x");
+  });
+  afterEach(() => {
+    fs.removeSync(file);
+    clearEmojiCache();
+  });
 
   it("is relative to the html directory, not an absolute local path", () => {
     // An absolute /Users/... src is a broken image on every machine but the
@@ -32,6 +40,19 @@ describe("getEmojiRef()", () => {
 
   it("is undefined for an emoji that was never downloaded", () => {
     expect(getEmojiRef("no-such-emoji-anywhere")).toBeUndefined();
+  });
+
+  it("caches resolved emoji file paths to avoid repeated disk checks", () => {
+    // First lookup caches the found path
+    expect(getEmojiRef("test-emoji-ref")).toBe("emojis/test-emoji-ref.png");
+
+    // Even if disk file is removed, cached resolution returns the value until cache is cleared
+    fs.removeSync(file);
+    expect(getEmojiRef("test-emoji-ref")).toBe("emojis/test-emoji-ref.png");
+
+    // Clearing the cache forces a re-check on disk
+    clearEmojiCache();
+    expect(getEmojiRef("test-emoji-ref")).toBeUndefined();
   });
 });
 
@@ -126,4 +147,3 @@ describe("isEmojiUnicode() and getEmojiUnicode()", () => {
     expect(getEmojiUnicode("not-an-emoji")).toBe("");
   });
 });
-
