@@ -29,6 +29,11 @@ export function cleanEmojiName(name: string): string {
   if (cleaned.endsWith(":")) {
     cleaned = cleaned.slice(0, -1);
   }
+  // Strip path traversal sequences and separators to ensure emoji names cannot
+  // escape the emojis directory.
+  cleaned = cleaned.replace(/\\/g, "/");
+  cleaned = path.posix.basename(cleaned);
+  cleaned = cleaned.replace(/^\.+/, "");
   return cleaned;
 }
 
@@ -82,12 +87,17 @@ export function clearEmojiCache(): void {
 
 export function getEmojiFilePath(name: string, extension?: string) {
   const cleaned = cleanEmojiName(name);
+  if (!cleaned) return undefined;
 
   // If we have an extension, return the target path directly without caching,
   // since the file might still be downloading. The cache is populated when queried
   // or can be cleared via clearEmojiCache().
   if (extension) {
-    return path.join(EMOJIS_DIR, `${cleaned}${extension}`);
+    const targetPath = path.join(EMOJIS_DIR, `${cleaned}${extension}`);
+    if (!targetPath.startsWith(path.resolve(EMOJIS_DIR) + path.sep)) {
+      return undefined;
+    }
+    return targetPath;
   }
 
   if (_emojiFilePathCache.has(cleaned)) {
