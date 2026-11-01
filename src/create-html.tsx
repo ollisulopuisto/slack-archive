@@ -233,7 +233,7 @@ const Files: React.FunctionComponent<FilesProps> = (props) => {
     if (file.mimetype?.startsWith("image")) {
       return (
         <a key={file.id} href={href} target="_blank">
-          <img className="file" src={src} />
+          <img className="file" src={src} alt={name} />
         </a>
       );
     }
@@ -251,7 +251,7 @@ const Files: React.FunctionComponent<FilesProps> = (props) => {
 
       return (
         <a key={file.id} href={href} target="_blank">
-          <img className="file" src={src} />
+          <img className="file" src={src} alt={name} />
         </a>
       );
     }
@@ -280,7 +280,9 @@ const Avatar: React.FunctionComponent<AvatarProps> = ({ userId }) => {
   const ext = path.extname(user?.profile?.image_512!);
   const src = `${base}avatars/${userId}${ext}`;
 
-  return <img className="avatar" src={src} />;
+  // Decorative: the sender's name renders immediately beside the avatar,
+  // so an empty alt keeps screen readers from reading the image URL aloud.
+  return <img className="avatar" src={src} alt="" />;
 };
 
 interface ParentMessageProps {
