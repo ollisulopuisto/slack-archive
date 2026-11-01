@@ -114,6 +114,22 @@ describe("cleanEmojiName()", () => {
       "male-police-officer::skin-tone-4",
     );
   });
+
+  it("neutralizes path traversal sequences and separators", () => {
+    expect(cleanEmojiName("../../evil")).toBe("evil");
+    expect(cleanEmojiName("..\\..\\evil")).toBe("evil");
+    expect(cleanEmojiName("/etc/passwd")).toBe("passwd");
+    expect(cleanEmojiName("..")).toBe("");
+  });
+});
+
+describe("getEmojiFilePath() path traversal defense", () => {
+  it("does not allow resolving or writing paths outside EMOJIS_DIR", () => {
+    expect(getEmojiFilePath("../../evil", ".png")).toBe(
+      path.join(EMOJIS_DIR, "evil.png"),
+    );
+    expect(getEmojiFilePath("..", ".png")).toBeUndefined();
+  });
 });
 
 describe("isEmojiUnicode() and getEmojiUnicode()", () => {
