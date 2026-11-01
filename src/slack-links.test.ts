@@ -77,4 +77,21 @@ describe("rewriteSlackLinks()", () => {
 
     expect(rewriteSlackLinks(html, bare)).toBe(html);
   });
+
+  it("handles text with no matching links via fast path without modifications", () => {
+    const html = `<p>This is a completely normal message with <a href="https://example.com">external links</a>.</p>`;
+
+    expect(rewriteSlackLinks(html, context)).toBe(html);
+  });
+
+  it("precompiles regexes in archiveLinkContext", () => {
+    expect(context.archiveRegex).toBeInstanceOf(RegExp);
+    expect(context.fileRegex).toBeInstanceOf(RegExp);
+    expect(context.teamFileRegex).toBeInstanceOf(RegExp);
+
+    const bare = archiveLinkContext({});
+    expect(bare.archiveRegex).toBeUndefined();
+    expect(bare.fileRegex).toBeUndefined();
+    expect(bare.teamFileRegex).toBeUndefined();
+  });
 });

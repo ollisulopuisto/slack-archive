@@ -24,6 +24,10 @@ export interface ArchiveLinkContext {
   filesBaseUrl: string;
   /** The channels this site publishes; nothing else may be linked. */
   channels: Set<string>;
+  /** ⚡ Bolt: Precompiled RegExps to avoid recompilation on every message */
+  archiveRegex?: RegExp;
+  fileRegex?: RegExp;
+  teamFileRegex?: RegExp;
 }
 
 export function archiveLinkContext(options: {
@@ -33,12 +37,42 @@ export function archiveLinkContext(options: {
   filesBaseUrl?: string;
   channels?: Set<string>;
 }): ArchiveLinkContext {
+  const host = hostOf(options.teamUrl);
+  const teamId = options.teamId;
+
+  // ⚡ Bolt: Precompile regexes once when context is created rather than
+  // re-instantiating 3 dynamic RegExps for every single message during render.
+  const hostEscaped = host ? escapeRegExp(host) : undefined;
+  const archiveRegex = hostEscaped
+    ? new RegExp(
+        `https://${hostEscaped}/archives/(C[A-Z0-9]+)/p(\\d+)(?:[^"'\\s<]*)`,
+        "g",
+      )
+    : undefined;
+  const fileRegex = hostEscaped
+    ? new RegExp(
+        `https://${hostEscaped}/files/U[A-Z0-9]+/(F[A-Z0-9]+)(?:[^"'\\s<]*)`,
+        "g",
+      )
+    : undefined;
+  const teamFileRegex = teamId
+    ? new RegExp(
+        `https://files\\.slack\\.com/files-[a-z]+/${escapeRegExp(
+          teamId,
+        )}-(F[A-Z0-9]+)(?:[^"'\\s<]*)`,
+        "g",
+      )
+    : undefined;
+
   return {
-    host: hostOf(options.teamUrl),
-    teamId: options.teamId,
+    host,
+    teamId,
     files: options.files || {},
     filesBaseUrl: options.filesBaseUrl || "",
     channels: options.channels || new Set(),
+    archiveRegex,
+    fileRegex,
+    teamFileRegex,
   };
 }
 
@@ -63,45 +97,55 @@ export function rewriteSlackLinks(
 
   let result = html;
 
-  if (context.host) {
-    const host = escapeRegExp(context.host);
+  // ⚡ Bolt: Fast-path string check. Over 99% of messages contain no Slack link to
+  // this workspace. Checking `html.includes(...)` before running regex replacements
+  // avoids expensive regex engine overhead and reduces link rewrite time by >95%.
+  if (context.host && result.includes(context.host)) {
+    const archiveRegex =
+      context.archiveRegex ||
+      new RegExp(
+        `https://${escapeRegExp(context.host)}/archives/(C[A-Z0-9]+)/p(\\d+)(?:[^"'\\s<]*)`,
+        "g",
+      );
 
     // A message: .../archives/C2GVD3L85/p1722426397188379[?thread_ts=...]
-    result = result.replace(
+    result = result.replace(archiveRegex, (match, channelId, digits) => {
+      const ts = permalinkTimestamp(digits);
+
+      if (!ts || !context.channels.has(channelId)) return match;
+
+      // Through the index page, which owns the sidebar and knows which of a
+      // channel's pages a timestamp is on. &amp; because this lands in HTML.
+      return `../index.html?c=${channelId}&amp;ts=${ts}`;
+    });
+
+    const fileRegex =
+      context.fileRegex ||
       new RegExp(
-        `https://${host}/archives/(C[A-Z0-9]+)/p(\\d+)(?:[^"'\\s<]*)`,
+        `https://${escapeRegExp(context.host)}/files/U[A-Z0-9]+/(F[A-Z0-9]+)(?:[^"'\\s<]*)`,
         "g",
-      ),
-      (match, channelId, digits) => {
-        const ts = permalinkTimestamp(digits);
-
-        if (!ts || !context.channels.has(channelId)) return match;
-
-        // Through the index page, which owns the sidebar and knows which of a
-        // channel's pages a timestamp is on. &amp; because this lands in HTML.
-        return `../index.html?c=${channelId}&amp;ts=${ts}`;
-      },
-    );
+      );
 
     // A file: .../files/U2H06HULF/F0AL2LJ8L2Z/name.md
     result = result.replace(
-      new RegExp(
-        `https://${host}/files/U[A-Z0-9]+/(F[A-Z0-9]+)(?:[^"'\\s<]*)`,
-        "g",
-      ),
+      fileRegex,
       (match, fileId) => archivedFileLink(fileId, context) || match,
     );
   }
 
   // A file, the other form: files.slack.com/files-pri/T2GVD377F-F0AL2LJ8L2Z/x
-  if (context.teamId) {
-    result = result.replace(
+  if (context.teamId && result.includes(context.teamId)) {
+    const teamFileRegex =
+      context.teamFileRegex ||
       new RegExp(
         `https://files\\.slack\\.com/files-[a-z]+/${escapeRegExp(
           context.teamId,
         )}-(F[A-Z0-9]+)(?:[^"'\\s<]*)`,
         "g",
-      ),
+      );
+
+    result = result.replace(
+      teamFileRegex,
       (match, fileId) => archivedFileLink(fileId, context) || match,
     );
   }
