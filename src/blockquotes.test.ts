@@ -59,4 +59,13 @@ describe("splitQuotes()", () => {
       { quote: true, text: "one\n\ntwo" },
     ]);
   });
+
+  it("handles multi-line text without quotes via fast path", () => {
+    const text = "First line\nSecond line\nThird line";
+    expect(splitQuotes(text)).toEqual([{ quote: false, text }]);
+  });
+
+  it("handles whitespace-only text via fast path", () => {
+    expect(splitQuotes("   \n\t  ")).toEqual([]);
+  });
 });
