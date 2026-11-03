@@ -299,6 +299,21 @@ export const STATS_PATH = path.join(HTML_DIR, "stats.html");
 export const BOTS_PATH = path.join(HTML_DIR, "bots.html");
 
 /**
+ * Sanitize a path component to prevent directory traversal out of target dirs.
+ */
+function sanitizePathSegment(segment: string): string {
+  const normalized = (segment || "").trim().replace(/\\/g, "/");
+  const base = path.posix.basename(normalized).replace(/^\.+/, "");
+  return base;
+}
+
+function sanitizeExtension(ext: string): string {
+  const normalized = (ext || "").trim().replace(/\\/g, "/");
+  const base = path.posix.basename(normalized).replace(/^\.+/, "");
+  return base ? `.${base}` : "";
+}
+
+/**
  * Where a past profile picture lives. Keyed by the date in Slack's own URL,
  * which is what identifies one picture rather than another.
  */
@@ -306,8 +321,26 @@ export function getAvatarHistoryFilePath(
   userId: string,
   date: string,
   extension: string,
-) {
-  return path.join(AVATARS_DIR, "history", userId, `${date}${extension}`);
+): string {
+  const safeUser = sanitizePathSegment(userId) || "unknown";
+  const safeDate = sanitizePathSegment(date) || "avatar";
+  const safeExt = extension ? sanitizeExtension(extension) : "";
+  const target = path.join(
+    AVATARS_DIR,
+    "history",
+    safeUser,
+    `${safeDate}${safeExt}`,
+  );
+  const historyDir = path.resolve(path.join(AVATARS_DIR, "history")) + path.sep;
+  if (!path.resolve(target).startsWith(historyDir)) {
+    return path.join(
+      AVATARS_DIR,
+      "history",
+      "unknown",
+      `avatar${safeExt || ".jpg"}`,
+    );
+  }
+  return target;
 }
 
 export function getChannelStatsFilePath(channelId: string) {
@@ -359,6 +392,13 @@ export function getChannelEntryPath(channelId: string) {
   return path.join(HTML_DIR, `${channelId}.html`);
 }
 
-export function getAvatarFilePath(userId: string, extension: string) {
-  return path.join(AVATARS_DIR, `${userId}${extension}`);
+export function getAvatarFilePath(userId: string, extension: string): string {
+  const safeUser = sanitizePathSegment(userId) || "avatar";
+  const safeExt = extension ? sanitizeExtension(extension) : "";
+  const target = path.join(AVATARS_DIR, `${safeUser}${safeExt}`);
+  const avatarsDir = path.resolve(AVATARS_DIR) + path.sep;
+  if (!path.resolve(target).startsWith(avatarsDir)) {
+    return path.join(AVATARS_DIR, `avatar${safeExt || ".png"}`);
+  }
+  return target;
 }

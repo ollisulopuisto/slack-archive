@@ -1,10 +1,14 @@
 import { describe, it, expect } from "vitest";
 
+import path from "path";
 import {
-  normalizeBaseUrl,
-  searchIndexes,
+  AVATARS_DIR,
+  getAvatarFilePath,
+  getAvatarHistoryFilePath,
   getChunkDirPath,
   getChunkFilePath,
+  normalizeBaseUrl,
+  searchIndexes,
 } from "./config.js";
 
 describe("normalizeBaseUrl", () => {
@@ -68,5 +72,42 @@ describe("searchIndexes", () => {
     // Silently building nothing, or the wrong one, is a search page that
     // loads and then cannot answer anything.
     expect(() => searchIndexes("sqlite")).toThrow(/--search-index/);
+  });
+});
+
+describe("getAvatarFilePath traversal protection", () => {
+  it("neutralizes traversal characters in userId", () => {
+    const safePath = getAvatarFilePath("../../evil", ".png");
+    expect(safePath).toBe(path.join(AVATARS_DIR, "evil.png"));
+  });
+
+  it("neutralizes traversal characters in extension", () => {
+    const safePath = getAvatarFilePath("U123", "/../../evil.png");
+    expect(safePath).toBe(path.join(AVATARS_DIR, "U123.evil.png"));
+  });
+
+  it("falls back to safe path if user id is purely traversal dots", () => {
+    const safePath = getAvatarFilePath("..", ".png");
+    expect(safePath).toBe(path.join(AVATARS_DIR, "avatar.png"));
+  });
+});
+
+describe("getAvatarHistoryFilePath traversal protection", () => {
+  it("neutralizes traversal characters in userId and date", () => {
+    const safePath = getAvatarHistoryFilePath(
+      "../../evilUser",
+      "../../evilDate",
+      ".jpg",
+    );
+    expect(safePath).toBe(
+      path.join(AVATARS_DIR, "history", "evilUser", "evilDate.jpg"),
+    );
+  });
+
+  it("falls back to safe path if components are purely traversal dots", () => {
+    const safePath = getAvatarHistoryFilePath("..", "..", ".jpg");
+    expect(safePath).toBe(
+      path.join(AVATARS_DIR, "history", "unknown", "avatar.jpg"),
+    );
   });
 });
