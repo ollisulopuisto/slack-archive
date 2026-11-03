@@ -232,7 +232,7 @@ const Files: React.FunctionComponent<FilesProps> = (props) => {
 
     if (file.mimetype?.startsWith("image")) {
       return (
-        <a key={file.id} href={href} target="_blank">
+        <a key={file.id} href={href} target="_blank" rel="noopener noreferrer">
           <img className="file" src={src} alt={name} />
         </a>
       );
@@ -250,14 +250,14 @@ const Files: React.FunctionComponent<FilesProps> = (props) => {
       src = `${FILES_BASE_URL}files/${channelId}/${archivedThumbName(file)}`;
 
       return (
-        <a key={file.id} href={href} target="_blank">
+        <a key={file.id} href={href} target="_blank" rel="noopener noreferrer">
           <img className="file" src={src} alt={name} />
         </a>
       );
     }
 
     return (
-      <a key={file.id} href={href} target="_blank">
+      <a key={file.id} href={href} target="_blank" rel="noopener noreferrer">
         {file.name}
       </a>
     );
@@ -894,7 +894,8 @@ const Sidebar: React.FunctionComponent = () => {
  * an iframe. Now every page stands on its own, and this one is simply the door.
  */
 const IndexPage: React.FunctionComponent = () => {
-  const { stats, teamMeta, base, root, channels, gaps, estimates } = useRender();
+  const { stats, teamMeta, base, root, channels, gaps, estimates } =
+    useRender();
   const speculative = stats
     ? speculativeTotals(
         { messages: stats.messages, reactions: stats.reactions },

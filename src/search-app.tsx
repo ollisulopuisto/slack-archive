@@ -1246,7 +1246,7 @@ const Message = ({ message, channels, users, query }) => {
   const isReply = Boolean(message.p && message.p !== message.t);
 
   return (
-    <a href={href} target="_blank">
+    <a href={href} target="_blank" rel="noopener noreferrer">
       <li className={`Message ${isReply ? "is-reply" : ""}`}>
         <p className="MessageMeta">
           <span className="Channel">#{channels[message.c]}</span>

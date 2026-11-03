@@ -26,6 +26,16 @@ describe("the rendered pages", () => {
   });
 
   it("links to the media browser in the sidebar and front page", () => {
-    expect(source).toContain('href={`${root}search.html?mode=media`}');
+    expect(source).toContain("href={`${root}search.html?mode=media`}");
+  });
+
+  it("secures all target=_blank links with rel noopener noreferrer", () => {
+    // Links opening in a new tab without noopener/noreferrer expose the archive
+    // to reverse tabnabbing and window.opener access.
+    const blankLinks = source.match(/<a[^>]*target="_blank"[^>]*>/g) || [];
+    expect(blankLinks.length).toBeGreaterThan(0);
+    for (const link of blankLinks) {
+      expect(link).toMatch(/rel="(?:noopener noreferrer|noreferrer)"/);
+    }
   });
 });
