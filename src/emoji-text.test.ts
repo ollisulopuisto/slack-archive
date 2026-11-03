@@ -76,4 +76,20 @@ describe("emoji in message text", () => {
       "<div>🎉🎉</div>",
     );
   });
+
+  it("leaves text without colons unchanged", () => {
+    expect(renderEmojiInHtml("<p>Hello world without emoji</p>", "")).toBe(
+      "<p>Hello world without emoji</p>",
+    );
+    expect(renderEmojiInHtml("", "")).toBe("");
+  });
+
+  it("leaves text with non-emoji colons intact", () => {
+    expect(
+      renderEmojiInHtml(
+        '<p>Visit <a href="https://example.com">here</a> for info</p>',
+        "",
+      ),
+    ).toBe('<p>Visit <a href="https://example.com">here</a> for info</p>');
+  });
 });
