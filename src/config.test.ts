@@ -3,8 +3,10 @@ import { describe, it, expect } from "vitest";
 import path from "path";
 import {
   AVATARS_DIR,
+  FILES_DIR,
   getAvatarFilePath,
   getAvatarHistoryFilePath,
+  getChannelUploadFilePath,
   getChunkDirPath,
   getChunkFilePath,
   normalizeBaseUrl,
@@ -30,6 +32,21 @@ describe("normalizeBaseUrl", () => {
     expect(normalizeBaseUrl("https://morttinen.pylly.club/media///")).toBe(
       "https://morttinen.pylly.club/media/",
     );
+  });
+});
+
+describe("getChannelUploadFilePath traversal protection", () => {
+  it("neutralizes traversal characters in channelId and fileName", () => {
+    const safePath = getChannelUploadFilePath(
+      "../../evilChannel",
+      "../../evilFile.png",
+    );
+    expect(safePath).toBe(path.join(FILES_DIR, "evilChannel", "evilFile.png"));
+  });
+
+  it("falls back to safe path if components are purely traversal dots", () => {
+    const safePath = getChannelUploadFilePath("..", "..");
+    expect(safePath).toBe(path.join(FILES_DIR, "unknown", "file"));
   });
 });
 

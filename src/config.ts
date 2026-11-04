@@ -372,8 +372,24 @@ export function getChannelDataFilePath(channelId: string) {
   return path.join(DATA_DIR, `${channelId}.json`);
 }
 
-export function getChannelUploadFilePath(channelId: string, fileName: string) {
-  return path.join(FILES_DIR, channelId, fileName);
+/**
+ * Where a downloaded channel upload/attachment lives.
+ *
+ * Sanitizes channelId and fileName to prevent path traversal outside of FILES_DIR
+ * if untrusted or crafted Slack message data contains traversal sequences.
+ */
+export function getChannelUploadFilePath(
+  channelId: string,
+  fileName: string,
+): string {
+  const safeChannel = sanitizePathSegment(channelId) || "unknown";
+  const safeFile = sanitizePathSegment(fileName) || "file";
+  const target = path.join(FILES_DIR, safeChannel, safeFile);
+  const filesDir = path.resolve(FILES_DIR) + path.sep;
+  if (!path.resolve(target).startsWith(filesDir)) {
+    return path.join(FILES_DIR, "unknown", "file");
+  }
+  return target;
 }
 
 export function getHTMLFilePath(channelId: string, index: number) {
