@@ -220,6 +220,9 @@
           break;
         }
       }
+      // Ensure scrollPaddingTop matches the sticky header's current layout height
+      // before scrolling into view, preventing the element from landing underneath.
+      padForHeader();
       // The walk to a reply's parent inserts chunks above the viewport, and
       // each insertion scrolls - which writes whatever message was at the
       // reading line into the URL. The scroll handler's throttle can then
@@ -328,9 +331,7 @@
 
       if (gutters.length === 0) return;
       var headerEl = document.querySelector(".header");
-      var headerBottom = headerEl
-        ? headerEl.getBoundingClientRect().bottom
-        : 0;
+      var headerBottom = headerEl ? headerEl.getBoundingClientRect().bottom : 0;
       var landing =
         Number.parseFloat(
           getComputedStyle(document.documentElement).scrollPaddingTop,
@@ -388,4 +389,3 @@
     }
   });
 })();
-
