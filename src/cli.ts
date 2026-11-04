@@ -48,8 +48,14 @@ import {
   getUserAvatars,
   getUserStatuses,
 } from "./data-load.js";
-import { mineNames, recordNames, snapshotNames } from "./user-names.js";
 import {
+  mineNames,
+  NameSighting,
+  recordNames,
+  snapshotNames,
+} from "./user-names.js";
+import {
+  AvatarSighting,
   markRefused,
   mineAvatars,
   pendingAvatars,
@@ -453,9 +459,29 @@ export async function main() {
       spinner.text = `Recording nicknames from ${channel.name || channel.id}`;
       spinner.render();
 
+      // Performance optimization (⚡ Bolt):
+      // Batch sightings across messages per channel instead of calling
+      // `recordNames` and `recordAvatars` on every single message.
+      // Both record functions clone and sort the entire history dictionary
+      // on each call (O(messages * users) allocations and work).
+      // Batching reduces history re-cloning to at most once per channel when
+      // sightings are present, speeding up large archive runs significantly.
+      const channelNameSightings: Array<NameSighting> = [];
+      const channelAvatarSightings: Array<AvatarSighting> = [];
+
       for (const message of await getMessages(channel.id, true)) {
-        userNames = recordNames(userNames, mineNames(message));
-        userAvatars = recordAvatars(userAvatars, mineAvatars(message));
+        const names = mineNames(message);
+        if (names.length > 0) channelNameSightings.push(...names);
+
+        const avatars = mineAvatars(message);
+        if (avatars.length > 0) channelAvatarSightings.push(...avatars);
+      }
+
+      if (channelNameSightings.length > 0) {
+        userNames = recordNames(userNames, channelNameSightings);
+      }
+      if (channelAvatarSightings.length > 0) {
+        userAvatars = recordAvatars(userAvatars, channelAvatarSightings);
       }
     }
 
