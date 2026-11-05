@@ -3,12 +3,19 @@ import { describe, it, expect } from "vitest";
 import path from "path";
 import {
   AVATARS_DIR,
+  DATA_DIR,
   FILES_DIR,
+  HTML_DIR,
   getAvatarFilePath,
   getAvatarHistoryFilePath,
+  getChannelDataFilePath,
+  getChannelEntryPath,
+  getChannelStatsFilePath,
   getChannelUploadFilePath,
   getChunkDirPath,
   getChunkFilePath,
+  getHTMLFilePath,
+  getProfileFilePath,
   normalizeBaseUrl,
   searchIndexes,
 } from "./config.js";
@@ -54,6 +61,16 @@ describe("getChunkDirPath", () => {
   it("returns the correct directory path for a channel", () => {
     expect(getChunkDirPath("C12345")).toContain("slack-archive/html/C12345");
   });
+
+  it("neutralizes traversal characters in channelId", () => {
+    const safePath = getChunkDirPath("../../evilChannel");
+    expect(safePath).toBe(path.join(HTML_DIR, "evilChannel"));
+  });
+
+  it("falls back to safe directory if channelId is purely traversal dots", () => {
+    const safePath = getChunkDirPath("..");
+    expect(safePath).toBe(path.join(HTML_DIR, "unknown"));
+  });
 });
 
 describe("getChunkFilePath", () => {
@@ -64,6 +81,72 @@ describe("getChunkFilePath", () => {
     expect(getChunkFilePath("C12345", 5)).toContain(
       "slack-archive/html/C12345/chunk-5.json",
     );
+  });
+
+  it("handles negative or invalid chunk index safely", () => {
+    expect(getChunkFilePath("C12345", -1)).toBe(
+      path.join(HTML_DIR, "C12345", "chunk-0.json"),
+    );
+  });
+});
+
+describe("getChannelDataFilePath traversal protection", () => {
+  it("neutralizes traversal in channelId", () => {
+    const safePath = getChannelDataFilePath("../../evilChannel");
+    expect(safePath).toBe(path.join(DATA_DIR, "evilChannel.json"));
+  });
+
+  it("falls back to unknown.json for purely traversal dots", () => {
+    const safePath = getChannelDataFilePath("..");
+    expect(safePath).toBe(path.join(DATA_DIR, "unknown.json"));
+  });
+});
+
+describe("getChannelStatsFilePath traversal protection", () => {
+  it("neutralizes traversal in channelId", () => {
+    const safePath = getChannelStatsFilePath("../../evilChannel");
+    expect(safePath).toBe(path.join(HTML_DIR, "channel-evilChannel.html"));
+  });
+
+  it("falls back to channel-unknown.html for purely traversal dots", () => {
+    const safePath = getChannelStatsFilePath("..");
+    expect(safePath).toBe(path.join(HTML_DIR, "channel-unknown.html"));
+  });
+});
+
+describe("getProfileFilePath traversal protection", () => {
+  it("neutralizes traversal in userId", () => {
+    const safePath = getProfileFilePath("../../evilUser");
+    expect(safePath).toBe(path.join(HTML_DIR, "user-evilUser.html"));
+  });
+
+  it("falls back to user-unknown.html for purely traversal dots", () => {
+    const safePath = getProfileFilePath("..");
+    expect(safePath).toBe(path.join(HTML_DIR, "user-unknown.html"));
+  });
+});
+
+describe("getChannelEntryPath traversal protection", () => {
+  it("neutralizes traversal in channelId", () => {
+    const safePath = getChannelEntryPath("../../evilChannel");
+    expect(safePath).toBe(path.join(HTML_DIR, "evilChannel.html"));
+  });
+
+  it("falls back to unknown.html for purely traversal dots", () => {
+    const safePath = getChannelEntryPath("..");
+    expect(safePath).toBe(path.join(HTML_DIR, "unknown.html"));
+  });
+});
+
+describe("getHTMLFilePath traversal protection", () => {
+  it("neutralizes traversal in channelId", () => {
+    const safePath = getHTMLFilePath("../../evilChannel", 1);
+    expect(safePath).toBe(path.join(HTML_DIR, "evilChannel-1.html"));
+  });
+
+  it("falls back to unknown-0.html for purely traversal dots and handles negative index", () => {
+    const safePath = getHTMLFilePath("..", -5);
+    expect(safePath).toBe(path.join(HTML_DIR, "unknown-0.html"));
   });
 });
 
