@@ -313,6 +313,19 @@ function sanitizeExtension(ext: string): string {
   return base ? `.${base}` : "";
 }
 
+/** Validate resolved path prefix containment to prevent directory traversal. */
+function safePathInDir(
+  baseDir: string,
+  relativePath: string,
+  fallback: string,
+): string {
+  const target = path.join(baseDir, relativePath);
+  const resolvedBase = path.resolve(baseDir) + path.sep;
+  return path.resolve(target).startsWith(resolvedBase)
+    ? target
+    : path.join(baseDir, fallback);
+}
+
 /**
  * Where a past profile picture lives. Keyed by the date in Slack's own URL,
  * which is what identifies one picture rather than another.
@@ -325,30 +338,26 @@ export function getAvatarHistoryFilePath(
   const safeUser = sanitizePathSegment(userId) || "unknown";
   const safeDate = sanitizePathSegment(date) || "avatar";
   const safeExt = extension ? sanitizeExtension(extension) : "";
-  const target = path.join(
-    AVATARS_DIR,
-    "history",
-    safeUser,
-    `${safeDate}${safeExt}`,
+  const historyDir = path.join(AVATARS_DIR, "history");
+  return safePathInDir(
+    historyDir,
+    path.join(safeUser, `${safeDate}${safeExt}`),
+    path.join("unknown", `avatar${safeExt || ".jpg"}`),
   );
-  const historyDir = path.resolve(path.join(AVATARS_DIR, "history")) + path.sep;
-  if (!path.resolve(target).startsWith(historyDir)) {
-    return path.join(
-      AVATARS_DIR,
-      "history",
-      "unknown",
-      `avatar${safeExt || ".jpg"}`,
-    );
-  }
-  return target;
 }
 
 export function getChannelStatsFilePath(channelId: string) {
-  return path.join(HTML_DIR, `channel-${channelId}.html`);
+  const safe = sanitizePathSegment(channelId) || "unknown";
+  return safePathInDir(
+    HTML_DIR,
+    `channel-${safe}.html`,
+    "channel-unknown.html",
+  );
 }
 
 export function getProfileFilePath(userId: string) {
-  return path.join(HTML_DIR, `user-${userId}.html`);
+  const safe = sanitizePathSegment(userId) || "unknown";
+  return safePathInDir(HTML_DIR, `user-${safe}.html`, "user-unknown.html");
 }
 export const MESSAGES_JS_PATH = path.join(__dirname, "../static/scroll.js");
 export const SEARCH_TEMPLATE_PATH = path.join(
@@ -369,7 +378,8 @@ export const SEARCH_DATA_PATH = path.join(DATA_DIR, "search.js");
 export const SEARCH_DB_PATH = path.join(DATA_DIR, "search.db");
 
 export function getChannelDataFilePath(channelId: string) {
-  return path.join(DATA_DIR, `${channelId}.json`);
+  const safe = sanitizePathSegment(channelId) || "unknown";
+  return safePathInDir(DATA_DIR, `${safe}.json`, "unknown.json");
 }
 
 /**
@@ -384,37 +394,45 @@ export function getChannelUploadFilePath(
 ): string {
   const safeChannel = sanitizePathSegment(channelId) || "unknown";
   const safeFile = sanitizePathSegment(fileName) || "file";
-  const target = path.join(FILES_DIR, safeChannel, safeFile);
-  const filesDir = path.resolve(FILES_DIR) + path.sep;
-  if (!path.resolve(target).startsWith(filesDir)) {
-    return path.join(FILES_DIR, "unknown", "file");
-  }
-  return target;
+  return safePathInDir(
+    FILES_DIR,
+    path.join(safeChannel, safeFile),
+    path.join("unknown", "file"),
+  );
 }
 
 export function getHTMLFilePath(channelId: string, index: number) {
-  return path.join(HTML_DIR, `${channelId}-${index}.html`);
+  const safe = sanitizePathSegment(channelId) || "unknown";
+  const safeIndex = Number.isSafeInteger(index) && index >= 0 ? index : 0;
+  return safePathInDir(
+    HTML_DIR,
+    `${safe}-${safeIndex}.html`,
+    `unknown-${safeIndex}.html`,
+  );
 }
 
 export function getChunkDirPath(channelId: string) {
-  return path.join(HTML_DIR, channelId);
+  const safe = sanitizePathSegment(channelId) || "unknown";
+  return safePathInDir(HTML_DIR, safe, "unknown");
 }
 
 export function getChunkFilePath(channelId: string, chunkIndex: number) {
-  return path.join(getChunkDirPath(channelId), `chunk-${chunkIndex}.json`);
+  const safeIndex =
+    Number.isSafeInteger(chunkIndex) && chunkIndex >= 0 ? chunkIndex : 0;
+  return path.join(getChunkDirPath(channelId), `chunk-${safeIndex}.json`);
 }
 
 export function getChannelEntryPath(channelId: string) {
-  return path.join(HTML_DIR, `${channelId}.html`);
+  const safe = sanitizePathSegment(channelId) || "unknown";
+  return safePathInDir(HTML_DIR, `${safe}.html`, "unknown.html");
 }
 
 export function getAvatarFilePath(userId: string, extension: string): string {
   const safeUser = sanitizePathSegment(userId) || "avatar";
   const safeExt = extension ? sanitizeExtension(extension) : "";
-  const target = path.join(AVATARS_DIR, `${safeUser}${safeExt}`);
-  const avatarsDir = path.resolve(AVATARS_DIR) + path.sep;
-  if (!path.resolve(target).startsWith(avatarsDir)) {
-    return path.join(AVATARS_DIR, `avatar${safeExt || ".png"}`);
-  }
-  return target;
+  return safePathInDir(
+    AVATARS_DIR,
+    `${safeUser}${safeExt}`,
+    `avatar${safeExt || ".png"}`,
+  );
 }
