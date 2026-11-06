@@ -97,4 +97,42 @@ describe("externalFileUrl()", () => {
       externalFileUrl({ id: "F2", mode: "hidden_by_limit" }),
     ).toBeUndefined();
   });
+
+  it("rejects dangerous or non-http(s) schemes like javascript: and data:", () => {
+    expect(
+      externalFileUrl({
+        id: "F3",
+        mode: "external",
+        is_external: true,
+        url_private: "javascript:alert(document.domain)",
+      } as never),
+    ).toBeUndefined();
+
+    expect(
+      externalFileUrl({
+        id: "F4",
+        mode: "external",
+        is_external: true,
+        url_private: "data:text/html,<script>alert(1)</script>",
+      } as never),
+    ).toBeUndefined();
+
+    expect(
+      externalFileUrl({
+        id: "F5",
+        mode: "external",
+        is_external: true,
+        url_private: "vbscript:msgbox(1)",
+      } as never),
+    ).toBeUndefined();
+
+    expect(
+      externalFileUrl({
+        id: "F6",
+        mode: "external",
+        is_external: true,
+        url_private: "not a valid url",
+      } as never),
+    ).toBeUndefined();
+  });
 });

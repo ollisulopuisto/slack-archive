@@ -206,7 +206,12 @@ const Files: React.FunctionComponent<FilesProps> = (props) => {
 
       if (elsewhere) {
         return (
-          <a key={file.id} href={elsewhere} target="_blank" rel="noreferrer">
+          <a
+            key={file.id}
+            href={elsewhere}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             {file.name || file.title || elsewhere}
           </a>
         );
