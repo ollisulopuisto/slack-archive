@@ -64,13 +64,28 @@ export function archivedFileName(file: ArchivedFile): string | undefined {
 export function externalFileUrl(file: ArchivedFile): string | undefined {
   if (!file || isHiddenFile(file) || archivedFileName(file)) return undefined;
 
-  const url = file.url_private || "";
+  const rawUrl = (file.url_private || "").trim();
+  if (!rawUrl) return undefined;
+
+  // Security: only allow explicit http: and https: schemes. Disallow dangerous
+  // protocols (such as javascript:, data:, vbscript:) that could lead to XSS
+  // when rendered into an anchor tag href.
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return undefined;
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return undefined;
+  }
 
   // Not a Slack-hosted URL: that one is the archive's job, and if it is
   // missing the file is missing rather than elsewhere.
-  if (!url || /(^|\.)slack\.com\//.test(url)) return undefined;
+  if (/(^|\.)slack\.com$/i.test(parsed.hostname)) return undefined;
 
-  return url;
+  return rawUrl;
 }
 
 /** The thumbnail the downloader writes beside a PDF. */
