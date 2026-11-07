@@ -1805,7 +1805,7 @@ const MediaItem = ({ file, channels, users, onSelect, onCopy, isCopied }) => {
           <a
             href={href}
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             className="MediaArchiveLink"
             title="Open message in archive context"
           >
@@ -1974,7 +1974,7 @@ const MediaZoomModal = ({
             <a
               href={href}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="MediaModalActionBtn primary"
               title="Open message in archive context"
             >
@@ -1991,7 +1991,7 @@ const MediaZoomModal = ({
             <a
               href={src}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="MediaModalActionBtn"
               title="Open original raw file in new tab"
               download

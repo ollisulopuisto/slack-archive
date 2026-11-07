@@ -39,3 +39,19 @@ describe("the rendered pages", () => {
     }
   });
 });
+
+describe("search-app.tsx links", () => {
+  const searchSource = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "search-app.tsx"),
+    "utf8",
+  );
+
+  it("secures all target=_blank links with rel noopener noreferrer", () => {
+    const blankLinks =
+      searchSource.match(/<a[^>]*target="_blank"[^>]*>/gs) || [];
+    expect(blankLinks.length).toBeGreaterThan(0);
+    for (const link of blankLinks) {
+      expect(link).toMatch(/rel="noopener noreferrer"/);
+    }
+  });
+});
