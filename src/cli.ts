@@ -235,10 +235,13 @@ async function getToken() {
     return;
   }
 
+  // Security: Prompt as a masked password rather than plaintext input
+  // to avoid shoulder surfing and leaking the secret token into terminal scrollback.
   const result = await prompt([
     {
       name: "token",
-      type: "input",
+      type: "password",
+      mask: "*",
       message:
         "Please enter your Slack token (xoxp-...). See README for more details.",
     },
