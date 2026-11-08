@@ -64,6 +64,39 @@ describe("downloadURL", () => {
     expect(fetch).not.toHaveBeenCalled();
     expect(fs.readFileSync(filePath, "utf8")).toBe("OLD");
   });
+
+  it("refuses unsafe protocols such as file:, javascript:, data:, and invalid URLs", async () => {
+    const filePath = path.join(dir, "target.png");
+
+    expect(await downloadURL("file:///etc/passwd", filePath)).toBe("failed");
+    expect(await downloadURL("javascript:alert(1)", filePath)).toBe("failed");
+    expect(await downloadURL("data:text/plain;base64,SGVsbG8=", filePath)).toBe(
+      "failed",
+    );
+    expect(await downloadURL("not-a-valid-url", filePath)).toBe("failed");
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(fs.existsSync(filePath)).toBe(false);
+  });
+
+  it("refuses redirects to unsafe protocols", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 302,
+      headers: {
+        get: (name: string) =>
+          name === "location" ? "file:///etc/passwd" : null,
+      },
+      arrayBuffer: async () => new ArrayBuffer(0),
+    } as any);
+
+    const filePath = path.join(dir, "redirect-target.png");
+    const outcome = await downloadURL("https://example.com/redirect", filePath);
+
+    expect(outcome).toBe("failed");
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    expect(fs.existsSync(filePath)).toBe(false);
+  });
 });
 
 describe("shouldSendSlackToken", () => {

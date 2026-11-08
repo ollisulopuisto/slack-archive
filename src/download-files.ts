@@ -66,6 +66,24 @@ export async function downloadURL(
   options: DownloadUrlOptions = {},
   redirectsLeft = 5,
 ): Promise<DownloadOutcome> {
+  // Security: only allow explicit http: and https: protocols. Disallow dangerous
+  // or unsupported schemes (such as file:, javascript:, data:) to prevent SSRF
+  // or unexpected local resource reading.
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    console.warn(`Failed to download file ${url}: invalid URL`);
+    return "failed";
+  }
+
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    console.warn(
+      `Failed to download file ${url}: unsupported protocol ${parsedUrl.protocol}`,
+    );
+    return "failed";
+  }
+
   const wantsAuth = options.authorize !== false;
   const authorize = wantsAuth && shouldSendSlackToken(url);
 
