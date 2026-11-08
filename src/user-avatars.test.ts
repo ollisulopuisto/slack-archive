@@ -53,6 +53,19 @@ describe("mineAvatars", () => {
 
     expect(found.map((f) => f.userId)).toEqual(["U2"]);
   });
+
+  it("returns empty array for plain messages without attachments or replies", () => {
+    expect(mineAvatars({ ts: "1700000000.0", text: "plain message" })).toEqual(
+      [],
+    );
+    expect(
+      mineAvatars({
+        ts: "1700000000.0",
+        attachments: [],
+        replies: [],
+      }),
+    ).toEqual([]);
+  });
 });
 
 describe("recordAvatars", () => {
