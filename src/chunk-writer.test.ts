@@ -23,6 +23,18 @@ describe("chunk-writer", () => {
       const exists = await fs.pathExists(dir);
       expect(exists).toBe(true);
     });
+
+    it("neutralizes directory traversal in channelId", async () => {
+      const dir = await ensureChunkDir("../../evilChannel", testDir);
+      expect(dir).toBe(path.join(testDir, "evilChannel"));
+      expect(await fs.pathExists(dir)).toBe(true);
+    });
+
+    it("falls back to unknown directory if channelId is purely traversal dots", async () => {
+      const dir = await ensureChunkDir("..", testDir);
+      expect(dir).toBe(path.join(testDir, "unknown"));
+      expect(await fs.pathExists(dir)).toBe(true);
+    });
   });
 
   describe("writeChunk", () => {
@@ -79,6 +91,23 @@ describe("chunk-writer", () => {
 
       expect(JSON.parse(content1).index).toBe(0);
       expect(JSON.parse(content2).index).toBe(1);
+    });
+
+    it("prevents directory traversal and handles negative chunk indices safely", async () => {
+      const chunk = {
+        html: "<div>traversal test</div>",
+        oldestTs: "100.0",
+        newestTs: "100.0",
+        index: -1,
+        total: 1,
+      };
+
+      await writeChunk(testDir, "../../evilChannel", -1, chunk);
+
+      const filePath = path.join(testDir, "evilChannel", "chunk-0.json");
+      expect(await fs.pathExists(filePath)).toBe(true);
+      const parsed = JSON.parse(await fs.readFile(filePath, "utf-8"));
+      expect(parsed.html).toBe("<div>traversal test</div>");
     });
   });
 });
