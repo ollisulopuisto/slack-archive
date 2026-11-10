@@ -310,7 +310,9 @@ async function createSearchHTML() {
 
   template = template.replace(
     "<!-- csp -->",
-    `<meta http-equiv="Content-Security-Policy" content="${contentSecurityPolicy({})}" />`,
+    `<meta http-equiv="Content-Security-Policy" content="${contentSecurityPolicy({
+      filesBaseUrl: FILES_BASE_URL,
+    })}" />`,
   );
 
   copyNodeModuleFile(["react", "umd", "react.production.min.js"], "react.js");

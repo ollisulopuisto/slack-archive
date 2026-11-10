@@ -25,6 +25,24 @@ describe("contentSecurityPolicy", () => {
     expect(contentSecurityPolicy({ filesBaseUrl: "" })).not.toContain("https:");
   });
 
+  it("refuses non-http(s) schemes like javascript:, data:, or file: in filesBaseUrl", () => {
+    const jsCsp = contentSecurityPolicy({
+      filesBaseUrl: "javascript:alert(1)",
+    });
+    expect(jsCsp).not.toContain("javascript:");
+
+    const dataCsp = contentSecurityPolicy({
+      filesBaseUrl: "data:text/html,<script>alert(1)</script>",
+    });
+    // data: is in img-src for inline avatars, but must not be added to media-src or duplicated
+    expect(dataCsp).toMatch(/media-src 'self'(;|$)/);
+
+    const fileCsp = contentSecurityPolicy({
+      filesBaseUrl: "file:///etc/passwd",
+    });
+    expect(fileCsp).not.toContain("file:");
+  });
+
   it("lets the sidebar search box submit to the search page, and nowhere else", () => {
     // Every page has a GET form to search.html. form-action 'none' blocked it,
     // so typing in the box and pressing Enter did nothing.

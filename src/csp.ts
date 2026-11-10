@@ -36,7 +36,13 @@ function originOf(url: string): string {
   if (!trimmed) return "";
 
   try {
-    return new URL(trimmed).origin;
+    const parsed = new URL(trimmed);
+    // Security: Only allow http: and https: protocols to prevent injection of
+    // unexpected or dangerous schemes into CSP directives.
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "";
+    }
+    return parsed.origin;
   } catch {
     return "";
   }
