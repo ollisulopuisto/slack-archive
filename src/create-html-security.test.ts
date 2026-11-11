@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { safeJsonForScript } from "./create-html.js";
 
 const source = fs.readFileSync(
   path.join(path.dirname(fileURLToPath(import.meta.url)), "create-html.tsx"),
@@ -37,6 +38,27 @@ describe("the rendered pages", () => {
     for (const link of blankLinks) {
       expect(link).toMatch(/rel="(?:noopener noreferrer|noreferrer)"/);
     }
+  });
+});
+
+describe("safeJsonForScript", () => {
+  it("escapes '<' characters to prevent script injection and tag breakout", () => {
+    const malicious = {
+      malicious: "</script><script>alert(1)</script>",
+      comment: "<!-- test -->",
+    };
+    const serialized = safeJsonForScript(malicious);
+
+    expect(serialized).not.toContain("<");
+    expect(serialized).not.toContain("</script>");
+    expect(serialized).toContain("\\u003c/script>");
+    expect(JSON.parse(serialized)).toEqual(malicious);
+  });
+
+  it("is used for drilldown cube embedded in create-html.tsx", () => {
+    expect(source).toMatch(
+      /dangerouslySetInnerHTML=\{\{\s*__html:\s*safeJsonForScript\(cube\)\s*\}\}/,
+    );
   });
 });
 

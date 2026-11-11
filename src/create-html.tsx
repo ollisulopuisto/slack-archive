@@ -1471,6 +1471,14 @@ function formatDay(ts: string): string {
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 /**
+ * Safely serialize data to JSON for embedding inside a <script> tag.
+ * Replaces `<` with `\u003c` to prevent `</script>` breakout and HTML comment injection.
+ */
+export function safeJsonForScript(data: unknown): string {
+  return JSON.stringify(data).replace(/</g, "\\u003c");
+}
+
+/**
  * The clickable year -> month -> day -> hour chart.
  *
  * Only the leaves travel: one number per day and hour, sparsely. Every level
@@ -1499,7 +1507,7 @@ const Drilldown: React.FunctionComponent<{
       <script
         type="application/json"
         id={`${id}-data`}
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(cube) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonForScript(cube) }}
       />
       <script src={`${base}drilldown.js`} defer />
     </div>
